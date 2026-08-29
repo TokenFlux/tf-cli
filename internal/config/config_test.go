@@ -37,7 +37,7 @@ func TestSaveConfigPermissionsAndRoundTrip(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	prof, _ := cfg.Profile("")
-	prof.SetSlots("claude", ModelSlots{Default: "a", Fast: "b", Heavy: "c"})
+	prof.SetSlots("claude", ModelSlots{SlotDefault: "a", SlotFast: "b", SlotHeavy: "c"})
 
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -63,24 +63,77 @@ func TestSaveConfigPermissionsAndRoundTrip(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 	rp, _ := reloaded.Profile("")
-	if got := rp.Slots("claude"); got.Default != "a" || got.Fast != "b" || got.Heavy != "c" {
+	got := rp.Slots("claude")
+	if got.Get(SlotDefault) != "a" || got.Get(SlotFast) != "b" || got.Get(SlotHeavy) != "c" {
 		t.Errorf("slots = %+v, want a/b/c", got)
+	}
+}
+
+// 各 harness 的槽位集合不同，存储必须容纳任意槽名。
+func TestSlotsAreHarnessSpecific(t *testing.T) {
+	p := &Profile{Host: DefaultHost}
+	p.SetSlots("claude", ModelSlots{SlotFast: "haiku", SlotDefault: "sonnet", SlotHeavy: "opus"})
+	p.SetSlots("codex", ModelSlots{SlotDefault: "gpt", SlotReview: "gpt-review"})
+	p.SetSlots("opencode", ModelSlots{SlotDefault: "gpt", SlotSmall: "gpt-small"})
+
+	if got := p.Slots("codex").Get(SlotReview); got != "gpt-review" {
+		t.Errorf("codex review slot = %q", got)
+	}
+	if got := p.Slots("opencode").Get(SlotSmall); got != "gpt-small" {
+		t.Errorf("opencode small slot = %q", got)
+	}
+	if got := p.Slots("claude").Get(SlotSmall); got != "" {
+		t.Errorf("claude should have no small slot, got %q", got)
+	}
+}
+
+// 单槽修改不能波及同一 harness 的其它槽。
+func TestSetSlotIsSurgical(t *testing.T) {
+	p := &Profile{Host: DefaultHost}
+	p.SetSlots("opencode", ModelSlots{SlotDefault: "main", SlotSmall: "small"})
+	p.SetSlot("opencode", SlotSmall, "cheaper")
+
+	s := p.Slots("opencode")
+	if s.Get(SlotDefault) != "main" {
+		t.Errorf("default slot was disturbed: %q", s.Get(SlotDefault))
+	}
+	if s.Get(SlotSmall) != "cheaper" {
+		t.Errorf("small slot = %q, want cheaper", s.Get(SlotSmall))
+	}
+
+	// 置空即删除该槽，使其回到「未配置」。
+	p.SetSlot("opencode", SlotSmall, "")
+	if got := p.Slots("opencode").Get(SlotSmall); got != "" {
+		t.Errorf("cleared slot = %q, want empty", got)
+	}
+}
+
+// Slots 必须返回副本，调用方改动不能污染配置。
+func TestSlotsReturnsCopy(t *testing.T) {
+	p := &Profile{Host: DefaultHost}
+	p.SetSlots("claude", ModelSlots{SlotDefault: "sonnet"})
+
+	grabbed := p.Slots("claude")
+	grabbed[SlotDefault] = "tampered"
+
+	if got := p.Slots("claude").Get(SlotDefault); got != "sonnet" {
+		t.Errorf("config was mutated through the returned map: %q", got)
 	}
 }
 
 // 模型槽必须按 harness 分开存，互不影响。
 func TestSlotsAreIsolatedPerHarness(t *testing.T) {
 	p := &Profile{Host: DefaultHost}
-	p.SetSlots("claude", ModelSlots{Default: "claude-model"})
-	p.SetSlots("codex", ModelSlots{Default: "codex-model"})
+	p.SetSlots("claude", ModelSlots{SlotDefault: "claude-model"})
+	p.SetSlots("codex", ModelSlots{SlotDefault: "codex-model"})
 
-	if got := p.Slots("claude").Default; got != "claude-model" {
+	if got := p.Slots("claude").Get(SlotDefault); got != "claude-model" {
 		t.Errorf("claude slot = %q", got)
 	}
-	if got := p.Slots("codex").Default; got != "codex-model" {
+	if got := p.Slots("codex").Get(SlotDefault); got != "codex-model" {
 		t.Errorf("codex slot = %q", got)
 	}
-	if got := p.Slots("opencode").Default; got != "" {
+	if got := p.Slots("opencode").Get(SlotDefault); got != "" {
 		t.Errorf("unset harness should be empty, got %q", got)
 	}
 }

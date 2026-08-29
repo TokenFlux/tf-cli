@@ -17,20 +17,41 @@ const DefaultHost = "https://tokenflux.dev"
 // DefaultProfile 是 v0 唯一会用到的 profile 名。
 const DefaultProfile = "default"
 
-// ModelSlots 是一个 harness 的模型槽。
+// 通用槽名。各 harness 只使用其中一部分，另有自己特有的槽。
+const (
+	SlotDefault = "default" // 主模型
+	SlotSmall   = "small"   // 标题、摘要等廉价调用
+	SlotFast    = "fast"    // claude 的 haiku 档
+	SlotHeavy   = "heavy"   // claude 的 opus 档
+	SlotReview  = "review"  // codex 的 review_model
+)
+
+// ModelSlots 是一个 harness 的模型槽：槽名 → 模型 ID。
+//
+// 用映射而非固定字段，因为各 harness 的槽位互不相同：
+// claude 是 fast/default/heavy，codex 是 default/review，
+// opencode 是 default/small。适配表负责声明自己有哪些槽。
 //
 // 必须按 harness 分开存：claude 走 anthropic_messages、codex 走
 // openai_responses，复合 Key 下可能落在完全不同的分组。
-type ModelSlots struct {
-	Default string `json:"default,omitempty"`
-	Fast    string `json:"fast,omitempty"`
-	Heavy   string `json:"heavy,omitempty"`
+type ModelSlots map[string]string
+
+// Get 返回槽位模型，未设置时为空串。
+func (s ModelSlots) Get(slot string) string { return s[slot] }
+
+// Clone 返回副本，避免调用方改到配置内部状态。
+func (s ModelSlots) Clone() ModelSlots {
+	out := make(ModelSlots, len(s))
+	for k, v := range s {
+		out[k] = v
+	}
+	return out
 }
 
 // Profile 是一组「指向哪个网关 + 用什么模型」的设定。
 type Profile struct {
-	Host      string                 `json:"host"`
-	Harnesses map[string]*ModelSlots `json:"harnesses,omitempty"`
+	Host      string                `json:"host"`
+	Harnesses map[string]ModelSlots `json:"harnesses,omitempty"`
 }
 
 // Config 是 config.json 的根结构。
@@ -97,23 +118,40 @@ func (c *Config) Profile(name string) (*Profile, bool) {
 	return p, ok
 }
 
-// Slots 返回某 harness 的模型槽，不存在时返回空槽。
+// Slots 返回某 harness 的模型槽副本，不存在时返回空槽。
 func (p *Profile) Slots(harness string) ModelSlots {
-	if p.Harnesses == nil {
-		return ModelSlots{}
-	}
 	if s, ok := p.Harnesses[harness]; ok && s != nil {
-		return *s
+		return s.Clone()
 	}
 	return ModelSlots{}
 }
 
-// SetSlots 写入某 harness 的模型槽。
+// SetSlots 整体写入某 harness 的模型槽。
 func (p *Profile) SetSlots(harness string, s ModelSlots) {
 	if p.Harnesses == nil {
-		p.Harnesses = map[string]*ModelSlots{}
+		p.Harnesses = map[string]ModelSlots{}
 	}
-	p.Harnesses[harness] = &s
+	p.Harnesses[harness] = s.Clone()
+}
+
+// SetSlot 只改一个槽，其余保持不变。供 `tkr model set` 使用。
+func (p *Profile) SetSlot(harness, slot, model string) {
+	if p.Harnesses == nil {
+		p.Harnesses = map[string]ModelSlots{}
+	}
+	if p.Harnesses[harness] == nil {
+		p.Harnesses[harness] = ModelSlots{}
+	}
+	if model == "" {
+		delete(p.Harnesses[harness], slot)
+		return
+	}
+	p.Harnesses[harness][slot] = model
+}
+
+// ClearSlots 清空某 harness 的槽位，使下次启动重新引导选择。
+func (p *Profile) ClearSlots(harness string) {
+	delete(p.Harnesses, harness)
 }
 
 // writeAtomic 先写同目录临时文件再 rename，避免中断产生半个文件。

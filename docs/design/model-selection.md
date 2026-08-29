@@ -22,7 +22,11 @@ tkr → claude   模型 gpt-5.6-sol · 分组 ChatGPT ×4 · 可用率 99.2%
 
 ### 第二层：没有默认（首次）→ 一次性交互选择器
 
-选完写进 profile，之后不再问。
+**一次把该 harness 的全部槽位选完**，不只是主模型。选完写进 profile，之后不再问。
+
+理由已被实测证实：opencode 不注入 `small_model` 时会用内置默认的 `gpt-5.4-nano`，
+该模型不在分组里，标题生成**静默失败**（主对话正常、退出码 0）。
+只选主模型 = 留一个用户看不见的坑。见 `research/harness-probe.md`。
 
 ### 第三层：非 TTY 或 `--yes` → 启发式自动选
 
@@ -69,21 +73,56 @@ tkr claude             → 用默认
 
 ---
 
-## claude 的三档：一屏确认，不是选三次
+## 每个 harness 的槽位
 
-Claude Code 的 `/model` 在 haiku / sonnet / opus 间切换，各档走不同环境变量。让用户选三次太重，改成**智能预选 + 一屏确认**：
+适配表必须**穷举**自己用到的全部槽位。漏掉一个，用户就会遇到一次静默失败。
+
+| harness | 槽位 | 注入到 |
+|---|---|---|
+| claude | `fast` / `default` / `heavy` | `ANTHROPIC_DEFAULT_{HAIKU,SONNET,OPUS}_MODEL` |
+| codex | `default` / `review` | `-c model=` / `-c review_model=` |
+| opencode | `default` / `small` | 配置内容里的 `model` / `small_model` |
+
+## 一屏确认，不是逐槽追问
+
+无论几个槽，都用**智能预选 + 一屏确认**，回车即走：
 
 ```
-claude 有三个模型档位，已按价格自动推荐：
+claude 需要三个模型档位，已按价格自动推荐：
 
   fast (haiku)     gpt-5.4          $10/$60 /M
   default (sonnet) gpt-5.6-sol      $10/$60 /M
   heavy (opus)     gpt-5.5          $12/$72 /M
 
-  enter 接受   ↑↓ + enter 单独修改   
+  enter 接受   ↑↓ 选中某槽 + enter 单独修改   e 全部逐槽编辑
 ```
 
-预选启发式：按输出单价排序，最便宜 → fast，最贵 → heavy，`sort_order` 最靠前 → default。
+预选启发式：按输出单价排序，最便宜 → `fast` / `small`，最贵 → `heavy`，
+`sort_order` 最靠前 → `default`；`review` 默认跟随 `default`。
+
+---
+
+## 修改接口：`tkr model`
+
+选择不是一锤子买卖，必须能随时改。交互与非交互两条路都要有：
+
+```bash
+tkr model                       # 交互：先选 harness，再一屏编辑其全部槽位
+tkr model claude                # 直接编辑 claude 的槽位
+tkr model --list                # 表格展示所有 harness 的当前槽位
+
+tkr model claude --set default=gpt-5.6-sol --set fast=gpt-5.4   # 非交互，可脚本化
+tkr model claude --reset        # 清空，下次启动重新引导
+```
+
+约束：
+
+- `--set` 的模型 ID 要经过校验（存在于分组、且该 harness 的协议可用），
+  校验不过直接拒绝并列出可选项 —— 不要等到启动 harness 时才炸。
+- `--list` 要标出**未配置**的槽位，因为未配置意味着 harness 会用它的内置默认值，
+  而那个值大概率不在分组里。
+- 与启动期的 `-m` 分工明确：`tkr claude -m` 是**本次运行**改主模型，
+  `tkr model claude` 是**持久修改全部槽位**。
 
 **档位不足时的回退**：分组模型少于三个时，多个槽填同一个模型（比如只有一个模型就三槽全填）。要明确告诉用户「该分组模型不足三档，`/model` 切换不会有区别」，否则用户会以为切了没生效。
 
