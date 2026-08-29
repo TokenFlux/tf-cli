@@ -94,3 +94,40 @@ v1（更多 harness / run -- / 完整 JSON 输出）
 ```
 
 **结论：v0 现在就能开工。** 建议同时把 B 表第一条（公开端点加协议字段）作为最优先的沟通事项抛给后端——它可能让 v0 的预检直接完整，省掉整个探测子系统。
+
+---
+
+## 三、进度（更新于 2026-08-29）
+
+### 已完成
+
+| 里程碑 | 状态 | 说明 |
+| --- | --- | --- |
+| M0 骨架 | 完成 | CLI 框架、config/credentials、权限自修复、错误码、双语文案、`--json` |
+| M2 认证 | 大部完成 | `login`（stdin/隐藏输入、当场校验、冲突不静默覆盖、自订名）、`logout`、`keys`。**缺 `tkr status`**（余额、限速窗口） |
+| M3 启动 | 机制完成 | fork+wait、信号转发、退出码穿透、注入配方。**三项实测未做**（claude/codex 未装） |
+| M4 模型 | 完成 | ID 解析（分组前缀 + 强度后缀）、族折叠、方向键 TUI、按 harness 分开的模型槽、一屏确认 |
+| M5 预检 | 部分完成 | 协议探测（零 token）、按分组前缀的准入记录、Key 与模型两级筛选。**缺 doctor** |
+| M6 harness | 1/3 实测 | opencode 实跑通过；claude/codex 配方已写但未验证 |
+
+### 未开始
+
+- **M1 目录**：`catalog` + `tkr models` / `tkr groups`，走公开的 `/api/v1/marketplace/models`。
+  倍率、定价、可用率、模态都在这份数据里 —— 同时是「同模型多分组该选哪个」和
+  「过滤掉图像/专用模型」的唯一数据来源。
+- **M5 的 doctor**：CC-Switch 残留、harness 自存凭据、代理风险、废弃端点。
+- **M7 分发**：goreleaser、npm 平台包、install.sh、Apache-2.0、SECURITY.md。
+
+### 计划外的修正（已完成）
+
+- **废除全局 current profile**：绑定改为属于 harness，按能力自动选 Key。
+  见 `design/no-global-mode.md`。原 PLAN 中 v0.5 的「完整 profile 机制、`tkr use`」作废。
+- **协议准入按分组前缀记录**：复合 Key 一把横跨多个分组，
+  同一把 Key 的不同模型可调端点不同。
+- **模型列表合并为一处真相**（config.json），删掉会串味的独立缓存。
+
+### 阻塞项
+
+- **claude / codex 未安装**，M3 的三项实测（`claude_code_only` 指纹识别、
+  `HTTPS_PROXY` 影响、`ENABLE_TOOL_SEARCH`）无法进行。这是全项目最高风险项：
+  若 tkr 的 exec 路径破坏 UA+TLS 指纹，Claude Max（倍率 20）这条主线就不成立。

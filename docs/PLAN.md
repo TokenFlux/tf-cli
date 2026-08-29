@@ -98,7 +98,10 @@ goreleaser 交叉编译、npm 主包 + 平台包、install.sh + SHA256SUMS、bre
 **验收**：`pnpx tkr models` 可用（无 postinstall 下载）；`curl | bash` 可用；`npm publish --provenance` 通过；识别安装来源后 `tkr update` 行为正确。
 
 ### v0.5
-网页「导入 tkr」按钮 + localhost 回环 + Origin 预览确认；完整 profile 机制（多 profile、`tkr use`、项目级 `.tkr/config.json` 只存 profile 名）。
+网页「导入 tkr」按钮 + localhost 回环 + Origin 预览确认；项目级 `.tkr/config.json`（只存 Key 标签）。
+
+> 原计划中的「完整 profile 机制 / `tkr use`」已作废：绑定属于 harness，
+> 不存在全局当前 profile。见 `design/no-global-mode.md`。
 
 ### v1（视情况）
 `tkr run --`、hermes 及更多 harness、钥匙串后端、`--json` 全量覆盖。
