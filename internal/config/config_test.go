@@ -254,3 +254,32 @@ func TestCredentialsRemoveIsPerProfile(t *testing.T) {
 		t.Errorf("Clear() left %d credentials", got)
 	}
 }
+
+// 模型缓存必须按 profile 分开：不同 profile 是不同的 Key、不同的分组。
+func TestModelsCacheIsPerProfile(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{ConfigDir: dir, CacheDir: dir}
+
+	if err := paths.WriteCache(ModelsCacheKey("default"), []string{"claude-opus-5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := paths.WriteCache(ModelsCacheKey("gpt"), []string{"gpt-5.4"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	if _, err := paths.ReadCache(ModelsCacheKey("default"), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "claude-opus-5" {
+		t.Errorf("default cache polluted: %v", got)
+	}
+
+	// 删一个 profile 的缓存不能影响另一个。
+	if err := paths.RemoveCache(ModelsCacheKey("gpt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := paths.ReadCache(ModelsCacheKey("default"), &got); err != nil {
+		t.Errorf("default cache was removed along with gpt: %v", err)
+	}
+}

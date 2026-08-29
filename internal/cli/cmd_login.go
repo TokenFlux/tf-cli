@@ -99,6 +99,13 @@ func runLogin(c *Context) error {
 		cfg.Profiles[profileName] = &config.Profile{Host: profile.Host}
 	}
 
+	// 刚登录的那把 Key 就是用户想用的那把。
+	//
+	// 不切的后果很隐蔽：下一条 `tkr codex` 会继续用旧 profile 的 Key，
+	// 列出一堆不相干的模型，而用户完全看不出发生了什么。
+	switched := cfg.Current != profileName
+	cfg.Current = profileName
+
 	creds.Set(profileName, &config.Credential{Key: key, Source: config.SourcePaste})
 	if err := creds.Save(); err != nil {
 		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据无法写入", "cannot write credentials")).WithCause(err)
@@ -108,18 +115,23 @@ func runLogin(c *Context) error {
 	}
 
 	// 顺手落一份模型缓存：补全必须零网络，这是它唯一的数据来源。
-	if err := paths.WriteCache("models", ids); err != nil {
+	if err := paths.WriteCache(config.ModelsCacheKey(profileName), ids); err != nil {
 		c.UI.Warnf(c.UI.T("模型缓存写入失败：%v", "could not cache the model list: %v"), err)
 	}
 
 	c.UI.Emit("login", map[string]any{
 		"profile": profileName, "host": profile.Host,
-		"key": config.Mask(key), "models": ids,
+		"key": config.Mask(key), "models": ids, "switched": switched,
 	}, func() {
 		c.UI.Printf("✓ %s\n", fmt.Sprintf(c.UI.T("已保存到 profile %q", "saved to profile %q"), profileName))
 		c.UI.Printf("  %-8s %s\n", "host", profile.Host)
 		c.UI.Printf("  %-8s %s\n", "key", config.Mask(key))
 		c.UI.Printf("  %-8s %d %s\n", c.UI.T("模型", "models"), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
+		if switched {
+			c.UI.Printf("  %-8s %s\n", c.UI.T("当前", "current"),
+				fmt.Sprintf(c.UI.T("已切到 %q（切回：tkr use <profile>）",
+					"switched to %q (switch back with: tkr use <profile>)"), profileName))
+		}
 	})
 	return nil
 }

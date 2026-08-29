@@ -9,6 +9,7 @@ func Main(argv []string) int {
 	app.Register(newConfigCommand())
 	app.Register(newLoginCommand())
 	app.Register(newLogoutCommand())
+	app.Register(newUseCommand())
 	app.Register(newHarnessCommand())
 	app.Register(newModelCommand())
 	app.Register(newCompletionsCommand())

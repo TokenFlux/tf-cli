@@ -99,9 +99,9 @@ func runLogout(c *Context) error {
 
 	// 模型列表是由这把 Key 推导出来的，退出登录时一并清掉，
 	// 免得补全继续泄露「这把 Key 能看到哪些模型」。
-	// 仅在已无任何凭据时清，否则会误伤其它 profile 的补全。
-	if len(creds.Names()) == 0 {
-		_ = paths.RemoveCache("models")
+	// 缓存按 profile 分开存，删哪个 profile 就只清哪一份。
+	for _, name := range removed {
+		_ = paths.RemoveCache(config.ModelsCacheKey(name))
 	}
 
 	host := config.DefaultHost

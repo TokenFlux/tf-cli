@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -201,4 +202,14 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// ProfileNames 按名称排序列出所有 profile。
+func (c *Config) ProfileNames() []string {
+	out := make([]string, 0, len(c.Profiles))
+	for name := range c.Profiles {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }

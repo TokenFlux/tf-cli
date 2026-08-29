@@ -50,6 +50,12 @@ func (p Paths) ReadCache(name string, v any) (age time.Duration, err error) {
 	return time.Since(env.At), nil
 }
 
+// ModelsCacheKey 返回某个 profile 的模型缓存名。
+//
+// 必须按 profile 分开：不同 profile 是不同的 Key、不同的分组，
+// 共用一份缓存会让补全和降级读到另一把 Key 的模型列表。
+func ModelsCacheKey(profile string) string { return "models-" + profile }
+
 // RemoveCache 删除一份缓存。文件不存在不算错误。
 func (p Paths) RemoveCache(name string) error {
 	err := os.Remove(filepath.Join(p.CacheDir, name+".json"))
