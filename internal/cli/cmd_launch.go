@@ -85,6 +85,13 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		banner += "   " + c.UI.Dim(c.UI.T("key", "key")) + " " + keyName
 	}
 	banner += "   " + c.UI.Dim(c.UI.T("模型", "model")) + " " + slots[config.SlotDefault]
+	// 其它槽只在与主模型不同时才列出 —— 相同就是噪音。
+	// 但必须让用户看得见：fast 槽决定了后台任务花多少钱。
+	for _, sl := range h.Slots {
+		if v := slots[sl.Name]; v != "" && sl.Name != config.SlotDefault && v != slots[config.SlotDefault] {
+			banner += "   " + c.UI.Dim(sl.Name) + " " + v
+		}
+	}
 	if effort != "" {
 		banner += "   " + c.UI.Dim(c.UI.T("强度", "effort")) + " " + effort
 	}
@@ -197,10 +204,7 @@ func resolveSlots(c *Context, cfg *config.Config,
 
 	if !interactive {
 		c.UI.Warnf(c.UI.T("非交互环境，沿用 %s", "non-interactive, using %s"), slots[config.SlotDefault])
-	} else if err := editSlots(c, h, slots, ids); err != nil {
-		return nil, err
 	}
-
 	cfg.Harness(h.Name).Slots = slots
 	if err := cfg.Save(); err != nil {
 		c.UI.Warnf(c.UI.T("模型已选定，但写入配置失败：%v", "model chosen, but saving config failed: %v"), err)
@@ -227,52 +231,6 @@ func warnIdenticalSlots(c *Context, h *harness.Harness, slots config.ModelSlots)
 		"%s 的所有档位都指向 %s，harness 内部的模型切换将没有区别",
 		"every %s tier points at %s, so switching models inside the harness will do nothing"),
 		h.Name, first)
-}
-
-// editSlots 是一屏确认：列出该 harness 的全部槽位及当前取值，
-// 回车接受，或选中某槽单独修改。
-//
-// 不逐槽追问：启动器的本分是快，三个问题连着弹会把人退坏。
-func editSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []string) error {
-	zh := c.UI.Lang == ui.LangZH
-
-	for {
-		items := make([]ui.Item, 0, len(h.Slots)+1)
-		for _, s := range h.Slots {
-			items = append(items, ui.Item{
-				Label:  s.Name,
-				Detail: slots[s.Name],
-				Note:   c.UI.Dim("— " + s.Purpose(zh)),
-			})
-		}
-		accept := c.UI.T("✓ 接受并启动", "✓ accept and launch")
-		items = append(items, ui.Item{Label: accept})
-
-		idx, err := c.UI.Select(fmt.Sprintf(c.UI.T(
-			"%s 的模型槽（选中某项可修改）", "Model slots for %s (select one to change)"), h.Name), items)
-		if err != nil {
-			return err
-		}
-		if idx == len(h.Slots) {
-			return nil
-		}
-
-		slot := h.Slots[idx]
-		choices := modelItems(ids)
-		for i, id := range ids {
-			if id == slots[slot.Name] {
-				choices[i].Note = c.UI.Dim(c.UI.T("← 当前", "← current"))
-			}
-		}
-
-		pick, err := c.UI.Select(fmt.Sprintf(c.UI.T("为 %s.%s 选择模型", "Pick a model for %s.%s"),
-			h.Name, slot.Name), choices)
-		if err != nil {
-			// 单次取消只退回上一层，不应该把整个启动流程也取消。
-			continue
-		}
-		slots[slot.Name] = ids[pick]
-	}
 }
 
 // applyEffort 把思考强度落到具体机制上，返回仍需交给 harness 的强度值。
