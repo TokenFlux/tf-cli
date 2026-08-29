@@ -18,8 +18,22 @@ var ErrNotInteractive = Errf(CodeUsage, "not an interactive terminal")
 //
 // --json 与 --yes 都视为非交互：前者的输出要能被机器解析，
 // 后者是用户明确要求不要打断。
+//
+// 判据是「能不能拿到控制终端」而不是「stdin 是不是终端」：
+// 选择器直接读写 /dev/tty，所以 `echo $KEY | tkr login` 这种
+// stdin 被管道占用的场景依然可以交互。
 func (u *UI) Interactive(assumeYes bool) bool {
-	return u.TTY && !u.JSON && !assumeYes && isTerminal(os.Stdin)
+	return !u.JSON && !assumeYes && hasControllingTTY()
+}
+
+// hasControllingTTY 报告能否打开控制终端。
+func hasControllingTTY() bool {
+	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	return true
 }
 
 // Choose 展示编号选项并读取选择，返回选中项的下标。

@@ -132,3 +132,24 @@ func TestGlobalFlagsAvailableEverywhere(t *testing.T) {
 		t.Errorf("profile = %q, want work", got)
 	}
 }
+
+// 建议的 profile 名取自模型名首词元，并要避开已占用的名字。
+func TestSuggestProfileName(t *testing.T) {
+	cases := []struct {
+		ids   []string
+		taken []string
+		want  string
+	}{
+		{[]string{"gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "codex-auto-review"}, nil, "gpt"},
+		{[]string{"claude-opus-5", "claude-sonnet-5"}, nil, "claude"},
+		{[]string{"gemini-3.1-pro-high"}, nil, "gemini"},
+		{[]string{"gpt-5.4"}, []string{"gpt"}, "gpt-2"},
+		{[]string{"gpt-5.4"}, []string{"gpt", "gpt-2"}, "gpt-3"},
+		{nil, nil, "profile"},
+	}
+	for _, c := range cases {
+		if got := suggestProfileName(c.ids, c.taken); got != c.want {
+			t.Errorf("suggestProfileName(%v, taken=%v) = %q, want %q", c.ids, c.taken, got, c.want)
+		}
+	}
+}
