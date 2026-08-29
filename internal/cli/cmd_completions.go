@@ -111,7 +111,7 @@ func complete(words []string) []string {
 	case "login":
 		return filter([]string{"--with-key", "--host", "--profile"}, cur)
 	case "logout":
-		return filter([]string{"--all", "--profile"}, cur)
+		return filter(append(storedProfiles(), "--all", "--profile"), cur)
 	}
 
 	if strings.HasPrefix(cur, "-") {
@@ -214,6 +214,19 @@ func cachedModels() []string {
 		return nil
 	}
 	return ids
+}
+
+// storedProfiles 读本地配置列出 profile 名，供 logout 补全。仍是零网络。
+func storedProfiles() []string {
+	paths, err := config.DefaultPaths()
+	if err != nil {
+		return nil
+	}
+	creds, _, err := config.LoadCredentials(paths)
+	if err != nil {
+		return nil
+	}
+	return creds.Names()
 }
 
 func commandNames() []string {

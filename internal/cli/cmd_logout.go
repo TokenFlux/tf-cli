@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/ui"
@@ -10,7 +11,7 @@ import (
 func newLogoutCommand() *Command {
 	return &Command{
 		Name:  "logout",
-		Usage: "tkr logout [--all]",
+		Usage: "tkr logout [<profile>] [--all]",
 		Summary: func(u *ui.UI) string {
 			return u.T("删除本机保存的 API Key", "Remove the API key stored on this machine")
 		},
@@ -19,6 +20,39 @@ func newLogoutCommand() *Command {
 		},
 		Run: runLogout,
 	}
+}
+
+// pickProfile 确定要删哪一把。
+//
+// 优先级：位置参数 > --profile > 只有一把时直接选它 > 交互选择。
+// 多把凭据下绝不静默猜：删错一把就要重新去网页拿 Key。
+func pickProfile(c *Context, creds *config.Credentials, stored []string) (string, error) {
+	if len(c.Args) > 0 {
+		return c.Args[0], nil
+	}
+	if name := c.Flags.String("profile"); name != "" {
+		return name, nil
+	}
+	if len(stored) == 1 {
+		return stored[0], nil
+	}
+
+	if !c.UI.Interactive(c.Flags.Bool("yes")) {
+		return "", ui.Errf(ui.CodeUsage,
+			c.UI.T("本机保存了多把凭据，请指定删哪一把", "several credentials are stored; say which one to remove")).
+			WithHint("tkr logout " + strings.Join(stored, " | "))
+	}
+
+	items := make([]ui.Item, 0, len(stored))
+	for _, name := range stored {
+		cred, _ := creds.Get(name)
+		items = append(items, ui.Item{Label: name, Detail: config.Mask(cred.Key)})
+	}
+	idx, err := c.UI.Select(c.UI.T("删除哪一把凭据？", "Which credential should be removed?"), items)
+	if err != nil {
+		return "", err
+	}
+	return stored[idx], nil
 }
 
 func runLogout(c *Context) error {
@@ -31,23 +65,30 @@ func runLogout(c *Context) error {
 		return ui.Errf(ui.CodeCredentialsRead, c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
 	}
 
+	stored := creds.Names()
+	if len(stored) == 0 {
+		return ui.Errf(ui.CodeNotLoggedIn,
+			c.UI.T("本机没有保存任何凭据", "no credentials are stored on this machine")).
+			WithHint("tkr login")
+	}
+
 	var removed []string
-	if c.Flags.Bool("all") {
-		removed = creds.Names()
+	switch {
+	case c.Flags.Bool("all"):
+		removed = stored
 		creds.Clear()
-	} else {
-		name := c.Flags.String("profile")
-		if name == "" {
-			cfg, err := config.Load(paths)
-			if err != nil {
-				return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
-			}
-			name = cfg.Current
+	default:
+		name, err := pickProfile(c, creds, stored)
+		if err != nil {
+			return err
 		}
-		if _, ok := creds.Get(name); !ok {
+		cred, ok := creds.Get(name)
+		if !ok {
 			return ui.Errf(ui.CodeNotLoggedIn,
-				fmt.Sprintf(c.UI.T("profile %q 本来就没有保存凭据", "profile %q has no stored credential"), name))
+				fmt.Sprintf(c.UI.T("profile %q 没有保存凭据", "profile %q has no stored credential"), name)).
+				WithHint(c.UI.T("已保存的：", "stored: ") + strings.Join(stored, " "))
 		}
+		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("%s  %s", name, config.Mask(cred.Key))))
 		creds.Remove(name)
 		removed = []string{name}
 	}
@@ -58,7 +99,10 @@ func runLogout(c *Context) error {
 
 	// 模型列表是由这把 Key 推导出来的，退出登录时一并清掉，
 	// 免得补全继续泄露「这把 Key 能看到哪些模型」。
-	_ = paths.RemoveCache("models")
+	// 仅在已无任何凭据时清，否则会误伤其它 profile 的补全。
+	if len(creds.Names()) == 0 {
+		_ = paths.RemoveCache("models")
+	}
 
 	host := config.DefaultHost
 	if cfg, err := config.Load(paths); err == nil {

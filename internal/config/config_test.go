@@ -212,3 +212,45 @@ func TestMask(t *testing.T) {
 		t.Errorf("short key mask = %q, want ****", got)
 	}
 }
+
+// 凭据是按 profile 分开存的：删一把不能影响另一把。
+func TestCredentialsRemoveIsPerProfile(t *testing.T) {
+	dir := t.TempDir()
+	paths := Paths{ConfigDir: dir, CacheDir: dir}
+
+	creds, _, err := LoadCredentials(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds.Set("default", &Credential{Key: "sk-aaa", Source: SourcePaste})
+	creds.Set("work", &Credential{Key: "sk-bbb", Source: SourcePaste})
+	if err := creds.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := creds.Names(); len(got) != 2 || got[0] != "default" || got[1] != "work" {
+		t.Fatalf("Names() = %v, want sorted [default work]", got)
+	}
+
+	creds.Remove("work")
+	if err := creds.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, _, err := LoadCredentials(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := reloaded.Get("work"); ok {
+		t.Error("work credential survived removal")
+	}
+	cred, ok := reloaded.Get("default")
+	if !ok || cred.Key != "sk-aaa" {
+		t.Errorf("default credential was disturbed: %+v", cred)
+	}
+
+	reloaded.Clear()
+	if got := len(reloaded.Names()); got != 0 {
+		t.Errorf("Clear() left %d credentials", got)
+	}
+}
