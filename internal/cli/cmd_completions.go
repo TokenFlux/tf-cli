@@ -109,11 +109,9 @@ func complete(words []string) []string {
 	case "completions":
 		return filter([]string{"bash", "zsh", "fish"}, cur)
 	case "login":
-		return filter([]string{"--with-key", "--host", "--profile"}, cur)
-	case "use":
-		return filter(storedProfiles(), cur)
+		return filter(append(storedKeys(), "--with-key", "--host", "--force"), cur)
 	case "logout":
-		return filter(append(storedProfiles(), "--all", "--profile"), cur)
+		return filter(append(storedKeys(), "--all"), cur)
 	}
 
 	if strings.HasPrefix(cur, "-") {
@@ -135,7 +133,7 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 			return nil // 位置参数即透传起点
 		}
 		switch strings.TrimLeft(strings.SplitN(w, "=", 2)[0], "-") {
-		case "m", "model", "e", "effort", "profile", "host":
+		case "m", "model", "e", "effort", "k", "key", "host":
 			i++ // 跳过其取值
 		case "json", "yes", "y", "help", "h":
 		default:
@@ -154,7 +152,7 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 	}
 
 	if strings.HasPrefix(cur, "-") {
-		return append([]string{"--model", "--effort"}, globalFlagNames()...)
+		return append([]string{"--model", "--effort", "--key"}, globalFlagNames()...)
 	}
 	return nil
 }
@@ -218,8 +216,8 @@ func cachedModels() []string {
 	return ids
 }
 
-// storedProfiles 读本地配置列出 profile 名，供 logout 补全。仍是零网络。
-func storedProfiles() []string {
+// storedKeys 列出本地已保存的 Key 标签。仍是零网络。
+func storedKeys() []string {
 	paths, err := config.DefaultPaths()
 	if err != nil {
 		return nil
@@ -232,7 +230,7 @@ func storedProfiles() []string {
 }
 
 func commandNames() []string {
-	names := []string{"version", "config", "login", "logout", "use", "harness", "model", "completions"}
+	names := []string{"version", "config", "login", "logout", "keys", "harness", "model", "completions"}
 	return append(names, harnessNames()...)
 }
 

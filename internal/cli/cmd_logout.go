@@ -105,10 +105,18 @@ func runLogout(c *Context) error {
 	}
 
 	host := config.DefaultHost
-	if cfg, err := config.Load(paths); err == nil {
-		if p, ok := cfg.Profile(""); ok && p.Host != "" {
-			host = p.Host
+	if cfg, err := config.Load(paths); err == nil && len(removed) > 0 {
+		host = cfg.HostOf(removed[0])
+		// 同时清掉元数据与指向它的绑定，避免留下悬空引用。
+		for _, name := range removed {
+			delete(cfg.Keys, name)
+			for _, hc := range cfg.Harnesses {
+				if hc.Key == name {
+					hc.Key = ""
+				}
+			}
 		}
+		_ = cfg.Save()
 	}
 
 	c.UI.Emit("logout", map[string]any{"removed": removed}, func() {

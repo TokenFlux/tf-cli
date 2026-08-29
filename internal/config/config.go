@@ -1,7 +1,11 @@
-// Package config 负责 profile 与凭据的读写。
+// Package config 管理 tkr 的配置与凭据。
 //
-// 两个文件刻意分开（见 docs/design/open-decisions.md C 项）：
-// config.json 要能贴进 issue，credentials.json 不能。
+// 分两个文件：
+//   - config.json      0644，Key 的元数据与 harness 绑定，可以贴进 issue
+//   - credentials.json 0600，只放密钥本身
+//
+// 刻意没有「当前 profile」这类全局模式 —— 绑定属于 harness，
+// 理由见 docs/design/no-global-mode.md。
 package config
 
 import (
@@ -13,203 +17,220 @@ import (
 	"time"
 )
 
-// DefaultHost 是托管实例。自托管用 --host 或 profile 覆盖。
+// DefaultHost 是托管版的默认网关。
 const DefaultHost = "https://tokenflux.dev"
 
-// DefaultProfile 是 v0 唯一会用到的 profile 名。
-const DefaultProfile = "default"
-
-// 通用槽名。各 harness 只使用其中一部分，另有自己特有的槽。
+// 已知的模型槽名。各 harness 用到哪些由适配表声明。
 const (
-	SlotDefault = "default" // 主模型
-	SlotSmall   = "small"   // 标题、摘要等廉价调用
-	SlotFast    = "fast"    // claude 的 haiku 档
-	SlotHeavy   = "heavy"   // claude 的 opus 档
-	SlotReview  = "review"  // codex 的 review_model
+	SlotDefault = "default"
+	SlotFast    = "fast"
+	SlotHeavy   = "heavy"
+	SlotSmall   = "small"
+	SlotReview  = "review"
 )
 
-// ModelSlots 是一个 harness 的模型槽：槽名 → 模型 ID。
+// KeyMeta 是一把 Key 的非机密元数据。
 //
-// 用映射而非固定字段，因为各 harness 的槽位互不相同：
-// claude 是 fast/default/heavy，codex 是 default/review，
-// opencode 是 default/small。适配表负责声明自己有哪些槽。
+// 协议与模型列表都是探测/查询的结果，带时间戳以便按 TTL 失效。
+type KeyMeta struct {
+	Host      string    `json:"host"`
+	Protocols []string  `json:"protocols,omitempty"`
+	Models    []string  `json:"models,omitempty"`
+	ProbedAt  time.Time `json:"probed_at,omitempty"`
+}
+
+// Supports 报告这把 Key 是否允许某个客户端协议。
 //
-// 必须按 harness 分开存：claude 走 anthropic_messages、codex 走
-// openai_responses，复合 Key 下可能落在完全不同的分组。
-type ModelSlots map[string]string
-
-// Get 返回槽位模型，未设置时为空串。
-func (s ModelSlots) Get(slot string) string { return s[slot] }
-
-// Clone 返回副本，避免调用方改到配置内部状态。
-func (s ModelSlots) Clone() ModelSlots {
-	out := make(ModelSlots, len(s))
-	for k, v := range s {
-		out[k] = v
+// 未探测过时返回 true：没有证据就不拦，预检只能证伪。
+func (m *KeyMeta) Supports(proto string) bool {
+	if m == nil || len(m.Protocols) == 0 {
+		return true
 	}
-	return out
+	for _, p := range m.Protocols {
+		if p == proto {
+			return true
+		}
+	}
+	return false
 }
 
-// Profile 是一组「指向哪个网关 + 用什么模型」的设定。
-type Profile struct {
-	Host      string                `json:"host"`
-	Harnesses map[string]ModelSlots `json:"harnesses,omitempty"`
+// Probed 报告是否有可用的探测结果。
+func (m *KeyMeta) Probed() bool { return m != nil && len(m.Protocols) > 0 }
+
+// HarnessConfig 是某个 harness 的绑定与模型槽。
+type HarnessConfig struct {
+	Key   string     `json:"key,omitempty"`
+	Slots ModelSlots `json:"slots,omitempty"`
 }
 
-// InstallRecord 记录一次由 tkr 代为执行的安装。
+// ModelSlots 是槽名到模型 ID 的映射。
 //
-// 存在的意义是可追溯：doctor 要能回答「这个 harness 是谁装的、怎么装的」，
-// 用户卸载时才有据可循。不含任何凭据，因此可以放在 0644 的 config.json 里。
-type InstallRecord struct {
-	Manager string    `json:"manager"`
-	Command string    `json:"command"`
-	At      time.Time `json:"at"`
-	Version string    `json:"version,omitempty"`
-}
+// 用映射而非固定字段：各 harness 的槽位不同（claude 有 fast/default/heavy，
+// codex 有 default/review），固定结构装不下。
+type ModelSlots map[string]string
 
 // Config 是 config.json 的根结构。
 type Config struct {
-	Version  int                      `json:"version"`
-	Current  string                   `json:"current"`
-	Profiles map[string]*Profile      `json:"profiles"`
-	Installs map[string]InstallRecord `json:"installs,omitempty"`
+	Version   int                       `json:"version"`
+	Keys      map[string]*KeyMeta       `json:"keys"`
+	Harnesses map[string]*HarnessConfig `json:"harnesses,omitempty"`
+	Installs  map[string]InstallRecord  `json:"installs,omitempty"`
 
 	paths Paths
 }
 
-// RecordInstall 登记一次安装。
-func (c *Config) RecordInstall(harness string, rec InstallRecord) {
-	if c.Installs == nil {
-		c.Installs = map[string]InstallRecord{}
-	}
-	if rec.At.IsZero() {
-		rec.At = time.Now()
-	}
-	c.Installs[harness] = rec
-}
+// Load 读取配置；文件不存在时返回空配置。
+func Load(paths Paths) (*Config, error) {
+	cfg := &Config{Version: 1, Keys: map[string]*KeyMeta{}, paths: paths}
 
-// Load 读取配置；文件不存在时返回带默认 profile 的空配置。
-func Load(p Paths) (*Config, error) {
-	c := &Config{
-		Version:  1,
-		Current:  DefaultProfile,
-		Profiles: map[string]*Profile{},
-		paths:    p,
-	}
-
-	data, err := os.ReadFile(p.ConfigFile())
+	data, err := os.ReadFile(paths.ConfigFile())
 	if os.IsNotExist(err) {
-		c.Profiles[DefaultProfile] = &Profile{Host: DefaultHost}
-		return c, nil
+		return cfg, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", p.ConfigFile(), err)
+		return nil, err
 	}
-	if err := json.Unmarshal(data, c); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", p.ConfigFile(), err)
+	if err := json.Unmarshal(data, cfg); err != nil {
+		return nil, fmt.Errorf("%s: %w", paths.ConfigFile(), err)
 	}
-	c.paths = p
+	if cfg.Keys == nil {
+		cfg.Keys = map[string]*KeyMeta{}
+	}
+	cfg.migrate(data)
+	cfg.paths = paths
+	return cfg, nil
+}
 
-	if c.Profiles == nil {
-		c.Profiles = map[string]*Profile{}
+// migrate 把旧的 profiles/current 结构搬到新的 keys/harnesses 上。
+//
+// 旧结构有一个全局 current，新结构没有：把它作为所有 harness 的初始绑定，
+// 语义等价且不丢用户已选的模型。
+func (c *Config) migrate(raw []byte) {
+	var old struct {
+		Current  string `json:"current"`
+		Profiles map[string]struct {
+			Host      string                `json:"host"`
+			Harnesses map[string]ModelSlots `json:"harnesses"`
+		} `json:"profiles"`
 	}
-	if c.Current == "" {
-		c.Current = DefaultProfile
+	if err := json.Unmarshal(raw, &old); err != nil || len(old.Profiles) == 0 {
+		return
 	}
-	if _, ok := c.Profiles[c.Current]; !ok {
-		c.Profiles[c.Current] = &Profile{Host: DefaultHost}
+	for name, p := range old.Profiles {
+		if _, exists := c.Keys[name]; !exists {
+			host := p.Host
+			if host == "" {
+				host = DefaultHost
+			}
+			c.Keys[name] = &KeyMeta{Host: host}
+		}
+		if name != old.Current {
+			continue
+		}
+		for hname, slots := range p.Harnesses {
+			hc := c.Harness(hname)
+			hc.Key = name
+			for k, v := range slots {
+				hc.Slots[k] = v
+			}
+		}
 	}
-	return c, nil
+}
+
+// Harness 返回某个 harness 的配置，必要时创建。
+func (c *Config) Harness(name string) *HarnessConfig {
+	if c.Harnesses == nil {
+		c.Harnesses = map[string]*HarnessConfig{}
+	}
+	hc, ok := c.Harnesses[name]
+	if !ok {
+		hc = &HarnessConfig{Slots: ModelSlots{}}
+		c.Harnesses[name] = hc
+	}
+	if hc.Slots == nil {
+		hc.Slots = ModelSlots{}
+	}
+	return hc
+}
+
+// KeyNames 按名称排序列出所有已知的 Key 标签。
+func (c *Config) KeyNames() []string {
+	out := make([]string, 0, len(c.Keys))
+	for name := range c.Keys {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// KeyMetaOf 返回某把 Key 的元数据，必要时创建。
+func (c *Config) KeyMetaOf(name string) *KeyMeta {
+	if c.Keys == nil {
+		c.Keys = map[string]*KeyMeta{}
+	}
+	m, ok := c.Keys[name]
+	if !ok {
+		m = &KeyMeta{Host: DefaultHost}
+		c.Keys[name] = m
+	}
+	return m
+}
+
+// HostOf 返回某把 Key 的网关地址。
+func (c *Config) HostOf(name string) string {
+	if m, ok := c.Keys[name]; ok && m.Host != "" {
+		return m.Host
+	}
+	return DefaultHost
 }
 
 // Save 原子写回配置。
 func (c *Config) Save() error {
-	if err := ensureDir(c.paths.ConfigDir); err != nil {
+	if err := os.MkdirAll(c.paths.ConfigDir, 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	return writeAtomic(c.paths.ConfigFile(), append(data, '\n'), configFilePerm)
+	return writeAtomic(c.paths.ConfigFile(), append(data, '\n'), 0o644)
 }
 
-// Profile 返回指定 profile；name 为空时返回当前 profile。
-func (c *Config) Profile(name string) (*Profile, bool) {
-	if name == "" {
-		name = c.Current
-	}
-	p, ok := c.Profiles[name]
-	return p, ok
-}
-
-// Slots 返回某 harness 的模型槽副本，不存在时返回空槽。
-func (p *Profile) Slots(harness string) ModelSlots {
-	if s, ok := p.Harnesses[harness]; ok && s != nil {
-		return s.Clone()
-	}
-	return ModelSlots{}
-}
-
-// SetSlots 整体写入某 harness 的模型槽。
-func (p *Profile) SetSlots(harness string, s ModelSlots) {
-	if p.Harnesses == nil {
-		p.Harnesses = map[string]ModelSlots{}
-	}
-	p.Harnesses[harness] = s.Clone()
-}
-
-// SetSlot 只改一个槽，其余保持不变。供 `tkr model set` 使用。
-func (p *Profile) SetSlot(harness, slot, model string) {
-	if p.Harnesses == nil {
-		p.Harnesses = map[string]ModelSlots{}
-	}
-	if p.Harnesses[harness] == nil {
-		p.Harnesses[harness] = ModelSlots{}
-	}
-	if model == "" {
-		delete(p.Harnesses[harness], slot)
-		return
-	}
-	p.Harnesses[harness][slot] = model
-}
-
-// ClearSlots 清空某 harness 的槽位，使下次启动重新引导选择。
-func (p *Profile) ClearSlots(harness string) {
-	delete(p.Harnesses, harness)
-}
-
-// writeAtomic 先写同目录临时文件再 rename，避免中断产生半个文件。
-// 权限在 rename 之前设置，防止出现短暂的宽权限窗口。
+// writeAtomic 先写临时文件再改名，避免中断留下半个文件。
 func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, ".tmp-*")
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
 	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
+	defer os.Remove(tmp.Name())
 
-	if _, err := f.Write(data); err != nil {
-		f.Close()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
 		return err
 	}
-	if err := f.Chmod(perm); err != nil {
-		f.Close()
+	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := f.Close(); err != nil {
+	if err := os.Chmod(tmp.Name(), perm); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	return os.Rename(tmp.Name(), path)
 }
 
-// ProfileNames 按名称排序列出所有 profile。
-func (c *Config) ProfileNames() []string {
-	out := make([]string, 0, len(c.Profiles))
-	for name := range c.Profiles {
-		out = append(out, name)
+// InstallRecord 记录某个 harness 是被 tkr 用什么方式装上的。
+type InstallRecord struct {
+	Manager string    `json:"manager"`
+	Command string    `json:"command"`
+	Version string    `json:"version,omitempty"`
+	At      time.Time `json:"at"`
+}
+
+// RecordInstall 记下一次安装，供 doctor 回溯与卸载参考。
+func (c *Config) RecordInstall(name string, rec InstallRecord) {
+	if c.Installs == nil {
+		c.Installs = map[string]InstallRecord{}
 	}
-	sort.Strings(out)
-	return out
+	rec.At = time.Now()
+	c.Installs[name] = rec
 }

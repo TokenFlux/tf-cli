@@ -39,23 +39,22 @@ func runLogin(c *Context) error {
 		return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
 	}
 
-	// profile 来源：位置参数 > --profile > 当前 profile。
-	// 前两者算“用户明确指定”，不会再因冲突而追问。
-	profileName := c.Flags.String("profile")
+	// 标签来源：位置参数 > --key。都没有时先落到 default，
+	// 冲突时再询问。显式指定则不追问。
+	keyName := c.Flags.String("key")
 	if len(c.Args) > 0 {
-		profileName = c.Args[0]
+		keyName = c.Args[0]
 	}
-	explicit := profileName != ""
+	explicit := keyName != ""
 	if !explicit {
-		profileName = cfg.Current
+		keyName = "default"
 	}
-	profile, ok := cfg.Profile(profileName)
-	if !ok {
-		profile = &config.Profile{Host: config.DefaultHost}
-		cfg.Profiles[profileName] = profile
+	host := config.DefaultHost
+	if m, ok := cfg.Keys[keyName]; ok && m.Host != "" {
+		host = m.Host
 	}
 	if h := c.Flags.String("host"); h != "" {
-		profile.Host = normalizeHost(h)
+		host = normalizeHost(h)
 	}
 
 	key, err := readKey(c)
@@ -68,18 +67,18 @@ func runLogin(c *Context) error {
 	}
 
 	// 当场校验：/v1/models 是唯一能用 API Key 读到的目录接口。
-	client := gateway.New(profile.Host, key)
+	client := gateway.New(host, key)
 	models, err := client.Models(context.Background())
 	if err != nil {
 		var apiErr *gateway.APIError
 		if ok := asAPIError(err, &apiErr); ok && apiErr.InvalidKey() {
 			return ui.Errf(ui.CodeNotLoggedIn,
 				c.UI.T("这把 Key 不被网关接受", "the gateway rejected this key")).
-				WithHint(profile.Host + "/keys").WithCause(err)
+				WithHint(host + "/keys").WithCause(err)
 		}
 		return ui.Errf(ui.CodeNotLoggedIn,
 			fmt.Sprintf(c.UI.T("无法校验 Key：%v", "could not verify the key: %v"), err)).
-			WithHint(profile.Host)
+			WithHint(host)
 	}
 
 	ids := make([]string, 0, len(models))
@@ -91,22 +90,19 @@ func runLogin(c *Context) error {
 	if err != nil {
 		return ui.Errf(ui.CodeCredentialsRead, c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
 	}
-	profileName, err = resolveLoginProfile(c, creds, cfg, profileName, explicit, key, ids)
+	keyName, err = resolveLoginProfile(c, creds, cfg, keyName, explicit, key, ids)
 	if err != nil {
 		return err
 	}
-	if _, ok := cfg.Profile(profileName); !ok {
-		cfg.Profiles[profileName] = &config.Profile{Host: profile.Host}
-	}
+	meta := cfg.KeyMetaOf(keyName)
+	meta.Host = host
+	meta.Models = ids
 
-	// 刚登录的那把 Key 就是用户想用的那把。
-	//
-	// 不切的后果很隐蔽：下一条 `tkr codex` 会继续用旧 profile 的 Key，
-	// 列出一堆不相干的模型，而用户完全看不出发生了什么。
-	switched := cfg.Current != profileName
-	cfg.Current = profileName
+	// 顺带探一次协议准入：零 token 成本，却决定了这把 Key 之后
+	// 会不会出现在各 harness 的候选里。
+	probeAndStore(cfg, keyName, host, key)
 
-	creds.Set(profileName, &config.Credential{Key: key, Source: config.SourcePaste})
+	creds.Set(keyName, &config.Credential{Key: key, Source: config.SourcePaste})
 	if err := creds.Save(); err != nil {
 		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据无法写入", "cannot write credentials")).WithCause(err)
 	}
@@ -115,22 +111,21 @@ func runLogin(c *Context) error {
 	}
 
 	// 顺手落一份模型缓存：补全必须零网络，这是它唯一的数据来源。
-	if err := paths.WriteCache(config.ModelsCacheKey(profileName), ids); err != nil {
+	if err := paths.WriteCache(config.ModelsCacheKey(keyName), ids); err != nil {
 		c.UI.Warnf(c.UI.T("模型缓存写入失败：%v", "could not cache the model list: %v"), err)
 	}
 
 	c.UI.Emit("login", map[string]any{
-		"profile": profileName, "host": profile.Host,
-		"key": config.Mask(key), "models": ids, "switched": switched,
+		"profile": keyName, "host": host,
+		"key": config.Mask(key), "models": ids, "protocols": cfg.Keys[keyName].Protocols,
 	}, func() {
-		c.UI.Printf("✓ %s\n", fmt.Sprintf(c.UI.T("已保存到 profile %q", "saved to profile %q"), profileName))
-		c.UI.Printf("  %-8s %s\n", "host", profile.Host)
+		c.UI.Printf("✓ %s\n", fmt.Sprintf(c.UI.T("已保存到 profile %q", "saved to profile %q"), keyName))
+		c.UI.Printf("  %-8s %s\n", "host", host)
 		c.UI.Printf("  %-8s %s\n", "key", config.Mask(key))
 		c.UI.Printf("  %-8s %d %s\n", c.UI.T("模型", "models"), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
-		if switched {
-			c.UI.Printf("  %-8s %s\n", c.UI.T("当前", "current"),
-				fmt.Sprintf(c.UI.T("已切到 %q（切回：tkr use <profile>）",
-					"switched to %q (switch back with: tkr use <profile>)"), profileName))
+		if protos := cfg.Keys[keyName].Protocols; len(protos) > 0 {
+			c.UI.Printf("  %-8s %s\n", c.UI.T("协议", "protocols"), c.UI.Dim(strings.Join(protos, " ")))
+			c.UI.Printf("  %-8s %s\n", c.UI.T("可跑", "can run"), strings.Join(runnable(cfg, keyName), " "))
 		}
 	})
 	return nil

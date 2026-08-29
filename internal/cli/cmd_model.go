@@ -35,19 +35,10 @@ func runModel(c *Context) error {
 	if err != nil {
 		return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
 	}
-	profileName := c.Flags.String("profile")
-	if profileName == "" {
-		profileName = cfg.Current
-	}
-	profile, ok := cfg.Profile(profileName)
-	if !ok {
-		return ui.Errf(ui.CodeProfileNotFound,
-			fmt.Sprintf(c.UI.T("找不到 profile：%s", "no such profile: %s"), profileName))
-	}
 
 	// 不指定 harness 时列出全部。
 	if len(c.Args) == 0 {
-		return listModelSlots(c, profile)
+		return listModelSlots(c, cfg)
 	}
 
 	name := c.Args[0]
@@ -59,7 +50,7 @@ func runModel(c *Context) error {
 	}
 
 	if c.Flags.Bool("reset") {
-		profile.ClearSlots(h.Name)
+		cfg.Harness(h.Name).Slots = config.ModelSlots{}
 		if err := cfg.Save(); err != nil {
 			return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 		}
@@ -82,13 +73,13 @@ func runModel(c *Context) error {
 				fmt.Sprintf(c.UI.T("%s 没有名为 %q 的槽", "%s has no slot named %q"), h.Name, slot)).
 				WithHint(c.UI.T("可用槽位：", "available slots: ") + slotList(h))
 		}
-		profile.SetSlot(h.Name, slot, model)
+		cfg.Harness(h.Name).Slots[slot] = model
 		if err := cfg.Save(); err != nil {
 			return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 		}
 	}
 
-	return showHarnessSlots(c, profile, h)
+	return showHarnessSlots(c, cfg, h)
 }
 
 func hasSlot(h *harness.Harness, slot string) bool {
@@ -108,27 +99,27 @@ func slotList(h *harness.Harness) string {
 	return strings.Join(names, ", ")
 }
 
-func listModelSlots(c *Context, profile *config.Profile) error {
+func listModelSlots(c *Context, cfg *config.Config) error {
 	type entry struct {
 		Harness string            `json:"harness"`
 		Slots   map[string]string `json:"slots"`
 	}
 	var out []entry
 	for _, h := range harness.All {
-		out = append(out, entry{Harness: h.Name, Slots: profile.Slots(h.Name)})
+		out = append(out, entry{Harness: h.Name, Slots: cfg.Harness(h.Name).Slots})
 	}
 
 	c.UI.Emit("model list", out, func() {
 		for _, h := range harness.All {
 			c.UI.Printf("%s\n", c.UI.Bold(h.Name))
-			printSlots(c, profile.Slots(h.Name), h)
+			printSlots(c, cfg.Harness(h.Name).Slots, h)
 		}
 	})
 	return nil
 }
 
-func showHarnessSlots(c *Context, profile *config.Profile, h *harness.Harness) error {
-	slots := profile.Slots(h.Name)
+func showHarnessSlots(c *Context, cfg *config.Config, h *harness.Harness) error {
+	slots := cfg.Harness(h.Name).Slots
 	c.UI.Emit("model", map[string]any{"harness": h.Name, "slots": slots}, func() {
 		c.UI.Printf("%s\n", c.UI.Bold(h.Name))
 		printSlots(c, slots, h)
@@ -146,7 +137,7 @@ func printSlots(c *Context, slots config.ModelSlots, h *harness.Harness) {
 	sort.Strings(names)
 
 	for _, s := range h.Slots {
-		v := slots.Get(s.Name)
+		v := slots[s.Name]
 		if v == "" {
 			mark := c.UI.T("未配置", "unset")
 			if s.Required {

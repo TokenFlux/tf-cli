@@ -89,42 +89,40 @@ func (c *Credentials) Save() error {
 // Get 返回某 profile 的凭据。
 //
 // 环境变量 TKR_API_KEY 优先于落盘凭据，且不写盘 —— 容器与 CI 场景。
-func (c *Credentials) Get(profile string) (*Credential, bool) {
+func (c *Credentials) Get(name string) (*Credential, bool) {
 	if k := os.Getenv("TKR_API_KEY"); k != "" {
 		return &Credential{Key: k, Source: SourceEnv}, true
 	}
-	if profile == "" {
-		profile = DefaultProfile
-	}
-	cred, ok := c.Items[profile]
+	cred, ok := c.Items[name]
 	return cred, ok && cred != nil && cred.Key != ""
 }
 
 // Set 写入某 profile 的凭据。
-func (c *Credentials) Set(profile string, cred *Credential) {
-	if profile == "" {
-		profile = DefaultProfile
-	}
+func (c *Credentials) Set(name string, cred *Credential) {
 	if c.Items == nil {
 		c.Items = map[string]*Credential{}
 	}
 	if cred.CreatedAt.IsZero() {
 		cred.CreatedAt = time.Now()
 	}
-	c.Items[profile] = cred
+	c.Items[name] = cred
 }
 
 // Mask 把 Key 截断成可安全展示的形式。
 // 任何面向用户的输出都必须经过它。
 func Mask(key string) string {
 	const head, tail = 6, 4
+	// 空值不是秘密，拿 **** 去表示“没有 Key”只会误导。
+	if key == "" {
+		return ""
+	}
 	if len(key) <= head+tail {
 		return "****"
 	}
 	return key[:head] + "…" + key[len(key)-tail:]
 }
 
-// Names 返回所有已保存凭据的 profile 名。
+// Names 返回所有已保存凭据的标签。
 func (c *Credentials) Names() []string {
 	out := make([]string, 0, len(c.Items))
 	for name := range c.Items {
@@ -135,8 +133,8 @@ func (c *Credentials) Names() []string {
 }
 
 // Remove 删除某个 profile 的凭据。
-func (c *Credentials) Remove(profile string) {
-	delete(c.Items, profile)
+func (c *Credentials) Remove(name string) {
+	delete(c.Items, name)
 }
 
 // Clear 删除全部凭据。

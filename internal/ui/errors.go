@@ -24,8 +24,10 @@ const (
 	CodeInstallIncomplete   Code = "TKR_INSTALL_INCOMPLETE"
 	CodeCancelled           Code = "TKR_CANCELLED"
 
-	CodeNetwork  Code = "TKR_NETWORK"
-	CodeInternal Code = "TKR_INTERNAL"
+	CodeKeyNotFound      Code = "TKR_KEY_NOT_FOUND"
+	CodeProtocolMismatch Code = "TKR_PROTOCOL_MISMATCH"
+	CodeNetwork          Code = "TKR_NETWORK"
+	CodeInternal         Code = "TKR_INTERNAL"
 )
 
 // Error 是带错误码与修复建议的结构化错误。

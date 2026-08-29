@@ -45,29 +45,19 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
 	}
 
-	profileName := c.Flags.String("profile")
-	if profileName == "" {
-		profileName = cfg.Current
-	}
-	profile, ok := cfg.Profile(profileName)
-	if !ok {
-		return ui.Errf(ui.CodeProfileNotFound,
-			fmt.Sprintf(c.UI.T("找不到 profile：%s", "no such profile: %s"), profileName))
-	}
-	host := profile.Host
-	if hv := c.Flags.String("host"); hv != "" {
-		host = normalizeHost(hv)
-	}
-
 	creds, _, err := config.LoadCredentials(paths)
 	if err != nil {
 		return ui.Errf(ui.CodeCredentialsRead, c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
 	}
-	cred, loggedIn := creds.Get(profileName)
-	if !loggedIn {
-		return ui.Errf(ui.CodeNotLoggedIn,
-			c.UI.T("尚未保存 API Key", "no API key stored")).
-			WithHint("tkr login")
+
+	keyName, err := resolveKey(c, cfg, creds, h)
+	if err != nil {
+		return err
+	}
+	cred, _ := creds.Get(keyName)
+	host := cfg.HostOf(keyName)
+	if hv := c.Flags.String("host"); hv != "" {
+		host = normalizeHost(hv)
 	}
 
 	// harness 缺失时按 E 项规则征求用户意见。
@@ -77,12 +67,12 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		}
 	}
 
-	slots, err := resolveSlots(c, cfg, profile, h, profileName, host, cred.Key)
+	slots, err := resolveSlots(c, cfg, h, keyName, host, cred.Key)
 	if err != nil {
 		return err
 	}
 
-	effort, err := applyEffort(c, h, slots, profileName, host, cred.Key)
+	effort, err := applyEffort(c, h, slots, keyName, host, cred.Key)
 	if err != nil {
 		return err
 	}
@@ -96,11 +86,11 @@ func runLaunch(c *Context, h *harness.Harness) error {
 
 	// 启动横幅：用户必须知道自己正在用什么，但只占一行。
 	//
-	// 有多个 profile 时必须把 profile 名括进来：用错 Key 的表现是
-	// “模型列表没见过”，不写出来用户很难想到是 profile 选错了。
+	// 有多把 Key 时必须写出用的是哪把：用错 Key 的表现是
+	// “模型列表没见过”，不写出来用户很难联想到是 Key 的问题。
 	banner := fmt.Sprintf("%s → %s", c.UI.Bold("tkr"), h.Name)
-	if len(cfg.Profiles) > 1 {
-		banner += "   " + c.UI.Dim(c.UI.T("profile", "profile")) + " " + profileName
+	if len(creds.Names()) > 1 {
+		banner += "   " + c.UI.Dim(c.UI.T("key", "key")) + " " + keyName
 	}
 	banner += "   " + c.UI.Dim(c.UI.T("模型", "model")) + " " + slots[config.SlotDefault]
 	if effort != "" {
@@ -128,10 +118,13 @@ func runLaunch(c *Context, h *harness.Harness) error {
 //
 // 必须填满所有已声明的槽：留空会让 harness 回落到它的内置默认模型，
 // 而那个模型通常不在用户的分组里，且失败可能是静默的。
-func resolveSlots(c *Context, cfg *config.Config, profile *config.Profile,
-	h *harness.Harness, profileName, host, key string) (map[string]string, error) {
+func resolveSlots(c *Context, cfg *config.Config,
+	h *harness.Harness, keyName, host, key string) (map[string]string, error) {
 
-	slots := profile.Slots(h.Name)
+	slots := config.ModelSlots{}
+	for k, v := range cfg.Harness(h.Name).Slots {
+		slots[k] = v
+	}
 
 	// -m 带值：本次覆盖主模型，不写盘。
 	override := c.Flags.String("model")
@@ -151,7 +144,7 @@ func resolveSlots(c *Context, cfg *config.Config, profile *config.Profile,
 		return slots, nil
 	}
 
-	ids, err := listModels(c, profileName, host, key)
+	ids, err := listModels(c, keyName, host, key)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +198,7 @@ func resolveSlots(c *Context, cfg *config.Config, profile *config.Profile,
 		return nil, err
 	}
 
-	profile.SetSlots(h.Name, slots)
+	cfg.Harness(h.Name).Slots = slots
 	if err := cfg.Save(); err != nil {
 		c.UI.Warnf(c.UI.T("模型已选定，但写入配置失败：%v", "model chosen, but saving config failed: %v"), err)
 	}
@@ -283,7 +276,7 @@ func editSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []st
 //
 // 优先用模型 ID 变体（如 gemini-3.1-pro-high）：那是分组真正支持的形式，
 // 比把参数交给 harness 再转发更可靠。没有变体时才回落到 harness 的旋钮。
-func applyEffort(c *Context, h *harness.Harness, slots config.ModelSlots, profileName, host, key string) (string, error) {
+func applyEffort(c *Context, h *harness.Harness, slots config.ModelSlots, keyName, host, key string) (string, error) {
 	effort := c.Flags.String("effort")
 	if effort == "" {
 		return "", nil
@@ -294,7 +287,7 @@ func applyEffort(c *Context, h *harness.Harness, slots config.ModelSlots, profil
 
 	// 先看分组里有没有该强度的模型变体。有就直接换模型 ——
 	// 那是分组真正支持的形式，比指望 harness 转发参数可靠。
-	if ids, err := listModels(c, profileName, host, key); err == nil {
+	if ids, err := listModels(c, keyName, host, key); err == nil {
 		variant := model.Ref{Base: base, Effort: effort}.String()
 		if contains(ids, variant) {
 			slots[config.SlotDefault] = variant
@@ -349,7 +342,7 @@ func modelItems(ids []string) []ui.Item {
 //
 // 启动路径上的网络调用必须可降级：一次瞬时抖动不应该让用户
 // 根本启动不了 harness。只有在既无网络又无缓存时才真正失败。
-func listModels(c *Context, profileName, host, key string) ([]string, error) {
+func listModels(c *Context, keyName, host, key string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
@@ -362,7 +355,7 @@ func listModels(c *Context, profileName, host, key string) ([]string, error) {
 		}
 		sort.Strings(ids)
 		if paths, perr := config.DefaultPaths(); perr == nil {
-			_ = paths.WriteCache(config.ModelsCacheKey(profileName), ids)
+			_ = paths.WriteCache(config.ModelsCacheKey(keyName), ids)
 		}
 		return ids, nil
 	}
@@ -377,7 +370,7 @@ func listModels(c *Context, profileName, host, key string) ([]string, error) {
 
 	var cached []string
 	if paths, perr := config.DefaultPaths(); perr == nil {
-		if age, cerr := paths.ReadCache(config.ModelsCacheKey(profileName), &cached); cerr == nil && len(cached) > 0 {
+		if age, cerr := paths.ReadCache(config.ModelsCacheKey(keyName), &cached); cerr == nil && len(cached) > 0 {
 			c.UI.Warnf(c.UI.T("模型列表取不到，暂用 %s 前的缓存",
 				"could not refresh models, using a cache from %s ago"), age.Round(time.Second))
 			return cached, nil

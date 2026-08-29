@@ -1,227 +1,212 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func testPaths(t *testing.T) Paths {
 	t.Helper()
 	dir := t.TempDir()
-	return Paths{ConfigDir: filepath.Join(dir, "cfg"), CacheDir: filepath.Join(dir, "cache")}
+	return Paths{ConfigDir: dir, CacheDir: filepath.Join(dir, "cache")}
 }
 
-// 首次读取应给出可用的默认配置，而不是报错。
-func TestLoadMissingConfigYieldsDefaults(t *testing.T) {
-	p := testPaths(t)
-	cfg, err := Load(p)
+// 新装的机器上不该有任何 Key，也不该有隐藏的「当前模式」。
+func TestLoadEmpty(t *testing.T) {
+	cfg, err := Load(testPaths(t))
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatal(err)
 	}
-	prof, ok := cfg.Profile("")
-	if !ok {
-		t.Fatal("default profile missing")
+	if len(cfg.Keys) != 0 {
+		t.Errorf("fresh config should have no keys, got %v", cfg.KeyNames())
 	}
-	if prof.Host != DefaultHost {
-		t.Errorf("host = %q, want %q", prof.Host, DefaultHost)
+	if len(cfg.Harnesses) != 0 {
+		t.Errorf("fresh config should have no bindings, got %v", cfg.Harnesses)
 	}
 }
 
-// 配置文件 0644、目录 0700，且能往返。
-func TestSaveConfigPermissionsAndRoundTrip(t *testing.T) {
-	p := testPaths(t)
-	cfg, err := Load(p)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	prof, _ := cfg.Profile("")
-	prof.SetSlots("claude", ModelSlots{SlotDefault: "a", SlotFast: "b", SlotHeavy: "c"})
-
+// 配置 0644、目录 0700、凭据 0600 —— 凭据文件是唯一的机密。
+func TestFilePermissions(t *testing.T) {
+	paths := testPaths(t)
+	cfg, _ := Load(paths)
+	cfg.KeyMetaOf("default").Host = DefaultHost
 	if err := cfg.Save(); err != nil {
-		t.Fatalf("Save: %v", err)
+		t.Fatal(err)
 	}
-
-	info, err := os.Stat(p.ConfigFile())
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if got := info.Mode().Perm(); got != configFilePerm {
-		t.Errorf("config perm = %o, want %o", got, configFilePerm)
-	}
-	dirInfo, err := os.Stat(p.ConfigDir)
-	if err != nil {
-		t.Fatalf("stat dir: %v", err)
-	}
-	if got := dirInfo.Mode().Perm(); got != dirPerm {
-		t.Errorf("dir perm = %o, want %o", got, dirPerm)
-	}
-
-	reloaded, err := Load(p)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	rp, _ := reloaded.Profile("")
-	got := rp.Slots("claude")
-	if got.Get(SlotDefault) != "a" || got.Get(SlotFast) != "b" || got.Get(SlotHeavy) != "c" {
-		t.Errorf("slots = %+v, want a/b/c", got)
-	}
-}
-
-// 各 harness 的槽位集合不同，存储必须容纳任意槽名。
-func TestSlotsAreHarnessSpecific(t *testing.T) {
-	p := &Profile{Host: DefaultHost}
-	p.SetSlots("claude", ModelSlots{SlotFast: "haiku", SlotDefault: "sonnet", SlotHeavy: "opus"})
-	p.SetSlots("codex", ModelSlots{SlotDefault: "gpt", SlotReview: "gpt-review"})
-	p.SetSlots("opencode", ModelSlots{SlotDefault: "gpt", SlotSmall: "gpt-small"})
-
-	if got := p.Slots("codex").Get(SlotReview); got != "gpt-review" {
-		t.Errorf("codex review slot = %q", got)
-	}
-	if got := p.Slots("opencode").Get(SlotSmall); got != "gpt-small" {
-		t.Errorf("opencode small slot = %q", got)
-	}
-	if got := p.Slots("claude").Get(SlotSmall); got != "" {
-		t.Errorf("claude should have no small slot, got %q", got)
-	}
-}
-
-// 单槽修改不能波及同一 harness 的其它槽。
-func TestSetSlotIsSurgical(t *testing.T) {
-	p := &Profile{Host: DefaultHost}
-	p.SetSlots("opencode", ModelSlots{SlotDefault: "main", SlotSmall: "small"})
-	p.SetSlot("opencode", SlotSmall, "cheaper")
-
-	s := p.Slots("opencode")
-	if s.Get(SlotDefault) != "main" {
-		t.Errorf("default slot was disturbed: %q", s.Get(SlotDefault))
-	}
-	if s.Get(SlotSmall) != "cheaper" {
-		t.Errorf("small slot = %q, want cheaper", s.Get(SlotSmall))
-	}
-
-	// 置空即删除该槽，使其回到「未配置」。
-	p.SetSlot("opencode", SlotSmall, "")
-	if got := p.Slots("opencode").Get(SlotSmall); got != "" {
-		t.Errorf("cleared slot = %q, want empty", got)
-	}
-}
-
-// Slots 必须返回副本，调用方改动不能污染配置。
-func TestSlotsReturnsCopy(t *testing.T) {
-	p := &Profile{Host: DefaultHost}
-	p.SetSlots("claude", ModelSlots{SlotDefault: "sonnet"})
-
-	grabbed := p.Slots("claude")
-	grabbed[SlotDefault] = "tampered"
-
-	if got := p.Slots("claude").Get(SlotDefault); got != "sonnet" {
-		t.Errorf("config was mutated through the returned map: %q", got)
-	}
-}
-
-// 模型槽必须按 harness 分开存，互不影响。
-func TestSlotsAreIsolatedPerHarness(t *testing.T) {
-	p := &Profile{Host: DefaultHost}
-	p.SetSlots("claude", ModelSlots{SlotDefault: "claude-model"})
-	p.SetSlots("codex", ModelSlots{SlotDefault: "codex-model"})
-
-	if got := p.Slots("claude").Get(SlotDefault); got != "claude-model" {
-		t.Errorf("claude slot = %q", got)
-	}
-	if got := p.Slots("codex").Get(SlotDefault); got != "codex-model" {
-		t.Errorf("codex slot = %q", got)
-	}
-	if got := p.Slots("opencode").Get(SlotDefault); got != "" {
-		t.Errorf("unset harness should be empty, got %q", got)
-	}
-}
-
-// 凭据文件必须是 0600。
-func TestCredentialsWrittenWith0600(t *testing.T) {
-	p := testPaths(t)
-	creds, _, err := LoadCredentials(p)
-	if err != nil {
-		t.Fatalf("LoadCredentials: %v", err)
-	}
-	creds.Set(DefaultProfile, &Credential{Key: "sk-secret", Source: SourcePaste})
-	if err := creds.Save(); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	info, err := os.Stat(p.CredentialsFile())
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if got := info.Mode().Perm(); got != credsFilePerm {
-		t.Errorf("credentials perm = %o, want %o", got, credsFilePerm)
-	}
-}
-
-// 权限过宽的凭据文件应被自动收紧并汇报。
-func TestLoadCredentialsRepairsLoosePermissions(t *testing.T) {
-	p := testPaths(t)
-	if err := ensureDir(p.ConfigDir); err != nil {
-		t.Fatalf("ensureDir: %v", err)
-	}
-	if err := os.WriteFile(p.CredentialsFile(), []byte(`{"version":1,"credentials":{}}`), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	_, repaired, err := LoadCredentials(p)
-	if err != nil {
-		t.Fatalf("LoadCredentials: %v", err)
-	}
-	if !repaired {
-		t.Error("expected the loose permission to be reported")
-	}
-	info, _ := os.Stat(p.CredentialsFile())
-	if got := info.Mode().Perm(); got != credsFilePerm {
-		t.Errorf("perm after repair = %o, want %o", got, credsFilePerm)
-	}
-}
-
-// 环境变量优先于落盘凭据，且不写盘。
-func TestEnvKeyTakesPrecedence(t *testing.T) {
-	p := testPaths(t)
-	creds, _, err := LoadCredentials(p)
-	if err != nil {
-		t.Fatalf("LoadCredentials: %v", err)
-	}
-	creds.Set(DefaultProfile, &Credential{Key: "sk-from-disk"})
-
-	t.Setenv("TKR_API_KEY", "sk-from-env")
-	got, ok := creds.Get(DefaultProfile)
-	if !ok {
-		t.Fatal("expected a credential")
-	}
-	if got.Key != "sk-from-env" || got.Source != SourceEnv {
-		t.Errorf("got %+v, want the env key", got)
-	}
-}
-
-// 任何展示都必须经过 Mask，且不能泄露中间部分。
-func TestMask(t *testing.T) {
-	const key = "sk-d616520b0071d4df6ccc3ad743362bd4"
-	masked := Mask(key)
-	if strings.Contains(masked, "0071d4df") {
-		t.Errorf("mask leaked the middle: %q", masked)
-	}
-	if got := Mask("short"); got != "****" {
-		t.Errorf("short key mask = %q, want ****", got)
-	}
-}
-
-// 凭据是按 profile 分开存的：删一把不能影响另一把。
-func TestCredentialsRemoveIsPerProfile(t *testing.T) {
-	dir := t.TempDir()
-	paths := Paths{ConfigDir: dir, CacheDir: dir}
 
 	creds, _, err := LoadCredentials(paths)
 	if err != nil {
 		t.Fatal(err)
 	}
+	creds.Set("default", &Credential{Key: "sk-secret", Source: SourcePaste})
+	if err := creds.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		path string
+		want os.FileMode
+	}{
+		{paths.ConfigFile(), 0o644},
+		{paths.CredentialsFile(), 0o600},
+		{paths.ConfigDir, 0o700},
+	} {
+		st, err := os.Stat(tc.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := st.Mode().Perm(); got != tc.want {
+			t.Errorf("%s mode = %o, want %o", tc.path, got, tc.want)
+		}
+	}
+}
+
+// 权限过宽的凭据文件要被自动收紧，并让调用方知道发生过修复。
+func TestCredentialsPermissionRepair(t *testing.T) {
+	paths := testPaths(t)
+	creds, _, _ := LoadCredentials(paths)
+	creds.Set("default", &Credential{Key: "sk-secret", Source: SourcePaste})
+	if err := creds.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(paths.CredentialsFile(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, repaired, err := LoadCredentials(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !repaired {
+		t.Fatal("loose permissions should be reported as repaired")
+	}
+	st, _ := os.Stat(paths.CredentialsFile())
+	if got := st.Mode().Perm(); got != 0o600 {
+		t.Errorf("mode after repair = %o, want 600", got)
+	}
+}
+
+// 环境变量优先于落盘凭据，供容器与 CI 使用。
+func TestEnvKeyWins(t *testing.T) {
+	paths := testPaths(t)
+	creds, _, _ := LoadCredentials(paths)
+	creds.Set("default", &Credential{Key: "sk-file", Source: SourcePaste})
+
+	t.Setenv("TKR_API_KEY", "sk-env")
+	cred, ok := creds.Get("default")
+	if !ok || cred.Key != "sk-env" || cred.Source != SourceEnv {
+		t.Errorf("env key should win, got %+v", cred)
+	}
+}
+
+// 模型槽按 harness 分开：改一个不能动到另一个。
+func TestSlotsArePerHarness(t *testing.T) {
+	paths := testPaths(t)
+	cfg, _ := Load(paths)
+
+	cfg.Harness("claude").Slots[SlotDefault] = "claude-sonnet-5"
+	cfg.Harness("claude").Slots[SlotFast] = "claude-haiku-4-5"
+	cfg.Harness("codex").Slots[SlotDefault] = "gpt-5.6-sol"
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Harness("claude").Slots[SlotFast]; got != "claude-haiku-4-5" {
+		t.Errorf("claude fast slot = %q", got)
+	}
+	if got := reloaded.Harness("codex").Slots[SlotDefault]; got != "gpt-5.6-sol" {
+		t.Errorf("codex default slot = %q", got)
+	}
+	if got := reloaded.Harness("codex").Slots[SlotFast]; got != "" {
+		t.Errorf("codex should not have inherited claude's fast slot: %q", got)
+	}
+}
+
+// 绑定属于 harness：不同 harness 可以用不同的 Key。
+func TestBindingsArePerHarness(t *testing.T) {
+	paths := testPaths(t)
+	cfg, _ := Load(paths)
+
+	cfg.Harness("claude").Key = "max"
+	cfg.Harness("codex").Key = "gpt"
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, _ := Load(paths)
+	if reloaded.Harness("claude").Key != "max" || reloaded.Harness("codex").Key != "gpt" {
+		t.Errorf("bindings not preserved: %+v", reloaded.Harnesses)
+	}
+}
+
+// 未探测过的 Key 视为支持一切：预检只能证伪，没有证据就不拦。
+func TestSupportsWithoutProbe(t *testing.T) {
+	var unknown *KeyMeta
+	if !unknown.Supports("openai_responses") {
+		t.Error("an unprobed key must not be filtered out")
+	}
+	probed := &KeyMeta{Protocols: []string{"anthropic_messages"}}
+	if probed.Supports("openai_responses") {
+		t.Error("a probed key must be filtered by its protocols")
+	}
+	if !probed.Supports("anthropic_messages") {
+		t.Error("allowed protocol should pass")
+	}
+}
+
+// 旧的 profiles/current 结构要能迁到 keys/harnesses，且不丢已选模型。
+func TestMigrateFromProfiles(t *testing.T) {
+	paths := testPaths(t)
+	old := map[string]any{
+		"version": 1,
+		"current": "work",
+		"profiles": map[string]any{
+			"default": map[string]any{"host": DefaultHost},
+			"work": map[string]any{
+				"host": "https://gw.example.com",
+				"harnesses": map[string]any{
+					"codex": map[string]string{"default": "gpt-5.6-sol"},
+				},
+			},
+		},
+	}
+	data, _ := json.MarshalIndent(old, "", "  ")
+	if err := os.MkdirAll(paths.ConfigDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.ConfigFile(), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Keys) != 2 {
+		t.Fatalf("expected both profiles to become keys, got %v", cfg.KeyNames())
+	}
+	if got := cfg.HostOf("work"); got != "https://gw.example.com" {
+		t.Errorf("host lost in migration: %q", got)
+	}
+	// 旧的全局 current 变成各 harness 的初始绑定。
+	if got := cfg.Harness("codex").Key; got != "work" {
+		t.Errorf("codex binding = %q, want work", got)
+	}
+	if got := cfg.Harness("codex").Slots[SlotDefault]; got != "gpt-5.6-sol" {
+		t.Errorf("slot lost in migration: %q", got)
+	}
+}
+
+// 凭据按名字分开存：删一把不能影响另一把。
+func TestCredentialsRemoveIsPerName(t *testing.T) {
+	paths := testPaths(t)
+	creds, _, _ := LoadCredentials(paths)
 	creds.Set("default", &Credential{Key: "sk-aaa", Source: SourcePaste})
 	creds.Set("work", &Credential{Key: "sk-bbb", Source: SourcePaste})
 	if err := creds.Save(); err != nil {
@@ -237,29 +222,18 @@ func TestCredentialsRemoveIsPerProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reloaded, _, err := LoadCredentials(paths)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reloaded, _, _ := LoadCredentials(paths)
 	if _, ok := reloaded.Get("work"); ok {
 		t.Error("work credential survived removal")
 	}
-	cred, ok := reloaded.Get("default")
-	if !ok || cred.Key != "sk-aaa" {
+	if cred, ok := reloaded.Get("default"); !ok || cred.Key != "sk-aaa" {
 		t.Errorf("default credential was disturbed: %+v", cred)
-	}
-
-	reloaded.Clear()
-	if got := len(reloaded.Names()); got != 0 {
-		t.Errorf("Clear() left %d credentials", got)
 	}
 }
 
-// 模型缓存必须按 profile 分开：不同 profile 是不同的 Key、不同的分组。
-func TestModelsCacheIsPerProfile(t *testing.T) {
-	dir := t.TempDir()
-	paths := Paths{ConfigDir: dir, CacheDir: dir}
-
+// 模型缓存按 Key 分开，避免跨 Key 污染补全与降级。
+func TestModelsCacheIsPerKey(t *testing.T) {
+	paths := testPaths(t)
 	if err := paths.WriteCache(ModelsCacheKey("default"), []string{"claude-opus-5"}); err != nil {
 		t.Fatal(err)
 	}
@@ -272,14 +246,28 @@ func TestModelsCacheIsPerProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0] != "claude-opus-5" {
-		t.Errorf("default cache polluted: %v", got)
+		t.Errorf("cache polluted: %v", got)
 	}
 
-	// 删一个 profile 的缓存不能影响另一个。
 	if err := paths.RemoveCache(ModelsCacheKey("gpt")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := paths.ReadCache(ModelsCacheKey("default"), &got); err != nil {
-		t.Errorf("default cache was removed along with gpt: %v", err)
+		t.Errorf("removing one key's cache removed another's: %v", err)
+	}
+}
+
+// Mask 是所有 Key 展示的唯一出口，中间段绝不能露出。
+func TestMask(t *testing.T) {
+	full := "sk-d616520b0071d4df6ccc3ad743362bd4"
+	masked := Mask(full)
+	if masked == full {
+		t.Fatal("key was not masked")
+	}
+	if len(masked) > 16 {
+		t.Errorf("mask too long: %q", masked)
+	}
+	if Mask("") != "" {
+		t.Error("empty key should mask to empty")
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/tokenflux/tkr/internal/buildinfo"
 	"github.com/tokenflux/tkr/internal/config"
+	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
@@ -110,49 +111,27 @@ func runConfigShow(c *Context, paths config.Paths) error {
 		), paths.CredentialsFile())
 	}
 
-	profileName := c.Flags.String("profile")
-	if profileName == "" {
-		profileName = cfg.Current
-	}
-	profile, ok := cfg.Profile(profileName)
-	if !ok {
-		return ui.Errf(ui.CodeProfileNotFound,
-			fmt.Sprintf(c.UI.T("找不到 profile：%s", "no such profile: %s"), profileName)).
-			WithHint("tkr config show")
-	}
-
-	host := profile.Host
-	if h := c.Flags.String("host"); h != "" {
-		host = h
-	}
-
-	cred, loggedIn := creds.Get(profileName)
-	keyDisplay := ""
-	source := ""
-	if loggedIn {
-		keyDisplay = config.Mask(cred.Key)
-		source = cred.Source
-	}
+	names := creds.Names()
 
 	c.UI.Emit("config show", map[string]any{
-		"profile":     profileName,
-		"host":        host,
-		"logged_in":   loggedIn,
-		"key":         keyDisplay,
-		"key_source":  source,
+		"keys":        names,
+		"harnesses":   cfg.Harnesses,
 		"config_file": paths.ConfigFile(),
 		"created":     created,
 	}, func() {
-		c.UI.Printf("%-10s %s\n", "profile", profileName)
-		c.UI.Printf("%-10s %s\n", "host", host)
-		if loggedIn {
-			c.UI.Printf("%-10s %s %s\n", "key", keyDisplay, c.UI.Dim("("+source+")"))
-		} else {
-			c.UI.Printf("%-10s %s\n", "key", c.UI.Dim(c.UI.T("未登录", "not logged in")))
-			c.UI.Logf("%s", c.UI.Dim(c.UI.T(
-				"运行 tkr login 以保存 API Key。",
-				"Run `tkr login` to store an API key.",
-			)))
+		if len(names) == 0 {
+			c.UI.Printf("%s\n", c.UI.Dim(c.UI.T("还没有保存任何 Key", "no keys stored yet")))
+			c.UI.Logf("%s", c.UI.Dim(c.UI.T("运行 tkr login 以保存 API Key。", "Run `tkr login` to store an API key.")))
+		}
+		for _, n := range names {
+			cred, _ := creds.Get(n)
+			c.UI.Printf("%-10s %s  %s\n", n, config.Mask(cred.Key), c.UI.Dim(cfg.HostOf(n)))
+		}
+		// 绑定关系属于 harness，没有全局「当前 profile」这回事。
+		for _, h := range harness.All {
+			if hc, ok := cfg.Harnesses[h.Name]; ok && hc.Key != "" {
+				c.UI.Printf("%-10s → %s\n", h.Name, hc.Key)
+			}
 		}
 		if created {
 			c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf(c.UI.T(

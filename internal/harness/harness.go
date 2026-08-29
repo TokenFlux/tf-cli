@@ -30,6 +30,16 @@ type InstallOption struct {
 // Command 返回可展示、可复制的完整命令。
 func (o InstallOption) Command() string { return strings.Join(o.Args, " ") }
 
+// Protocol 是网关的客户端文本协议，取值与 TokenRouter 的
+// allowed_client_protocols 一致。
+type Protocol string
+
+const (
+	ProtoAnthropicMessages Protocol = "anthropic_messages"
+	ProtoOpenAIResponses   Protocol = "openai_responses"
+	ProtoOpenAIChat        Protocol = "openai_chat_completions"
+)
+
 // EffortKnob 表示该 harness 如何接受思考强度。
 //
 // 强度与模型槽是正交的两个维度，但 TokenFlux 上它们有时被混在一起：
@@ -48,9 +58,12 @@ const (
 
 // Harness 是一个可被 tkr 启动的工具。
 type Harness struct {
-	Name       string
-	Aliases    []string
-	Bin        string
+	Name    string
+	Aliases []string
+	Bin     string
+	// Protocol 是启动该 harness 所必需的客户端协议。
+	// 分组不允许这个协议时，那把 Key 根本不该出现在候选里。
+	Protocol   Protocol
 	Slots      []Slot
 	Installs   []InstallOption
 	EffortKnob EffortKnob
@@ -74,6 +87,7 @@ var All = []*Harness{
 		Bin:     "claude",
 		// 描述写用途而不写 Anthropic 的档位名：用户面对的是网关上的
 		// 模型列表，“sonnet 档”这类黑话无助于判断该填什么。
+		Protocol: ProtoAnthropicMessages,
 		Slots: []Slot{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			{Name: "fast", Purpose: zhen("后台任务：标题、文件摘要", "background tasks: titles, file summaries")},
@@ -88,9 +102,10 @@ var All = []*Harness{
 		DocsURL: "https://docs.tokenflux.dev/docs/agents/claude-code",
 	},
 	{
-		Name:    "codex",
-		Aliases: []string{"cx"},
-		Bin:     "codex",
+		Name:     "codex",
+		Aliases:  []string{"cx"},
+		Bin:      "codex",
+		Protocol: ProtoOpenAIResponses,
 		Slots: []Slot{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			{Name: "review", Purpose: zhen("代码审查", "code review")},
@@ -104,8 +119,9 @@ var All = []*Harness{
 		DocsURL: "https://docs.tokenflux.dev/docs/agents/codex",
 	},
 	{
-		Name: "opencode",
-		Bin:  "opencode",
+		Name:     "opencode",
+		Bin:      "opencode",
+		Protocol: ProtoOpenAIResponses,
 		Slots: []Slot{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			// 不注入 small 会回落到内置的 gpt-5.4-nano，标题生成静默失败。
