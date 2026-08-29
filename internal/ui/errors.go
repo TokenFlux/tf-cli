@@ -24,6 +24,7 @@ const (
 	CodeInstallIncomplete   Code = "TKR_INSTALL_INCOMPLETE"
 	CodeCancelled           Code = "TKR_CANCELLED"
 
+	CodeNetwork  Code = "TKR_NETWORK"
 	CodeInternal Code = "TKR_INTERNAL"
 )
 

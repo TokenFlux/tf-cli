@@ -119,15 +119,15 @@ func EnsureInstalled(c *Context, h *harness.Harness) error {
 		return notInstalledErr(c, h, options)
 	}
 
-	labels := make([]string, 0, len(options)+1)
+	items := make([]ui.Item, 0, len(options)+1)
 	for _, o := range options {
-		labels = append(labels, o.Command())
+		items = append(items, ui.Item{Label: o.Command(), Detail: o.Manager})
 	}
-	labels = append(labels, c.UI.T("退出", "quit"))
+	items = append(items, ui.Item{Label: c.UI.T("退出", "quit")})
 
-	idx, err := c.UI.Choose(
-		fmt.Sprintf(c.UI.T("未检测到 %s。", "%s is not installed."), h.Name),
-		labels,
+	idx, err := c.UI.Select(
+		fmt.Sprintf(c.UI.T("未检测到 %s，要现在装吗？", "%s is not installed. Install it now?"), h.Name),
+		items,
 	)
 	if err != nil {
 		return err
