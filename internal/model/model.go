@@ -42,33 +42,83 @@ func EffortRank(e string) int {
 
 // Ref 是拆开后的模型 ID。
 type Ref struct {
-	Base   string // 去掉强度后缀的基名
+	Prefix string // 复合 Key 的分组前缀；普通 Key 为空
+	Base   string // 去掉前缀与强度后缀的基名
 	Effort string // 空表示该 ID 未编码强度
 }
 
-// Parse 拆出基名与强度后缀。
+// Parse 拆出分组前缀、基名与强度后缀。
 //
-// 只认最后一段且必须是已知档位，避免把 `gpt-5.6-sol` 这种名字里
-// 本来就有连字符的模型误拆。
+// 前缀只按**第一个**斜杠拆 —— 模型 ID 自身可能含斜杠
+// （GPT/vendor/model 的前缀是 GPT，模型是 vendor/model）。
+//
+// 强度只认最后一段且必须是已知档位，避免把 `gpt-5.6-sol` 这种
+// 名字里本来就有连字符的模型误拆。
 func Parse(id string) Ref {
+	var r Ref
+	if i := strings.Index(id, "/"); i > 0 {
+		r.Prefix, id = id[:i], id[i+1:]
+	}
 	if i := strings.LastIndex(id, "-"); i > 0 {
 		if suffix := id[i+1:]; isEffort(suffix) {
-			return Ref{Base: id[:i], Effort: suffix}
+			r.Base, r.Effort = id[:i], suffix
+			return r
 		}
 	}
-	return Ref{Base: id}
+	r.Base = id
+	return r
 }
 
-// String 还原成模型 ID。
+// String 还原成完整模型 ID（含前缀）。
 func (r Ref) String() string {
+	if r.Prefix == "" {
+		return r.Display()
+	}
+	return r.Prefix + "/" + r.Display()
+}
+
+// Display 返回不含分组前缀的模型名，用于展示。
+func (r Ref) Display() string {
 	if r.Effort == "" {
 		return r.Base
 	}
 	return r.Base + "-" + r.Effort
 }
 
-// Family 是同一基名下的一组强度变体。
+// IsComposite 报告这份模型列表是否来自复合 Key。
+//
+// 复合 Key 的 /v1/models 会给每个 ID 加好分组前缀，所以出现斜杠
+// 就是充分信号，不需要额外接口判断。
+func IsComposite(ids []string) bool {
+	for _, id := range ids {
+		if strings.Contains(id, "/") {
+			return true
+		}
+	}
+	return false
+}
+
+// Prefixes 按出现顺序列出所有分组前缀。
+func Prefixes(ids []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, id := range ids {
+		p := Parse(id).Prefix
+		if p != "" && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Family 是同一分组、同一基名下的一组强度变体。
+//
+// 分组必须参与分组键：同一个模型可能同时存在于多个分组，
+// 且倒率差异巨大（claude-opus-5 在两个分组里相差 4 倍），
+// 合并掉会让用户无法选便宜的那个。
 type Family struct {
+	Prefix  string
 	Base    string
 	Efforts []string          // 已按强度排序；无变体时为空
 	byEfort map[string]string // 强度 → 完整模型 ID
@@ -104,11 +154,12 @@ func Group(ids []string) []Family {
 
 	for _, id := range ids {
 		r := Parse(id)
-		f, ok := acc[r.Base]
+		key := r.Prefix + "\x00" + r.Base
+		f, ok := acc[key]
 		if !ok {
-			f = &Family{Base: r.Base, byEfort: map[string]string{}}
-			acc[r.Base] = f
-			order = append(order, r.Base)
+			f = &Family{Prefix: r.Prefix, Base: r.Base, byEfort: map[string]string{}}
+			acc[key] = f
+			order = append(order, key)
 		}
 		if r.Effort == "" {
 			f.plain = id
@@ -119,8 +170,8 @@ func Group(ids []string) []Family {
 	}
 
 	out := make([]Family, 0, len(order))
-	for _, base := range order {
-		f := acc[base]
+	for _, key := range order {
+		f := acc[key]
 		sort.Slice(f.Efforts, func(i, j int) bool {
 			return EffortRank(f.Efforts[i]) < EffortRank(f.Efforts[j])
 		})

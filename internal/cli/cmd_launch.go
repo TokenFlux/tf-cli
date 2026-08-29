@@ -159,10 +159,7 @@ func resolveSlots(c *Context, cfg *config.Config, profile *config.Profile,
 				fmt.Sprintf(c.UI.T("%s 尚未选定主模型", "no main model chosen for %s"), h.Name)).
 				WithHint(fmt.Sprintf("tkr model %s --set default=<model>", h.Name))
 		}
-		choices := make([]ui.Item, 0, len(ids))
-		for _, id := range ids {
-			choices = append(choices, ui.Item{Label: id})
-		}
+		choices := modelItems(ids)
 		pick, err := c.UI.Select(fmt.Sprintf(c.UI.T("为 %s 选择主模型", "Pick the main model for %s"), h.Name), choices)
 		if err != nil {
 			return nil, err
@@ -255,13 +252,11 @@ func editSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []st
 		}
 
 		slot := h.Slots[idx]
-		choices := make([]ui.Item, 0, len(ids))
-		for _, id := range ids {
-			it := ui.Item{Label: id}
+		choices := modelItems(ids)
+		for i, id := range ids {
 			if id == slots[slot.Name] {
-				it.Note = c.UI.Dim(c.UI.T("← 当前", "← current"))
+				choices[i].Note = c.UI.Dim(c.UI.T("← 当前", "← current"))
 			}
-			choices = append(choices, it)
 		}
 
 		pick, err := c.UI.Select(fmt.Sprintf(c.UI.T("为 %s.%s 选择模型", "Pick a model for %s.%s"),
@@ -325,6 +320,19 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// modelItems 把模型 ID 变成选择器条目。
+//
+// 复合 Key 下同一个模型会在多个分组里重复出现，且倒率可能相差好几倍，
+// 所以把分组前缀单独成列 —— 否则列表里就是一堆看不出区别的同名项。
+func modelItems(ids []string) []ui.Item {
+	items := make([]ui.Item, 0, len(ids))
+	for _, id := range ids {
+		r := model.Parse(id)
+		items = append(items, ui.Item{Label: r.Display(), Detail: r.Prefix})
+	}
+	return items
 }
 
 // listModels 取模型列表，网络不可用时降级用缓存。

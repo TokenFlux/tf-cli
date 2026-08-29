@@ -160,14 +160,62 @@ func resolveLoginProfile(c *Context, creds *config.Credentials, cfg *config.Conf
 			Detail: c.UI.T("保留原有凭据", "keeps the existing one")},
 		{Label: fmt.Sprintf(c.UI.T("覆盖 %q", "replace %q"), target),
 			Detail: config.Mask(existing.Key) + " → " + config.Mask(key)},
+		{Label: c.UI.T("自订名称…", "custom name…"),
+			Detail: c.UI.T("自己输入一个", "type your own")},
 	})
 	if err != nil {
 		return "", err
 	}
-	if idx == 0 {
+	switch idx {
+	case 0:
 		return suggestion, nil
+	case 1:
+		return target, nil
 	}
-	return target, nil
+	return askProfileName(c, creds, suggestion)
+}
+
+// askProfileName 让用户输入 profile 名，并当场校验。
+//
+// 已存在的名字不直接拒绝 —— 用户可能就是想覆盖那一个，
+// 但必须把影响说清楚。
+func askProfileName(c *Context, creds *config.Credentials, suggestion string) (string, error) {
+	for {
+		name, err := c.UI.ReadLine(fmt.Sprintf(
+			c.UI.T("profile 名称 [%s]：", "profile name [%s]:"), suggestion))
+		if err != nil {
+			return "", err
+		}
+		if name == "" {
+			return suggestion, nil
+		}
+		if !validProfileName(name) {
+			c.UI.Warnf("%s", c.UI.T("名称只能用字母、数字、下划线和连字符，最长 32 位",
+				"names may only contain letters, digits, underscores and hyphens, max 32"))
+			continue
+		}
+		if old, exists := creds.Get(name); exists {
+			c.UI.Warnf(c.UI.T("profile %q 已存在（%s），保存将覆盖它",
+				"profile %q already exists (%s); saving will replace it"), name, config.Mask(old.Key))
+		}
+		return name, nil
+	}
+}
+
+func validProfileName(s string) bool {
+	if s == "" || len(s) > 32 {
+		return false
+	}
+	for _, r := range s {
+		ok := r == '-' || r == '_' ||
+			(r >= '0' && r <= '9') ||
+			(r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z')
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // suggestProfileName 从这把 Key 看得到的模型里猫一个名字。

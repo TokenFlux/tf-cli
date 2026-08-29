@@ -80,3 +80,51 @@ func TestGuessTier(t *testing.T) {
 		}
 	}
 }
+
+// 复合 Key 的前缀只按第一个斜杠拆 —— 模型 ID 自身可能含斜杠。
+func TestParseCompositePrefix(t *testing.T) {
+	cases := []struct{ id, prefix, base, effort string }{
+		{"GPT/gpt-5.6-sol", "GPT", "gpt-5.6-sol", ""},
+		{"Gemini/gemini-3.1-pro-high", "Gemini", "gemini-3.1-pro", "high"},
+		{"GPT/vendor/model", "GPT", "vendor/model", ""},
+		{"claude-opus-5", "", "claude-opus-5", ""},
+	}
+	for _, c := range cases {
+		got := Parse(c.id)
+		if got.Prefix != c.prefix || got.Base != c.base || got.Effort != c.effort {
+			t.Errorf("Parse(%q) = %+v", c.id, got)
+		}
+		if round := got.String(); round != c.id {
+			t.Errorf("round-trip of %q gave %q", c.id, round)
+		}
+	}
+
+	if got := Parse("Gemini/gemini-3.1-pro-high").Display(); got != "gemini-3.1-pro-high" {
+		t.Errorf("Display() = %q, want the id without the group prefix", got)
+	}
+}
+
+// 同一模型出现在多个分组时不能被合并 —— 倍率可能差好几倍。
+func TestSameModelInDifferentGroups(t *testing.T) {
+	ids := []string{"Max/claude-opus-5", "Kiro/claude-opus-5"}
+	fams := Group(ids)
+	if len(fams) != 2 {
+		t.Fatalf("got %d families, want 2 (one per group)", len(fams))
+	}
+	if fams[0].Prefix != "Max" || fams[1].Prefix != "Kiro" {
+		t.Errorf("prefixes lost: %+v", fams)
+	}
+	if id, _ := fams[1].ID(""); id != "Kiro/claude-opus-5" {
+		t.Errorf("ID() = %q, want the prefixed form", id)
+	}
+
+	if !IsComposite(ids) {
+		t.Error("a slash in the id means a composite key")
+	}
+	if IsComposite([]string{"gpt-5.4"}) {
+		t.Error("plain ids must not be treated as composite")
+	}
+	if got := Prefixes(ids); len(got) != 2 || got[0] != "Max" {
+		t.Errorf("Prefixes() = %v", got)
+	}
+}

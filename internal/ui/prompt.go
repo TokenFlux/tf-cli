@@ -65,3 +65,22 @@ func (u *UI) Choose(title string, options []string) (int, error) {
 	}
 	return n - 1, nil
 }
+
+// ReadLine 在控制终端上提问并读一行（回显可见）。
+//
+// 直接读写 /dev/tty 而不是 stdin：stdin 可能已被管道占用
+// （echo $KEY | tkr login），但用户仍然坐在终端前。
+func (u *UI) ReadLine(prompt string) (string, error) {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return "", ErrNotInteractive
+	}
+	defer tty.Close()
+
+	fmt.Fprintf(tty, "%s ", prompt)
+	line, err := bufio.NewReader(tty).ReadString('\n')
+	if err != nil {
+		return "", ErrNotInteractive
+	}
+	return strings.TrimSpace(line), nil
+}
