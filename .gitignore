@@ -1,0 +1,10 @@
+bin/
+dist/
+*.test
+.playwright-mcp/
+
+# 绝不提交任何凭据
+credentials.json
+*.key
+.env
+.env.*
