@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -121,4 +122,24 @@ func Mask(key string) string {
 		return "****"
 	}
 	return key[:head] + "…" + key[len(key)-tail:]
+}
+
+// Names 返回所有已保存凭据的 profile 名。
+func (c *Credentials) Names() []string {
+	out := make([]string, 0, len(c.Items))
+	for name := range c.Items {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Remove 删除某个 profile 的凭据。
+func (c *Credentials) Remove(profile string) {
+	delete(c.Items, profile)
+}
+
+// Clear 删除全部凭据。
+func (c *Credentials) Clear() {
+	c.Items = map[string]*Credential{}
 }

@@ -49,3 +49,12 @@ func (p Paths) ReadCache(name string, v any) (age time.Duration, err error) {
 	}
 	return time.Since(env.At), nil
 }
+
+// RemoveCache 删除一份缓存。文件不存在不算错误。
+func (p Paths) RemoveCache(name string) error {
+	err := os.Remove(filepath.Join(p.CacheDir, name+".json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}

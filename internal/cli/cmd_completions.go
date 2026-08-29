@@ -2,10 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
+	"github.com/tokenflux/tkr/internal/model"
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
@@ -25,17 +28,25 @@ func newCompletionsCommand() *Command {
 		Summary: func(u *ui.UI) string {
 			return u.T("输出 shell 补全脚本", "Print the shell completion script")
 		},
+		Flags: []Flag{
+			{Name: "install", Kind: KindBool,
+				Desc: "写入该 shell 的补全目录|Write it into the shell's completion directory"},
+		},
 		Run: func(c *Context) error {
 			if len(c.Args) == 0 {
 				return ui.Errf(ui.CodeUsage,
 					c.UI.T("需要指定 shell", "a shell is required")).
 					WithHint("tkr completions zsh")
 			}
-			script, ok := completionScripts[c.Args[0]]
+			shell := c.Args[0]
+			script, ok := completionScripts[shell]
 			if !ok {
 				return ui.Errf(ui.CodeUsage,
-					fmt.Sprintf(c.UI.T("不支持的 shell：%s", "unsupported shell: %s"), c.Args[0])).
+					fmt.Sprintf(c.UI.T("不支持的 shell：%s", "unsupported shell: %s"), shell)).
 					WithHint("bash | zsh | fish")
+			}
+			if c.Flags.Bool("install") {
+				return installCompletion(c, shell, script)
 			}
 			c.UI.Printf("%s", script)
 			return nil
@@ -99,6 +110,8 @@ func complete(words []string) []string {
 		return filter([]string{"bash", "zsh", "fish"}, cur)
 	case "login":
 		return filter([]string{"--with-key", "--host", "--profile"}, cur)
+	case "logout":
+		return filter([]string{"--all", "--profile"}, cur)
 	}
 
 	if strings.HasPrefix(cur, "-") {
@@ -120,7 +133,7 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 			return nil // 位置参数即透传起点
 		}
 		switch strings.TrimLeft(strings.SplitN(w, "=", 2)[0], "-") {
-		case "m", "model", "profile", "host":
+		case "m", "model", "e", "effort", "profile", "host":
 			i++ // 跳过其取值
 		case "json", "yes", "y", "help", "h":
 		default:
@@ -128,18 +141,39 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 		}
 	}
 
-	// 正在为 -m 补值：给出该 harness 已配置的槽位模型 + 缓存里的模型列表。
+	// 正在为某个 flag 补值。
 	if len(rest) > 0 {
-		last := strings.TrimLeft(strings.SplitN(rest[len(rest)-1], "=", 2)[0], "-")
-		if last == "m" || last == "model" {
+		switch strings.TrimLeft(strings.SplitN(rest[len(rest)-1], "=", 2)[0], "-") {
+		case "m", "model":
 			return cachedModels()
+		case "e", "effort":
+			return effortNames()
 		}
 	}
 
 	if strings.HasPrefix(cur, "-") {
-		return append([]string{"--model"}, globalFlagNames()...)
+		return append([]string{"--model", "--effort"}, globalFlagNames()...)
 	}
 	return nil
+}
+
+// effortNames 优先给出缓存模型里真实存在的强度变体，
+// 没有时才回落到通用档位。
+func effortNames() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range model.Group(cachedModels()) {
+		for _, e := range f.Efforts {
+			if !seen[e] {
+				seen[e] = true
+				out = append(out, e)
+			}
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	return []string{"minimal", "low", "medium", "high", "xhigh"}
 }
 
 func completeModel(rest []string, cur string) []string {
@@ -183,7 +217,7 @@ func cachedModels() []string {
 }
 
 func commandNames() []string {
-	names := []string{"version", "config", "login", "harness", "model", "completions"}
+	names := []string{"version", "config", "login", "logout", "harness", "model", "completions"}
 	return append(names, harnessNames()...)
 }
 
@@ -216,27 +250,80 @@ func filter(candidates []string, prefix string) []string {
 	return out
 }
 
+// 脚本里一律用「用户实际输入的那个路径」回调，而不是写死 `tkr`。
+// 否则 ./bin/tkr 这种未入 PATH 的跑法会因找不到命令而静默无补全。
 var completionScripts = map[string]string{
 	"bash": `# tkr bash completion —— eval "$(tkr completions bash)"
 _tkr_complete() {
     local IFS=$'\n'
-    COMPREPLY=($(tkr __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
+    COMPREPLY=($("${COMP_WORDS[0]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
 }
-complete -o default -F _tkr_complete tkr
+# 同时注册裸命令名与常见的相对路径写法。
+complete -o default -F _tkr_complete tkr ./tkr ./bin/tkr bin/tkr
 `,
 	"zsh": `# tkr zsh completion —— eval "$(tkr completions zsh)"
 _tkr_complete() {
     local -a candidates
-    candidates=(${(f)"$(tkr __complete ${words[2,$CURRENT]} 2>/dev/null)"})
+    candidates=(${(f)"$(${words[1]} __complete ${words[2,$CURRENT]} 2>/dev/null)"})
     compadd -a candidates
 }
 compdef _tkr_complete tkr
+# 模式注册：让 ./bin/tkr、/usr/local/bin/tkr 等写法也能补全。
+compdef _tkr_complete -p '*/tkr'
 `,
-	"fish": `# tkr fish completion —— tkr completions fish > ~/.config/fish/completions/tkr.fish
+	"fish": `# tkr fish completion —— tkr completions fish --install
 function __tkr_complete
     set -l tokens (commandline -opc) (commandline -ct)
-    tkr __complete $tokens[2..-1] 2>/dev/null
+    $tokens[1] __complete $tokens[2..-1] 2>/dev/null
 end
 complete -c tkr -f -a '(__tkr_complete)'
 `,
+}
+
+// installCompletion 把脚本写进该 shell 的补全目录。
+//
+// 只写专用的补全目录，**绝不去改 .bashrc / .zshrc** —— tkr 不改
+// 用户的配置文件，补全也不例外。需要用户自己动手的部分直接告知。
+func installCompletion(c *Context, shell, script string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ui.Errf(ui.CodeConfigWrite, err.Error())
+	}
+
+	var path, note string
+	switch shell {
+	case "fish":
+		path = filepath.Join(home, ".config", "fish", "completions", "tkr.fish")
+	case "zsh":
+		path = filepath.Join(home, ".zsh", "completions", "_tkr")
+		note = c.UI.T(
+			"若补全未生效，请确保 .zshrc 里有：fpath=(~/.zsh/completions $fpath) 与 autoload -U compinit && compinit",
+			"if it does not kick in, ensure .zshrc has: fpath=(~/.zsh/completions $fpath) and autoload -U compinit && compinit")
+	case "bash":
+		path = filepath.Join(home, ".local", "share", "bash-completion", "completions", "tkr")
+		note = c.UI.T("需要已安装 bash-completion（brew install bash-completion@2）",
+			"requires bash-completion to be installed (brew install bash-completion@2)")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return ui.Errf(ui.CodeConfigWrite, err.Error())
+	}
+	body := script
+	if shell == "zsh" {
+		// 放进 fpath 的文件需要 #compdef 头，且不能再调 compdef。
+		body = "#compdef tkr\n" + strings.ReplaceAll(script, "compdef _tkr_complete", "# compdef _tkr_complete")
+		body += "\n_tkr_complete \"$@\"\n"
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return ui.Errf(ui.CodeConfigWrite, err.Error())
+	}
+
+	c.UI.Emit("completions", map[string]string{"shell": shell, "path": path}, func() {
+		c.UI.Printf("✓ %s\n", path)
+		if note != "" {
+			c.UI.Printf("  %s\n", c.UI.Dim(note))
+		}
+		c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("重开终端后生效", "restart your shell to pick it up")))
+	})
+	return nil
 }
