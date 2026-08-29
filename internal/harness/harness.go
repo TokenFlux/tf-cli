@@ -30,14 +30,31 @@ type InstallOption struct {
 // Command 返回可展示、可复制的完整命令。
 func (o InstallOption) Command() string { return strings.Join(o.Args, " ") }
 
+// EffortKnob 表示该 harness 如何接受思考强度。
+//
+// 强度与模型槽是正交的两个维度，但 TokenFlux 上它们有时被混在一起：
+// 部分分组把强度编进模型 ID（gemini-3.1-pro-high），此时换强度就是换
+// 模型；另一些分组只能靠 harness 自己的旋钮。
+type EffortKnob int
+
+const (
+	// EffortViaModelID 只支持模型 ID 内含的强度变体，没有独立旋钮。
+	EffortViaModelID EffortKnob = iota
+	// EffortViaConfig 通过配置项传递（codex 的 model_reasoning_effort）。
+	EffortViaConfig
+	// EffortViaFlag 通过命令行传递（opencode 的 --variant）。
+	EffortViaFlag
+)
+
 // Harness 是一个可被 tkr 启动的工具。
 type Harness struct {
-	Name     string
-	Aliases  []string
-	Bin      string
-	Slots    []Slot
-	Installs []InstallOption
-	DocsURL  string
+	Name       string
+	Aliases    []string
+	Bin        string
+	Slots      []Slot
+	Installs   []InstallOption
+	EffortKnob EffortKnob
+	DocsURL    string
 }
 
 func zhen(zh, en string) func(bool) string {
@@ -55,11 +72,14 @@ var All = []*Harness{
 		Name:    "claude",
 		Aliases: []string{"claude-code", "cc"},
 		Bin:     "claude",
+		// 描述写用途而不写 Anthropic 的档位名：用户面对的是网关上的
+		// 模型列表，“sonnet 档”这类黑话无助于判断该填什么。
 		Slots: []Slot{
-			{Name: "default", Purpose: zhen("主模型（sonnet 档）", "main model (sonnet tier)"), Required: true},
-			{Name: "fast", Purpose: zhen("快速档（haiku）", "fast tier (haiku)")},
-			{Name: "heavy", Purpose: zhen("重型档（opus）", "heavy tier (opus)")},
+			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
+			{Name: "fast", Purpose: zhen("后台任务：标题、文件摘要", "background tasks: titles, file summaries")},
+			{Name: "heavy", Purpose: zhen("/model 切到最强档时", "when /model picks the strongest tier")},
 		},
+		EffortKnob: EffortViaModelID,
 		Installs: []InstallOption{
 			{Manager: "npm", Args: []string{"npm", "install", "-g", "@anthropic-ai/claude-code"}},
 			{Manager: "pnpm", Args: []string{"pnpm", "add", "-g", "@anthropic-ai/claude-code"}},
@@ -72,9 +92,10 @@ var All = []*Harness{
 		Aliases: []string{"cx"},
 		Bin:     "codex",
 		Slots: []Slot{
-			{Name: "default", Purpose: zhen("主模型", "main model"), Required: true},
-			{Name: "review", Purpose: zhen("代码审查模型", "review model")},
+			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
+			{Name: "review", Purpose: zhen("代码审查", "code review")},
 		},
+		EffortKnob: EffortViaConfig,
 		Installs: []InstallOption{
 			{Manager: "npm", Args: []string{"npm", "install", "-g", "@openai/codex"}},
 			{Manager: "pnpm", Args: []string{"pnpm", "add", "-g", "@openai/codex"}},
@@ -86,10 +107,11 @@ var All = []*Harness{
 		Name: "opencode",
 		Bin:  "opencode",
 		Slots: []Slot{
-			{Name: "default", Purpose: zhen("主模型", "main model"), Required: true},
+			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			// 不注入 small 会回落到内置的 gpt-5.4-nano，标题生成静默失败。
-			{Name: "small", Purpose: zhen("小模型（标题、摘要）", "small model (titles, summaries)"), Required: true},
+			{Name: "small", Purpose: zhen("后台任务：标题、摘要", "background tasks: titles, summaries"), Required: true},
 		},
+		EffortKnob: EffortViaFlag,
 		Installs: []InstallOption{
 			{Manager: "npm", Args: []string{"npm", "install", "-g", "opencode-ai"}},
 			{Manager: "brew", Args: []string{"brew", "install", "sst/tap/opencode"}},

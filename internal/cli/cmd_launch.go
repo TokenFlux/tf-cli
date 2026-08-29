@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/gateway"
 	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/launch"
+	"github.com/tokenflux/tkr/internal/model"
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
@@ -26,6 +28,8 @@ func newLaunchCommand(h *harness.Harness) *Command {
 		Flags: []Flag{
 			{Name: "model", Short: "m", Kind: KindOptString,
 				Desc: "本次使用的主模型；不带值则进入选择|Main model for this run; omit the value to pick interactively"},
+			{Name: "effort", Short: "e", Kind: KindString,
+				Desc: "思考强度：minimal|low|medium|high|xhigh|Reasoning effort: minimal|low|medium|high|xhigh"},
 		},
 		Run: func(c *Context) error { return runLaunch(c, h) },
 	}
@@ -78,11 +82,16 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		return err
 	}
 
+	effort, err := applyEffort(c, h, slots, host, cred.Key)
+	if err != nil {
+		return err
+	}
+
 	plan, err := h.BuildPlan(harness.Input{
-		Host: host, Key: cred.Key, Slots: slots, Args: c.Passthr,
+		Host: host, Key: cred.Key, Slots: slots, Effort: effort, Args: c.Passthr,
 	})
 	if err != nil {
-		return ui.Errf(ui.CodeInternal, err.Error())
+		return ui.Errf(ui.CodeUsage, err.Error())
 	}
 
 	// 启动横幅：用户必须知道自己正在用什么，但只占一行。
@@ -161,11 +170,25 @@ func resolveSlots(c *Context, cfg *config.Config, profile *config.Profile,
 		slots[config.SlotDefault] = ids[pick]
 	}
 
-	// 其余空槽先跟随主模型，保证没有槽落空。
-	// 槽落空 = harness 回落到内置默认模型 = 大概率不在分组里。
+	// 其余空槽按名字归位：分组里真有 haiku / opus 时，就不该把三个槽
+	// 塞同一个模型 —— 那会让 Claude Code 的 /model 切换变成空操作。
 	for _, s := range h.Slots {
-		if slots[s.Name] == "" {
-			slots[s.Name] = slots[config.SlotDefault]
+		if slots[s.Name] != "" {
+			continue
+		}
+		slots[s.Name] = slots[config.SlotDefault]
+		if s.Name != config.SlotFast && s.Name != config.SlotSmall && s.Name != config.SlotHeavy {
+			continue
+		}
+		want := "fast"
+		if s.Name == config.SlotHeavy {
+			want = "heavy"
+		}
+		for _, id := range ids {
+			if model.GuessTier(id) == want {
+				slots[s.Name] = id
+				break
+			}
 		}
 	}
 
@@ -179,7 +202,28 @@ func resolveSlots(c *Context, cfg *config.Config, profile *config.Profile,
 	if err := cfg.Save(); err != nil {
 		c.UI.Warnf(c.UI.T("模型已选定，但写入配置失败：%v", "model chosen, but saving config failed: %v"), err)
 	}
+	warnIdenticalSlots(c, h, slots)
 	return slots, nil
+}
+
+// warnIdenticalSlots 在所有槽位指向同一模型时提醒。
+//
+// 这不是错误，但后果不直观：harness 内部的档位切换会完全失效，
+// 用户会以为自己切成了更强的模型。
+func warnIdenticalSlots(c *Context, h *harness.Harness, slots config.ModelSlots) {
+	if len(h.Slots) < 2 {
+		return
+	}
+	first := slots[h.Slots[0].Name]
+	for _, s := range h.Slots[1:] {
+		if slots[s.Name] != first {
+			return
+		}
+	}
+	c.UI.Warnf(c.UI.T(
+		"%s 的所有档位都指向 %s，harness 内部的模型切换将没有区别",
+		"every %s tier points at %s, so switching models inside the harness will do nothing"),
+		h.Name, first)
 }
 
 // editSlots 是一屏确认：列出该 harness 的全部槽位及当前取值，
@@ -228,6 +272,59 @@ func editSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []st
 		}
 		slots[slot.Name] = ids[pick]
 	}
+}
+
+// applyEffort 把思考强度落到具体机制上，返回仍需交给 harness 的强度值。
+//
+// 优先用模型 ID 变体（如 gemini-3.1-pro-high）：那是分组真正支持的形式，
+// 比把参数交给 harness 再转发更可靠。没有变体时才回落到 harness 的旋钮。
+func applyEffort(c *Context, h *harness.Harness, slots config.ModelSlots, host, key string) (string, error) {
+	effort := c.Flags.String("effort")
+	if effort == "" {
+		return "", nil
+	}
+
+	cur := slots[config.SlotDefault]
+	base := model.Parse(cur).Base
+
+	// 先看分组里有没有该强度的模型变体。有就直接换模型 ——
+	// 那是分组真正支持的形式，比指望 harness 转发参数可靠。
+	if ids, err := listModels(c, host, key); err == nil {
+		variant := model.Ref{Base: base, Effort: effort}.String()
+		if contains(ids, variant) {
+			slots[config.SlotDefault] = variant
+			return "", nil
+		}
+		// 当前模型本就是变体之一，却没有请求的那个档：列出真实可选项。
+		if model.Parse(cur).Effort != "" {
+			available := []string{}
+			for _, id := range ids {
+				if r := model.Parse(id); r.Base == base && r.Effort != "" {
+					available = append(available, r.Effort)
+				}
+			}
+			return "", ui.Errf(ui.CodeUsage,
+				fmt.Sprintf(c.UI.T("%s 没有 %s 强度的变体", "%s has no %s variant"), base, effort)).
+				WithHint(strings.Join(available, " | "))
+		}
+	}
+
+	if h.EffortKnob == harness.EffortViaModelID {
+		return "", ui.Errf(ui.CodeUsage,
+			fmt.Sprintf(c.UI.T("%s 没有独立的思考强度开关", "%s has no reasoning-effort switch"), h.Name)).
+			WithHint(c.UI.T("改选带强度后缀的模型，如 -m gemini-3.1-pro-high",
+				"pick a model variant instead, e.g. -m gemini-3.1-pro-high"))
+	}
+	return effort, nil
+}
+
+func contains(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
 }
 
 // listModels 取模型列表，网络不可用时降级用缓存。

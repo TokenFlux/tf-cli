@@ -9,10 +9,11 @@ import (
 
 // Input 是构建启动方案所需的全部外部信息。
 type Input struct {
-	Host  string            // 已归一化的网关地址，不含尾部斜杠与 /v1
-	Key   string            // API Key
-	Slots map[string]string // 槽名 → 模型 ID
-	Args  []string          // 透传给 harness 的原始参数
+	Host   string            // 已归一化的网关地址，不含尾部斜杠与 /v1
+	Key    string            // API Key
+	Slots  map[string]string // 槽名 → 模型 ID
+	Effort string            // 思考强度；已能用模型 ID 表达时调用方会置空
+	Args   []string          // 透传给 harness 的原始参数
 }
 
 // Plan 是一次启动的完整描述。
@@ -38,6 +39,11 @@ func OpenAIBase(host string) string { return strings.TrimRight(host, "/") + "/v1
 func (h *Harness) BuildPlan(in Input) (*Plan, error) {
 	switch h.Name {
 	case "claude":
+		if in.Effort != "" {
+			// Claude Code 没有外部的强度旋钮；能调的只有模型 ID 自带变体。
+			// 静默忽略比报错更坏：用户会以为调生效了。
+			return nil, fmt.Errorf("claude has no reasoning-effort switch; pick a model variant instead")
+		}
 		return planClaude(in)
 	case "codex":
 		return planCodex(in)
@@ -130,6 +136,9 @@ func planCodex(in Input) (*Plan, error) {
 	if m := in.Slots["review"]; m != "" {
 		args = append(args, "-c", "review_model="+m)
 	}
+	if in.Effort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+in.Effort)
+	}
 	args = append(args, in.Args...)
 
 	set := map[string]string{keyEnv: in.Key}
@@ -166,6 +175,11 @@ func planOpencode(in Input) (*Plan, error) {
 		return nil, err
 	}
 
+	args := in.Args
+	if in.Effort != "" {
+		args = append([]string{"--variant", in.Effort}, args...)
+	}
+
 	set := map[string]string{"OPENCODE_CONFIG_CONTENT": string(blob)}
-	return &Plan{Bin: "opencode", Args: in.Args, Env: buildEnv(set, nil)}, nil
+	return &Plan{Bin: "opencode", Args: args, Env: buildEnv(set, nil)}, nil
 }

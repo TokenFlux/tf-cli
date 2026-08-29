@@ -1,6 +1,9 @@
 package harness
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // 别名要能命中，未知名字要落空。
 func TestLookup(t *testing.T) {
@@ -88,5 +91,73 @@ func TestDetectMissingBinary(t *testing.T) {
 	h := &Harness{Name: "ghost", Bin: "tkr-definitely-not-a-real-binary"}
 	if st := h.Detect(); st.Installed {
 		t.Errorf("phantom binary reported as installed: %+v", st)
+	}
+}
+
+// 强度机制必须和各 harness 的真实能力对应：
+// claude 没有外部旋钮，codex 用 model_reasoning_effort，opencode 用 --variant。
+func TestEffortKnobs(t *testing.T) {
+	want := map[string]EffortKnob{
+		"claude":   EffortViaModelID,
+		"codex":    EffortViaConfig,
+		"opencode": EffortViaFlag,
+	}
+	for name, knob := range want {
+		h, ok := Lookup(name)
+		if !ok {
+			t.Fatalf("%s missing", name)
+		}
+		if h.EffortKnob != knob {
+			t.Errorf("%s effort knob = %v, want %v", name, h.EffortKnob, knob)
+		}
+	}
+}
+
+// 请求强度时 claude 必须报错而非静默忽略 —— 静默会让用户以为调生效了。
+func TestClaudeRejectsEffort(t *testing.T) {
+	h, _ := Lookup("claude")
+	_, err := h.BuildPlan(Input{
+		Host: "https://example.com", Key: "k",
+		Slots: map[string]string{"default": "claude-opus-5"}, Effort: "high",
+	})
+	if err == nil {
+		t.Error("claude should reject an effort request instead of ignoring it")
+	}
+}
+
+// codex 与 opencode 的强度必须真的出现在启动参数里。
+func TestEffortReachesArgs(t *testing.T) {
+	codex, _ := Lookup("codex")
+	plan, err := codex.BuildPlan(Input{
+		Host: "https://example.com", Key: "k",
+		Slots: map[string]string{"default": "gpt-5.6-sol"}, Effort: "high",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(plan.Args, " "), "model_reasoning_effort=high") {
+		t.Errorf("codex args missing effort: %v", plan.Args)
+	}
+
+	oc, _ := Lookup("opencode")
+	plan, err = oc.BuildPlan(Input{
+		Host: "https://example.com", Key: "k",
+		Slots: map[string]string{"default": "gpt-5.6-sol", "small": "gpt-5.4"}, Effort: "high",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(plan.Args, " "), "--variant high") {
+		t.Errorf("opencode args missing variant: %v", plan.Args)
+	}
+}
+
+// 注入必须走 Anthropic 根路径 / OpenAI 的 /v1，这是最高频的手填错误。
+func TestBaseURLShapes(t *testing.T) {
+	if got := AnthropicBase("https://tokenflux.dev"); got != "https://tokenflux.dev" {
+		t.Errorf("anthropic base = %q", got)
+	}
+	if got := OpenAIBase("https://tokenflux.dev"); got != "https://tokenflux.dev/v1" {
+		t.Errorf("openai base = %q", got)
 	}
 }
