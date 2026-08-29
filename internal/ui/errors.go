@@ -1,6 +1,9 @@
 package ui
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // Code 是稳定的英文错误码。无论文案语言如何，它都不变，
 // 便于搜索、贴给 AI 排查、以及被脚本消费。
@@ -70,4 +73,25 @@ func AsError(err error) *Error {
 		return e
 	}
 	return &Error{Code: CodeInternal, Message: err.Error(), Cause: err}
+}
+
+// causeText 返回底层原因的单行摘要。
+//
+// 与 Message 相同则不重复输出 —— 同一句话说两遍只会稀释信息。
+func causeText(e *Error) string {
+	if e.Cause == nil {
+		return ""
+	}
+	s := e.Cause.Error()
+	if s == e.Message || strings.Contains(e.Message, s) {
+		return ""
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	const max = 160
+	if len(s) > max {
+		s = s[:max] + "…"
+	}
+	return s
 }

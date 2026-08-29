@@ -22,11 +22,24 @@ tkr 只做**进程内注入**：环境变量 + 命令行参数 + 进程私有的
 ## 装
 
 ```sh
-git clone https://github.com/tokenflux/tkr && cd tkr && make build
-# 二进制在 ./bin/tkr
+curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 ```
 
-预编译包与 npm 分发在做。
+装到 `~/.local/bin`，不需要 sudo。或者自己编：
+
+```sh
+git clone https://github.com/tokenflux/tkr && cd tkr && make build
+```
+
+升级：
+
+```sh
+tkr update            # 独立二进制会自替换（校验 SHA256 后原子替换）
+tkr update --check    # 只看有没有新版
+```
+
+用包管理器装的，`tkr update` 不会自替换 —— 它会告诉你该用哪条命令，
+因为自替换的结果会在下次 `npm i -g` 时被悄悄换回旧版。
 
 ## 用
 

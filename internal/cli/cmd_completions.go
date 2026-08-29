@@ -110,6 +110,8 @@ func complete(words []string) []string {
 		return filter([]string{"bash", "zsh", "fish"}, cur)
 	case "login":
 		return filter(append(storedKeys(), "--with-key", "--host", "--force"), cur)
+	case "update":
+		return filter([]string{"--check"}, cur)
 	case "logout":
 		return filter(append(storedKeys(), "--all"), cur)
 	}
@@ -254,7 +256,7 @@ func storedKeys() []string {
 }
 
 func commandNames() []string {
-	names := []string{"version", "config", "login", "logout", "keys", "harness", "model", "completions"}
+	names := []string{"version", "config", "login", "logout", "keys", "harness", "model", "update", "completions"}
 	return append(names, harnessNames()...)
 }
 

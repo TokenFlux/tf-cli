@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # gofmt 不是建议，是硬门槛：格式漂移会让 diff 失去意义。
+      - name: 格式
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "以下文件未格式化："
+            echo "$out"
+            exit 1
+          fi
+
+      - run: go vet ./...
+      - run: go test ./...
+
+      # 零第三方依赖是硬约束，不是偏好。
+      - name: 依赖检查
+        run: |
+          if [ -s go.sum ]; then
+            echo "go.sum 非空，引入了第三方依赖："
+            cat go.sum
+            exit 1
+          fi
+
+      - name: 交叉编译
+        run: |
+          set -eu
+          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do
+            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 \
+              go build -o /dev/null ./cmd/tkr
+            echo "ok $target"
+          done

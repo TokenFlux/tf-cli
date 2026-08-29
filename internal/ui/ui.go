@@ -139,6 +139,7 @@ type jsonError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Hint    string `json:"hint,omitempty"`
+	Cause   string `json:"cause,omitempty"`
 }
 
 // Emit 在 JSON 模式下输出成功信封；非 JSON 模式下交给 human 回调渲染。
@@ -163,11 +164,16 @@ func (u *UI) Fail(command string, err error) {
 		_ = enc.Encode(envelope{
 			OK:      false,
 			Command: command,
-			Error:   &jsonError{Code: string(e.Code), Message: e.Message, Hint: e.Hint},
+			Error:   &jsonError{Code: string(e.Code), Message: e.Message, Hint: e.Hint, Cause: causeText(e)},
 		})
 		return
 	}
 	fmt.Fprintf(u.Err, "%s %s\n", u.paint("error:", red), e.Message)
+	// 底层原因必须显示。“update failed” 不带原因等于没说，
+	// 而用户没有别的途径知道到底差了什么。
+	if cause := causeText(e); cause != "" {
+		fmt.Fprintf(u.Err, "  %s\n", u.Dim(cause))
+	}
 	if e.Hint != "" {
 		fmt.Fprintf(u.Err, "  %s\n", u.Dim(e.Hint))
 	}
