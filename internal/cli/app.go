@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -93,6 +94,11 @@ func (a *App) Run(argv []string) int {
 	}
 
 	if err := cmd.Run(ctx); err != nil {
+		// harness 的退出码必须原样穿透，否则脚本无法判断真实结果。
+		var ec *exitCodeError
+		if errors.As(err, &ec) {
+			return ec.code
+		}
 		ctx.UI.Fail(cmd.Name, err)
 		return 1
 	}
