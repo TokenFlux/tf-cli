@@ -27,7 +27,9 @@ func fixture(t *testing.T, protos map[string][]string) (*config.Config, *config.
 	}
 	for name, p := range protos {
 		creds.Set(name, &config.Credential{Key: "sk-" + name, Source: config.SourcePaste})
-		cfg.KeyMetaOf(name).Protocols = p
+		if p != nil {
+			cfg.KeyMetaOf(name).Protocols = map[string][]string{config.GroupScope: p}
+		}
 	}
 	return cfg, creds
 }
@@ -138,5 +140,45 @@ func TestResolveKeyKeepsUnprobed(t *testing.T) {
 	}
 	if got != "fresh" {
 		t.Errorf("resolveKey = %q, want fresh", got)
+	}
+}
+
+// 同一把 Key 里不同模型可调的端点不同：复合 Key 横跨多个分组，
+// 选择器必须只列出该 harness 真能调的那些。
+func TestFilterByProtocolWithinOneKey(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := config.Load(config.Paths{ConfigDir: dir, CacheDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.KeyMetaOf("multi").Protocols = map[string][]string{
+		"GPT":    {"openai_responses", "openai_chat_completions"},
+		"Claude": {"anthropic_messages"},
+	}
+	ids := []string{"GPT/gpt-5.6-sol", "Claude/claude-opus-5", "GPT/gpt-5.4"}
+
+	codex, _ := harness.Lookup("codex")
+	got := filterByProtocol(cfg, "multi", codex, ids)
+	if len(got) != 2 || got[0] != "GPT/gpt-5.6-sol" || got[1] != "GPT/gpt-5.4" {
+		t.Errorf("codex candidates = %v, want only the GPT ones", got)
+	}
+
+	claude, _ := harness.Lookup("claude")
+	got = filterByProtocol(cfg, "multi", claude, ids)
+	if len(got) != 1 || got[0] != "Claude/claude-opus-5" {
+		t.Errorf("claude candidates = %v, want only the Claude one", got)
+	}
+}
+
+// 未探测过的 Key 不过滤任何模型：预检只能证伪。
+func TestFilterByProtocolSkipsUnprobed(t *testing.T) {
+	dir := t.TempDir()
+	cfg, _ := config.Load(config.Paths{ConfigDir: dir, CacheDir: dir})
+	cfg.KeyMetaOf("fresh")
+
+	codex, _ := harness.Lookup("codex")
+	ids := []string{"a", "b"}
+	if got := filterByProtocol(cfg, "fresh", codex, ids); len(got) != 2 {
+		t.Errorf("unprobed key should not filter: %v", got)
 	}
 }

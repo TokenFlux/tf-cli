@@ -121,20 +121,20 @@ func TestParseMissingValue(t *testing.T) {
 // 全局 flag 在任何命令上都可用。
 func TestGlobalFlagsAvailableEverywhere(t *testing.T) {
 	cmd := &Command{Name: "models"}
-	ctx, err := parse(cmd, []string{"--json", "--profile", "work"})
+	ctx, err := parse(cmd, []string{"--json", "--key", "work"})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	if !ctx.Flags.Bool("json") {
 		t.Error("--json not parsed")
 	}
-	if got := ctx.Flags.String("profile"); got != "work" {
-		t.Errorf("profile = %q, want work", got)
+	if got := ctx.Flags.String("key"); got != "work" {
+		t.Errorf("key = %q, want work", got)
 	}
 }
 
-// 建议的 profile 名取自模型名首词元，并要避开已占用的名字。
-func TestSuggestProfileName(t *testing.T) {
+// 建议的名字取自分组前缀或模型名首词元，并要避开已占用的名字。
+func TestSuggestKeyName(t *testing.T) {
 	cases := []struct {
 		ids   []string
 		taken []string
@@ -145,11 +145,13 @@ func TestSuggestProfileName(t *testing.T) {
 		{[]string{"gemini-3.1-pro-high"}, nil, "gemini"},
 		{[]string{"gpt-5.4"}, []string{"gpt"}, "gpt-2"},
 		{[]string{"gpt-5.4"}, []string{"gpt", "gpt-2"}, "gpt-3"},
-		{nil, nil, "profile"},
+		{nil, nil, "key"},
+		// 复合 Key：分组前缀本身就是最好的名字。
+		{[]string{"GPT/gpt-5.4", "GPT/gpt-5.5", "Claude/claude-opus-5"}, nil, "gpt"},
 	}
 	for _, c := range cases {
-		if got := suggestProfileName(c.ids, c.taken); got != c.want {
-			t.Errorf("suggestProfileName(%v, taken=%v) = %q, want %q", c.ids, c.taken, got, c.want)
+		if got := suggestKeyName(c.ids, c.taken); got != c.want {
+			t.Errorf("suggestKeyName(%v, taken=%v) = %q, want %q", c.ids, c.taken, got, c.want)
 		}
 	}
 }

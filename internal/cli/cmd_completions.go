@@ -145,9 +145,9 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 	if len(rest) > 0 {
 		switch strings.TrimLeft(strings.SplitN(rest[len(rest)-1], "=", 2)[0], "-") {
 		case "m", "model":
-			return cachedModels()
+			return cachedModels(h.Name)
 		case "e", "effort":
-			return effortNames()
+			return effortNames(h.Name)
 		}
 	}
 
@@ -159,10 +159,10 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 
 // effortNames 优先给出缓存模型里真实存在的强度变体，
 // 没有时才回落到通用档位。
-func effortNames() []string {
+func effortNames(harnessName string) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, f := range model.Group(cachedModels()) {
+	for _, f := range model.Group(cachedModels(harnessName)) {
 		for _, e := range f.Efforts {
 			if !seen[e] {
 				seen[e] = true
@@ -190,7 +190,7 @@ func completeModel(rest []string, cur string) []string {
 	}
 	if slot, _, found := strings.Cut(cur, "="); found {
 		out := []string{}
-		for _, m := range cachedModels() {
+		for _, m := range cachedModels(h.Name) {
 			out = append(out, slot+"="+m)
 		}
 		return out
@@ -204,19 +204,43 @@ func completeModel(rest []string, cur string) []string {
 
 // cachedModels 只读缓存。缓存冷就返回空 —— 补全宁可少给候选，
 // 也不能在这里发网络请求。
-func cachedModels() []string {
+// cachedModels 读本地 config 里的模型列表。零网络。
+//
+// 按该 harness 的绑定取对应 Key，并按协议过滤 —— 补全不该提示
+// 一个选了就会 403 的模型。
+func cachedModels(harnessName string) []string {
 	paths, err := config.DefaultPaths()
 	if err != nil {
 		return nil
 	}
-	var ids []string
-	if _, err := paths.ReadCache("models", &ids); err != nil {
+	cfg, err := config.Load(paths)
+	if err != nil {
 		return nil
 	}
-	return ids
+	keyName := cfg.Harness(harnessName).Key
+	if keyName == "" {
+		for _, n := range cfg.KeyNames() {
+			keyName = n
+			break
+		}
+	}
+	meta := cfg.Keys[keyName]
+	if meta == nil {
+		return nil
+	}
+	h, ok := harness.Lookup(harnessName)
+	if !ok {
+		return meta.Models
+	}
+	out := make([]string, 0, len(meta.Models))
+	for _, id := range meta.Models {
+		if meta.SupportsIn(model.Parse(id).Prefix, string(h.Protocol)) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
-// storedKeys 列出本地已保存的 Key 标签。仍是零网络。
 func storedKeys() []string {
 	paths, err := config.DefaultPaths()
 	if err != nil {

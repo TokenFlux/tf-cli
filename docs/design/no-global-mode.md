@@ -81,3 +81,30 @@ codex 的候选里**。
 - 删除 `tkr use`。它的「切换」职能没了，「查看」职能归 `tkr keys`。
 - `--profile` 更名 `--key`，语义从「切换模式」变成「本次用哪把」。
 - `config.current` 迁移为各 harness 的初始绑定。
+
+## 修正：能力是**分组级**，不是 Key 级
+
+初版把协议准入当成整把 Key 的属性，这对复合 Key 是错的。
+
+复合 Key 一把横跨最多 20 个分组，每个分组有各自的 `allowed_client_protocols`。
+同一把 Key 里 `GPT/gpt-5.6-sol` 能跑 codex，`Claude/claude-opus-5` 只能跑 claude ——
+**同一个 Key 的不同模型，可调的端点不同**。
+
+因此：
+
+- `KeyMeta.Protocols` 是 `map[分组前缀][]协议`，普通 Key 用空串作唯一键
+- `Supports`（任一分组允许）用来筛 **Key 候选**
+- `SupportsIn`（指定分组允许）用来筛 **模型候选**
+- 探测必须逐前缀做：空 body 对复合 Key 无效，网关会先要 `COMPOSITE_KEY_MODEL_PREFIX_REQUIRED`。
+  改为发 `{"model":"<前缀>/__tkr_probe__"}` —— 前缀决定分组，模型不存在则请求
+  在调度前就被拒，同样零 token。
+- 403 有两种含义，必须按文案区分：`does not allow ... requests` 是协议不准入，
+  其余 403 只是模型不在分组里。只看状态码会把「模型选错」误判成「协议不通」。
+
+## 顺带合并的真相源
+
+模型列表原本存两份：config.json 的 `keys.<name>.models` 和一份独立缓存文件。
+两份数据必然打架，而且缓存要按 Key 分开存、分错就串味（已经发生过一次）。
+
+现在只保留 config.json 里那一份。补全直接读它，并按该 harness 的绑定与协议过滤 ——
+补全不该提示一个选了就会 403 的模型。

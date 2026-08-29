@@ -9,6 +9,7 @@ import (
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/gateway"
 	"github.com/tokenflux/tkr/internal/harness"
+	"github.com/tokenflux/tkr/internal/model"
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
@@ -105,7 +106,7 @@ func noKeyFitsError(c *Context, cfg *config.Config, h *harness.Harness, names []
 	for _, n := range names {
 		got := "?"
 		if m := cfg.Keys[n]; m.Probed() {
-			got = strings.Join(m.Protocols, " ")
+			got = strings.Join(m.ProtocolSummary(), " / ")
 		}
 		lines = append(lines, fmt.Sprintf("%s: %s", n, got))
 	}
@@ -125,15 +126,24 @@ func probeAndStore(cfg *config.Config, name, host, key string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	protos, err := gateway.New(host, key).ProbeProtocols(ctx)
-	if err != nil || len(protos) == 0 {
+	meta := cfg.KeyMetaOf(name)
+
+	// 复合 Key 必须逐前缀探：一把 Key 横跨多个分组，
+	// 每个分组的协议准入各不相同。前缀由 /v1/models 的 ID 直接给出。
+	prefixes := model.Prefixes(meta.Models)
+
+	probed, err := gateway.New(host, key).ProbeProtocols(ctx, prefixes)
+	if err != nil || len(probed) == 0 {
 		return
 	}
-	meta := cfg.KeyMetaOf(name)
 	meta.Host = host
-	meta.Protocols = make([]string, 0, len(protos))
-	for _, p := range protos {
-		meta.Protocols = append(meta.Protocols, string(p))
+	meta.Protocols = map[string][]string{}
+	for prefix, protos := range probed {
+		list := make([]string, 0, len(protos))
+		for _, p := range protos {
+			list = append(list, string(p))
+		}
+		meta.Protocols[prefix] = list
 	}
 	meta.ProbedAt = time.Now()
 }

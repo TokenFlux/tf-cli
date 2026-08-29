@@ -81,7 +81,7 @@ func globalFlags() []Flag {
 	return []Flag{
 		{Name: "help", Short: "h", Kind: KindBool, Desc: "显示帮助|Show help"},
 		{Name: "json", Kind: KindBool, Desc: "以 JSON 输出|Emit JSON output"},
-		{Name: "profile", Kind: KindString, Desc: "使用指定 profile|Use the named profile"},
+		{Name: "key", Short: "k", Kind: KindString, Desc: "本次使用哪把 Key|Which stored key to use for this run"},
 		{Name: "host", Kind: KindString, Desc: "覆盖网关地址|Override the gateway host"},
 		{Name: "yes", Short: "y", Kind: KindBool, Desc: "非交互，全部接受默认|Non-interactive, accept defaults"},
 	}

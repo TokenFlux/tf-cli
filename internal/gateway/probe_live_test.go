@@ -12,7 +12,7 @@ func TestLiveProbeProtocols(t *testing.T) {
 	if key == "" {
 		t.Skip("set TKR_LIVE_KEY to run")
 	}
-	got, err := New("https://tokenflux.dev", key).ProbeProtocols(context.Background())
+	got, err := New("https://tokenflux.dev", key).ProbeProtocols(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

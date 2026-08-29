@@ -151,7 +151,7 @@ func TestSupportsWithoutProbe(t *testing.T) {
 	if !unknown.Supports("openai_responses") {
 		t.Error("an unprobed key must not be filtered out")
 	}
-	probed := &KeyMeta{Protocols: []string{"anthropic_messages"}}
+	probed := &KeyMeta{Protocols: map[string][]string{GroupScope: {"anthropic_messages"}}}
 	if probed.Supports("openai_responses") {
 		t.Error("a probed key must be filtered by its protocols")
 	}
@@ -269,5 +269,51 @@ func TestMask(t *testing.T) {
 	}
 	if Mask("") != "" {
 		t.Error("empty key should mask to empty")
+	}
+}
+
+// 一把 Key 里不同模型可调的端点可能不同：复合 Key 横跨多个分组，
+// 每个分组的协议准入各不相同。
+func TestProtocolsArePerGroupPrefix(t *testing.T) {
+	m := &KeyMeta{Protocols: map[string][]string{
+		"GPT":    {"openai_responses", "openai_chat_completions"},
+		"Claude": {"anthropic_messages"},
+	}}
+
+	if !m.SupportsIn("GPT", "openai_responses") {
+		t.Error("GPT should allow responses")
+	}
+	if m.SupportsIn("Claude", "openai_responses") {
+		t.Error("Claude prefix must not allow responses")
+	}
+	if !m.SupportsIn("Claude", "anthropic_messages") {
+		t.Error("Claude should allow messages")
+	}
+
+	// 筛选 Key 候选时，只要有一个分组支持就算这把 Key 可用。
+	if !m.Supports("openai_responses") || !m.Supports("anthropic_messages") {
+		t.Error("Supports should be true if any prefix qualifies")
+	}
+	if m.Supports("gemini_generate_content") {
+		t.Error("no prefix allows gemini; Supports should be false")
+	}
+
+	// 没探到的前缀不拦。
+	if !m.SupportsIn("Unknown", "openai_responses") {
+		t.Error("an unprobed prefix must not be filtered out")
+	}
+}
+
+// 旧配置把 protocols 写成数组，要能读成「普通 Key 的唯一作用域」。
+func TestProtocolsBackwardCompatible(t *testing.T) {
+	var m KeyMeta
+	if err := json.Unmarshal([]byte(`{"host":"h","protocols":["anthropic_messages"]}`), &m); err != nil {
+		t.Fatal(err)
+	}
+	if !m.SupportsIn(GroupScope, "anthropic_messages") {
+		t.Error("flat array should map onto the default scope")
+	}
+	if m.SupportsIn(GroupScope, "openai_responses") {
+		t.Error("flat array should still filter")
 	}
 }

@@ -72,7 +72,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		return err
 	}
 
-	effort, err := applyEffort(c, h, slots, keyName, host, cred.Key)
+	effort, err := applyEffort(c, cfg, h, slots, keyName, host, cred.Key)
 	if err != nil {
 		return err
 	}
@@ -144,9 +144,20 @@ func resolveSlots(c *Context, cfg *config.Config,
 		return slots, nil
 	}
 
-	ids, err := listModels(c, keyName, host, key)
+	all, err := listModels(c, cfg, keyName, host, key)
 	if err != nil {
 		return nil, err
+	}
+
+	// 同一把 Key 里不同模型可调的端点可能不同：复合 Key 横跨多个分组，
+	// 每个分组的协议准入各不相同。把跑不了的模型在选择器里就滤掉，
+	// 而不是等启动时才 403。
+	ids := filterByProtocol(cfg, keyName, h, all)
+	if len(ids) == 0 {
+		return nil, ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
+			c.UI.T("Key %q 里没有 %s 能用的模型（需要 %s）",
+				"key %q has no model %s can use (needs %s)"), keyName, h.Name, h.Protocol)).
+			WithHint(strings.Join(cfg.Keys[keyName].ProtocolSummary(), " / "))
 	}
 
 	interactive := c.UI.Interactive(c.Flags.Bool("yes"))
@@ -276,7 +287,7 @@ func editSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []st
 //
 // 优先用模型 ID 变体（如 gemini-3.1-pro-high）：那是分组真正支持的形式，
 // 比把参数交给 harness 再转发更可靠。没有变体时才回落到 harness 的旋钮。
-func applyEffort(c *Context, h *harness.Harness, slots config.ModelSlots, keyName, host, key string) (string, error) {
+func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots config.ModelSlots, keyName, host, key string) (string, error) {
 	effort := c.Flags.String("effort")
 	if effort == "" {
 		return "", nil
@@ -287,7 +298,7 @@ func applyEffort(c *Context, h *harness.Harness, slots config.ModelSlots, keyNam
 
 	// 先看分组里有没有该强度的模型变体。有就直接换模型 ——
 	// 那是分组真正支持的形式，比指望 harness 转发参数可靠。
-	if ids, err := listModels(c, keyName, host, key); err == nil {
+	if ids, err := listModels(c, cfg, keyName, host, key); err == nil {
 		variant := model.Ref{Base: base, Effort: effort}.String()
 		if contains(ids, variant) {
 			slots[config.SlotDefault] = variant
@@ -325,6 +336,24 @@ func contains(list []string, v string) bool {
 	return false
 }
 
+// filterByProtocol 只保留该 harness 真能调的模型。
+//
+// 判据是模型 ID 的分组前缀：同一把复合 Key 里，GPT/* 可能允许
+// responses 而 Claude/* 只允许 messages。未探测到的前缀不过滤。
+func filterByProtocol(cfg *config.Config, keyName string, h *harness.Harness, ids []string) []string {
+	meta := cfg.Keys[keyName]
+	if !meta.Probed() {
+		return ids
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if meta.SupportsIn(model.Parse(id).Prefix, string(h.Protocol)) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // modelItems 把模型 ID 变成选择器条目。
 //
 // 复合 Key 下同一个模型会在多个分组里重复出现，且倒率可能相差好几倍，
@@ -338,56 +367,45 @@ func modelItems(ids []string) []ui.Item {
 	return items
 }
 
-// listModels 取模型列表，网络不可用时降级用缓存。
+// listModels 取模型列表：网络优先，失败时退回 config 里存的那份。
 //
-// 启动路径上的网络调用必须可降级：一次瞬时抖动不应该让用户
-// 根本启动不了 harness。只有在既无网络又无缓存时才真正失败。
-func listModels(c *Context, keyName, host, key string) ([]string, error) {
+// 模型列表只有一处真相 —— config.json 里的 keys.<name>.models。
+// 曾经另有一份独立缓存文件，两份数据必然打架（而且要按 Key 分开存，
+// 分错就会串味），合并后这类 bug 从根上没有了。
+func listModels(c *Context, cfg *config.Config, keyName, host, key string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
-	client := gateway.New(host, key)
-	models, err := client.Models(ctx)
+	models, err := gateway.New(host, key).Models(ctx)
 	if err == nil && len(models) > 0 {
 		ids := make([]string, 0, len(models))
 		for _, m := range models {
 			ids = append(ids, m.ID)
 		}
 		sort.Strings(ids)
-		if paths, perr := config.DefaultPaths(); perr == nil {
-			_ = paths.WriteCache(config.ModelsCacheKey(keyName), ids)
-		}
+		cfg.KeyMetaOf(keyName).Models = ids
+		_ = cfg.Save()
 		return ids, nil
 	}
 
-	// Key 被明确拒绝时不该退回缓存 —— 那是配置问题，不是网络问题。
+	// Key 被明确拒绝时不该退回旧数据 —— 那是配置问题，不是网络问题。
 	var apiErr *gateway.APIError
 	if asAPIError(err, &apiErr) && apiErr.InvalidKey() {
 		return nil, ui.Errf(ui.CodeNotLoggedIn,
-			c.UI.T("网关拒绝了当前的 Key", "the gateway rejected the stored key")).
-			WithHint("tkr login")
+			c.UI.T("网关拒绝了这把 Key", "the gateway rejected this key")).
+			WithHint("tkr login").WithCause(err)
 	}
 
-	var cached []string
-	if paths, perr := config.DefaultPaths(); perr == nil {
-		if age, cerr := paths.ReadCache(config.ModelsCacheKey(keyName), &cached); cerr == nil && len(cached) > 0 {
-			c.UI.Warnf(c.UI.T("模型列表取不到，暂用 %s 前的缓存",
-				"could not refresh models, using a cache from %s ago"), age.Round(time.Second))
-			return cached, nil
-		}
-	}
-
-	if err == nil {
-		return nil, ui.Errf(ui.CodeInternal,
-			c.UI.T("这把 Key 看不到任何模型", "this key can see no models")).
-			WithHint(host + "/keys")
+	if stored := cfg.KeyMetaOf(keyName).Models; len(stored) > 0 {
+		c.UI.Warnf("%s", c.UI.T("模型列表取不到，沿用上次的结果", "could not refresh the model list; using the last known one"))
+		return stored, nil
 	}
 	return nil, ui.Errf(ui.CodeNetwork,
-		fmt.Sprintf(c.UI.T("无法获取模型列表：%v", "cannot list models: %v"), err)).
+		fmt.Sprintf(c.UI.T("无法取得模型列表：%v", "cannot list models: %v"), err)).
 		WithHint(host)
 }
 
-// exitCodeError 让 harness 的退出码穿透 tkr。
+// exitCodeError 把子进程的退出码原样带回顶层。
 type exitCodeError struct{ code int }
 
 func (e *exitCodeError) Error() string { return fmt.Sprintf("exit status %d", e.code) }

@@ -19,58 +19,80 @@ const (
 	ProtoOpenAIChat        Protocol = "openai_chat_completions"
 )
 
-// probeTargets 是各协议的探测入口。
+// AllProtocols 的顺序与网关返回集合一致，便于比对。
+var AllProtocols = []Protocol{ProtoAnthropicMessages, ProtoOpenAIResponses, ProtoOpenAIChat}
+
 var probeTargets = map[Protocol]string{
 	ProtoAnthropicMessages: "/v1/messages",
 	ProtoOpenAIResponses:   "/v1/responses",
 	ProtoOpenAIChat:        "/v1/chat/completions",
 }
 
-// ProbeProtocols 探测这把 Key 的分组允许哪些协议。
+// probeModel 是一个必然不存在的模型名。
 //
-// 零 token 成本：协议准入发生在读取请求体之前，所以发一个空 body 就够了 ——
-// 400（缺字段）说明准入通过，403（does not allow）说明不通过。
+// 探测只关心「是否越过协议准入这一关」，所以模型不存在正是我们要的：
+// 请求会在调度前就被拒，不产生任何 token 消耗。
+const probeModel = "__tkr_probe__"
+
+// ProbeProtocols 探测各分组前缀允许哪些协议。
 //
-// 只能证伪：账号级能力可能更窄，通过不代表一定跑得起来。
-func (c *Client) ProbeProtocols(ctx context.Context) ([]Protocol, error) {
-	type result struct {
-		proto Protocol
-		ok    bool
+// prefixes 为空表示普通 Key（只绑一个分组），用空串作为唯一作用域键。
+// 复合 Key 必须逐前缀探测：一把 Key 横跨多个分组，每个分组的准入集合
+// 各不相同，而分组是由模型 ID 的前缀决定的。
+//
+// 零 token 成本：协议准入发生在调度与计费之前。
+func (c *Client) ProbeProtocols(ctx context.Context, prefixes []string) (map[string][]Protocol, error) {
+	if len(prefixes) == 0 {
+		prefixes = []string{""}
+	}
+
+	type job struct {
+		prefix string
+		proto  Protocol
+		ok     bool
 	}
 
 	var (
 		wg  sync.WaitGroup
 		mu  sync.Mutex
-		out []result
+		out []job
 	)
-	for proto, path := range probeTargets {
-		wg.Add(1)
-		go func(proto Protocol, path string) {
-			defer wg.Done()
-			ok := c.probeOne(ctx, path)
-			mu.Lock()
-			out = append(out, result{proto, ok})
-			mu.Unlock()
-		}(proto, path)
+	for _, prefix := range prefixes {
+		for proto, path := range probeTargets {
+			wg.Add(1)
+			go func(prefix string, proto Protocol, path string) {
+				defer wg.Done()
+				ok := c.probeOne(ctx, path, prefix)
+				mu.Lock()
+				out = append(out, job{prefix, proto, ok})
+				mu.Unlock()
+			}(prefix, proto, path)
+		}
 	}
 	wg.Wait()
 
-	// 顺序固定，与网关返回集合的排列一致，便于比对与展示。
-	order := []Protocol{ProtoAnthropicMessages, ProtoOpenAIResponses, ProtoOpenAIChat}
-	var allowed []Protocol
-	for _, want := range order {
-		for _, r := range out {
-			if r.proto == want && r.ok {
-				allowed = append(allowed, want)
+	result := map[string][]Protocol{}
+	for _, prefix := range prefixes {
+		for _, want := range AllProtocols {
+			for _, j := range out {
+				if j.prefix == prefix && j.proto == want && j.ok {
+					result[prefix] = append(result[prefix], want)
+				}
 			}
 		}
 	}
-	return allowed, nil
+	return result, nil
 }
 
-// probeOne 报告某个协议入口是否准入。
-func (c *Client) probeOne(ctx context.Context, path string) bool {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Host+path, strings.NewReader("{}"))
+// probeOne 报告某个协议入口对某个分组前缀是否准入。
+func (c *Client) probeOne(ctx context.Context, path, prefix string) bool {
+	model := probeModel
+	if prefix != "" {
+		model = prefix + "/" + probeModel
+	}
+	body := `{"model":"` + model + `"}`
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Host+path, strings.NewReader(body))
 	if err != nil {
 		return false
 	}
@@ -87,7 +109,22 @@ func (c *Client) probeOne(ctx context.Context, path string) bool {
 	}
 	defer resp.Body.Close()
 
-	// 403 = 协议不准入。其余（含 400 缺字段）都说明请求已越过准入这一关。
-	// 401 也算不通过，但那是 Key 的问题，调用方在此之前已经校验过。
-	return resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusUnauthorized
+	// 403 = 协议不准入。模型不存在会返回 403/404 但文案不同，
+	// 所以不能只看状态码，必须看是不是「协议」这一层拒的。
+	if resp.StatusCode == http.StatusUnauthorized {
+		return false
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		return true
+	}
+	return !isProtocolDenial(readBodySnippet(resp))
+}
+
+// isProtocolDenial 区分「协议不准入」与「模型不在分组」。
+//
+// 两者都可能是 403，但语义完全不同：前者说明这个 harness 根本不能用
+// 这个分组，后者只是模型选错了。
+func isProtocolDenial(body string) bool {
+	low := strings.ToLower(body)
+	return strings.Contains(low, "does not allow")
 }

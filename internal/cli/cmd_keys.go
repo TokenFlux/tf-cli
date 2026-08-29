@@ -53,7 +53,7 @@ func runKeys(c *Context) error {
 		meta := cfg.Keys[name]
 		r := row{Name: name, Host: cfg.HostOf(name), Key: config.Mask(cred.Key)}
 		if meta != nil {
-			r.Protocols = meta.Protocols
+			r.Protocols = meta.ProtocolSummary()
 		}
 		for _, h := range harness.All {
 			if meta.Supports(string(h.Protocol)) {

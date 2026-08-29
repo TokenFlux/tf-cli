@@ -139,3 +139,9 @@ func classify(status int, body []byte) error {
 	}
 	return e
 }
+
+// readBodySnippet 读一小段响应体用于错误分类。
+func readBodySnippet(resp *http.Response) string {
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	return string(b)
+}

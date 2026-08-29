@@ -10,6 +10,7 @@ import (
 
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/gateway"
+	"github.com/tokenflux/tkr/internal/model"
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
@@ -90,7 +91,7 @@ func runLogin(c *Context) error {
 	if err != nil {
 		return ui.Errf(ui.CodeCredentialsRead, c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
 	}
-	keyName, err = resolveLoginProfile(c, creds, cfg, keyName, explicit, key, ids)
+	keyName, err = resolveLoginName(c, creds, cfg, keyName, explicit, key, ids)
 	if err != nil {
 		return err
 	}
@@ -110,11 +111,6 @@ func runLogin(c *Context) error {
 		return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 	}
 
-	// 顺手落一份模型缓存：补全必须零网络，这是它唯一的数据来源。
-	if err := paths.WriteCache(config.ModelsCacheKey(keyName), ids); err != nil {
-		c.UI.Warnf(c.UI.T("模型缓存写入失败：%v", "could not cache the model list: %v"), err)
-	}
-
 	c.UI.Emit("login", map[string]any{
 		"profile": keyName, "host": host,
 		"key": config.Mask(key), "models": ids, "protocols": cfg.Keys[keyName].Protocols,
@@ -123,20 +119,20 @@ func runLogin(c *Context) error {
 		c.UI.Printf("  %-8s %s\n", "host", host)
 		c.UI.Printf("  %-8s %s\n", "key", config.Mask(key))
 		c.UI.Printf("  %-8s %d %s\n", c.UI.T("模型", "models"), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
-		if protos := cfg.Keys[keyName].Protocols; len(protos) > 0 {
-			c.UI.Printf("  %-8s %s\n", c.UI.T("协议", "protocols"), c.UI.Dim(strings.Join(protos, " ")))
+		if protos := cfg.Keys[keyName].ProtocolSummary(); len(protos) > 0 {
+			c.UI.Printf("  %-8s %s\n", c.UI.T("协议", "protocols"), c.UI.Dim(strings.Join(protos, " / ")))
 			c.UI.Printf("  %-8s %s\n", c.UI.T("可跑", "can run"), strings.Join(runnable(cfg, keyName), " "))
 		}
 	})
 	return nil
 }
 
-// resolveLoginProfile 处理“这个 profile 已经有另一把 Key”的情况。
+// resolveLoginName 处理“这个 profile 已经有另一把 Key”的情况。
 //
 // 默认行为绝不能是静默覆盖：覆掉的 Key 本地无处可找，用户得重新
 // 去网页拿。但也不能要求用户自己想名字 —— 直接根据这把 Key 看得到的
 // 模型猫一个。
-func resolveLoginProfile(c *Context, creds *config.Credentials, cfg *config.Config,
+func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 	target string, explicit bool, key string, ids []string) (string, error) {
 
 	existing, ok := creds.Get(target)
@@ -151,7 +147,7 @@ func resolveLoginProfile(c *Context, creds *config.Credentials, cfg *config.Conf
 		return target, nil
 	}
 
-	suggestion := suggestProfileName(ids, creds.Names())
+	suggestion := suggestKeyName(ids, creds.Names())
 
 	if !c.UI.Interactive(c.Flags.Bool("yes")) {
 		return "", ui.Errf(ui.CodeUsage, fmt.Sprintf(
@@ -225,14 +221,21 @@ func validProfileName(s string) bool {
 	return true
 }
 
-// suggestProfileName 从这把 Key 看得到的模型里猫一个名字。
+// suggestKeyName 从这把 Key 看得到的模型里猫一个名字。
 //
 // 模型名的首词元往往就是分组的性格（claude-opus-5 → claude），
 // 比让用户现想一个名字要强。
-func suggestProfileName(ids []string, taken []string) string {
+func suggestKeyName(ids []string, taken []string) string {
 	counts := map[string]int{}
 	for _, id := range ids {
-		if tok := leadingWord(id); tok != "" {
+		r := model.Parse(id)
+		// 复合 Key 的分组前缀本身就是最好的名字来源；
+		// 否则从模型基名取首词元（gpt-5.6-sol → gpt）。
+		tok := strings.ToLower(r.Prefix)
+		if tok == "" {
+			tok = leadingWord(r.Base)
+		}
+		if tok != "" {
 			counts[tok]++
 		}
 	}
@@ -243,7 +246,7 @@ func suggestProfileName(ids []string, taken []string) string {
 		}
 	}
 	if best == "" {
-		best = "profile"
+		best = "key"
 	}
 
 	used := map[string]bool{}

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -29,25 +30,76 @@ const (
 	SlotReview  = "review"
 )
 
+// GroupScope 是普通 Key 的唯一作用域键。
+//
+// 复合 Key 用分组前缀作键；普通 Key 只绑一个分组，用空串。
+const GroupScope = ""
+
 // KeyMeta 是一把 Key 的非机密元数据。
 //
-// 协议与模型列表都是探测/查询的结果，带时间戳以便按 TTL 失效。
+// 协议准入按**分组前缀**记录，而不是整把 Key 一个值：
+// 复合 Key 一把横跨多个分组，每个分组的 allowed_client_protocols
+// 各不相同 —— GPT/* 能跑 codex，Claude/* 只能跑 claude。
 type KeyMeta struct {
-	Host      string    `json:"host"`
-	Protocols []string  `json:"protocols,omitempty"`
-	Models    []string  `json:"models,omitempty"`
-	ProbedAt  time.Time `json:"probed_at,omitempty"`
+	Host      string              `json:"host"`
+	Protocols map[string][]string `json:"protocols,omitempty"`
+	Models    []string            `json:"models,omitempty"`
+	ProbedAt  time.Time           `json:"probed_at,omitempty"`
 }
 
-// Supports 报告这把 Key 是否允许某个客户端协议。
+// UnmarshalJSON 兼容早期把 Protocols 写成数组的配置。
+func (m *KeyMeta) UnmarshalJSON(data []byte) error {
+	type alias KeyMeta
+	var v struct {
+		alias
+		Protocols json.RawMessage `json:"protocols,omitempty"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*m = KeyMeta(v.alias)
+	if len(v.Protocols) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(v.Protocols, &m.Protocols); err == nil {
+		return nil
+	}
+	var flat []string
+	if err := json.Unmarshal(v.Protocols, &flat); err != nil {
+		return err
+	}
+	m.Protocols = map[string][]string{GroupScope: flat}
+	return nil
+}
+
+// SupportsIn 报告某个分组前缀是否允许该协议。
 //
 // 未探测过时返回 true：没有证据就不拦，预检只能证伪。
+func (m *KeyMeta) SupportsIn(prefix, proto string) bool {
+	if m == nil || len(m.Protocols) == 0 {
+		return true
+	}
+	allowed, ok := m.Protocols[prefix]
+	if !ok {
+		return true // 这个前缀没探到，同样不拦
+	}
+	for _, p := range allowed {
+		if p == proto {
+			return true
+		}
+	}
+	return false
+}
+
+// Supports 报告这把 Key **至少有一个分组**允许该协议。
+//
+// 用于筛选 Key 候选；具体能用哪些模型要再用 SupportsIn 逐个判。
 func (m *KeyMeta) Supports(proto string) bool {
 	if m == nil || len(m.Protocols) == 0 {
 		return true
 	}
-	for _, p := range m.Protocols {
-		if p == proto {
+	for prefix := range m.Protocols {
+		if m.SupportsIn(prefix, proto) {
 			return true
 		}
 	}
@@ -56,6 +108,28 @@ func (m *KeyMeta) Supports(proto string) bool {
 
 // Probed 报告是否有可用的探测结果。
 func (m *KeyMeta) Probed() bool { return m != nil && len(m.Protocols) > 0 }
+
+// ProtocolSummary 把探测结果扒平成可展示的行。
+func (m *KeyMeta) ProtocolSummary() []string {
+	if m == nil || len(m.Protocols) == 0 {
+		return nil
+	}
+	prefixes := make([]string, 0, len(m.Protocols))
+	for p := range m.Protocols {
+		prefixes = append(prefixes, p)
+	}
+	sort.Strings(prefixes)
+
+	out := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		line := strings.Join(m.Protocols[p], " ")
+		if p != GroupScope {
+			line = p + ": " + line
+		}
+		out = append(out, line)
+	}
+	return out
+}
 
 // HarnessConfig 是某个 harness 的绑定与模型槽。
 type HarnessConfig struct {
