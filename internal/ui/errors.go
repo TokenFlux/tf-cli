@@ -17,7 +17,14 @@ const (
 	CodeCredentialsRead Code = "TKR_CREDENTIALS_READ"
 	CodeProfileNotFound Code = "TKR_PROFILE_NOT_FOUND"
 	CodeNotLoggedIn     Code = "TKR_NOT_LOGGED_IN"
-	CodeInternal        Code = "TKR_INTERNAL"
+
+	CodeHarnessNotFound     Code = "TKR_HARNESS_NOT_FOUND"
+	CodeHarnessNotInstalled Code = "TKR_HARNESS_NOT_INSTALLED"
+	CodeInstallFailed       Code = "TKR_INSTALL_FAILED"
+	CodeInstallIncomplete   Code = "TKR_INSTALL_INCOMPLETE"
+	CodeCancelled           Code = "TKR_CANCELLED"
+
+	CodeInternal Code = "TKR_INTERNAL"
 )
 
 // Error 是带错误码与修复建议的结构化错误。

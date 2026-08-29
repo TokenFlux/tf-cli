@@ -5,5 +5,6 @@ func Main(argv []string) int {
 	app := NewApp()
 	app.Register(newVersionCommand())
 	app.Register(newConfigCommand())
+	app.Register(newHarnessCommand())
 	return app.Run(argv)
 }

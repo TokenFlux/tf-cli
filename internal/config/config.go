@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // DefaultHost 是托管实例。自托管用 --host 或 profile 覆盖。
@@ -54,13 +55,36 @@ type Profile struct {
 	Harnesses map[string]ModelSlots `json:"harnesses,omitempty"`
 }
 
+// InstallRecord 记录一次由 tkr 代为执行的安装。
+//
+// 存在的意义是可追溯：doctor 要能回答「这个 harness 是谁装的、怎么装的」，
+// 用户卸载时才有据可循。不含任何凭据，因此可以放在 0644 的 config.json 里。
+type InstallRecord struct {
+	Manager string    `json:"manager"`
+	Command string    `json:"command"`
+	At      time.Time `json:"at"`
+	Version string    `json:"version,omitempty"`
+}
+
 // Config 是 config.json 的根结构。
 type Config struct {
-	Version  int                 `json:"version"`
-	Current  string              `json:"current"`
-	Profiles map[string]*Profile `json:"profiles"`
+	Version  int                      `json:"version"`
+	Current  string                   `json:"current"`
+	Profiles map[string]*Profile      `json:"profiles"`
+	Installs map[string]InstallRecord `json:"installs,omitempty"`
 
 	paths Paths
+}
+
+// RecordInstall 登记一次安装。
+func (c *Config) RecordInstall(harness string, rec InstallRecord) {
+	if c.Installs == nil {
+		c.Installs = map[string]InstallRecord{}
+	}
+	if rec.At.IsZero() {
+		rec.At = time.Now()
+	}
+	c.Installs[harness] = rec
 }
 
 // Load 读取配置；文件不存在时返回带默认 profile 的空配置。
