@@ -52,15 +52,6 @@ func (c *Client) Models(ctx context.Context) ([]Model, error) {
 	return out.Data, nil
 }
 
-// Reachable 校验 host 是否是一个 TokenRouter 实例。
-//
-// /api/v1/settings/public 是公开端点，无需凭据，因此可以在 login 之前
-// 用它把「host 填错了」当场拦下。
-func (c *Client) Reachable(ctx context.Context) error {
-	var discard map[string]any
-	return c.getJSON(ctx, "/api/v1/settings/public", &discard)
-}
-
 func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Host+path, nil)
 	if err != nil {

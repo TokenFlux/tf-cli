@@ -27,14 +27,11 @@ func newModelCommand() *Command {
 }
 
 func runModel(c *Context) error {
-	paths, err := config.DefaultPaths()
+	st, err := loadState(c)
 	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("无法定位配置目录", "cannot locate the config directory")).WithCause(err)
+		return err
 	}
-	cfg, err := config.Load(paths)
-	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
-	}
+	cfg := st.cfg
 
 	// 不指定 harness 时列出全部。
 	if len(c.Args) == 0 {

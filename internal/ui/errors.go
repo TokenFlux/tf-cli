@@ -13,9 +13,7 @@ const (
 	CodeMissingValue    Code = "TKR_FLAG_MISSING_VALUE"
 	CodeConfigRead      Code = "TKR_CONFIG_READ"
 	CodeConfigWrite     Code = "TKR_CONFIG_WRITE"
-	CodeConfigPerm      Code = "TKR_CONFIG_PERMISSION"
 	CodeCredentialsRead Code = "TKR_CREDENTIALS_READ"
-	CodeProfileNotFound Code = "TKR_PROFILE_NOT_FOUND"
 	CodeNotLoggedIn     Code = "TKR_NOT_LOGGED_IN"
 
 	CodeHarnessNotFound     Code = "TKR_HARNESS_NOT_FOUND"

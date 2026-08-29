@@ -118,12 +118,6 @@ func TestSameModelInDifferentGroups(t *testing.T) {
 		t.Errorf("ID() = %q, want the prefixed form", id)
 	}
 
-	if !IsComposite(ids) {
-		t.Error("a slash in the id means a composite key")
-	}
-	if IsComposite([]string{"gpt-5.4"}) {
-		t.Error("plain ids must not be treated as composite")
-	}
 	if got := Prefixes(ids); len(got) != 2 || got[0] != "Max" {
 		t.Errorf("Prefixes() = %v", got)
 	}

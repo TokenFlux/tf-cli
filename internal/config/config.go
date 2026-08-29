@@ -47,31 +47,6 @@ type KeyMeta struct {
 	ProbedAt  time.Time           `json:"probed_at,omitempty"`
 }
 
-// UnmarshalJSON 兼容早期把 Protocols 写成数组的配置。
-func (m *KeyMeta) UnmarshalJSON(data []byte) error {
-	type alias KeyMeta
-	var v struct {
-		alias
-		Protocols json.RawMessage `json:"protocols,omitempty"`
-	}
-	if err := json.Unmarshal(data, &v); err != nil {
-		return err
-	}
-	*m = KeyMeta(v.alias)
-	if len(v.Protocols) == 0 {
-		return nil
-	}
-	if err := json.Unmarshal(v.Protocols, &m.Protocols); err == nil {
-		return nil
-	}
-	var flat []string
-	if err := json.Unmarshal(v.Protocols, &flat); err != nil {
-		return err
-	}
-	m.Protocols = map[string][]string{GroupScope: flat}
-	return nil
-}
-
 // SupportsIn 报告某个分组前缀是否允许该协议。
 //
 // 未探测过时返回 true：没有证据就不拦，预检只能证伪。
@@ -170,45 +145,8 @@ func Load(paths Paths) (*Config, error) {
 	if cfg.Keys == nil {
 		cfg.Keys = map[string]*KeyMeta{}
 	}
-	cfg.migrate(data)
 	cfg.paths = paths
 	return cfg, nil
-}
-
-// migrate 把旧的 profiles/current 结构搬到新的 keys/harnesses 上。
-//
-// 旧结构有一个全局 current，新结构没有：把它作为所有 harness 的初始绑定，
-// 语义等价且不丢用户已选的模型。
-func (c *Config) migrate(raw []byte) {
-	var old struct {
-		Current  string `json:"current"`
-		Profiles map[string]struct {
-			Host      string                `json:"host"`
-			Harnesses map[string]ModelSlots `json:"harnesses"`
-		} `json:"profiles"`
-	}
-	if err := json.Unmarshal(raw, &old); err != nil || len(old.Profiles) == 0 {
-		return
-	}
-	for name, p := range old.Profiles {
-		if _, exists := c.Keys[name]; !exists {
-			host := p.Host
-			if host == "" {
-				host = DefaultHost
-			}
-			c.Keys[name] = &KeyMeta{Host: host}
-		}
-		if name != old.Current {
-			continue
-		}
-		for hname, slots := range p.Harnesses {
-			hc := c.Harness(hname)
-			hc.Key = name
-			for k, v := range slots {
-				hc.Slots[k] = v
-			}
-		}
-	}
 }
 
 // Harness 返回某个 harness 的配置，必要时创建。

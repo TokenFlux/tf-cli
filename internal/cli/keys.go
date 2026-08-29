@@ -49,17 +49,23 @@ func resolveKey(c *Context, cfg *config.Config, creds *config.Credentials, h *ha
 		hc.Key = ""
 	}
 
-	// 能力筛选。未探测过的 Key 一律视为可用 —— 没有证据就不拦。
-	var fit []string
-	for _, n := range names {
-		if cfg.Keys[n].Supports(string(h.Protocol)) {
-			fit = append(fit, n)
-		}
-	}
+	fit := fitting(cfg, names, h)
 
 	switch len(fit) {
 	case 0:
-		return "", noKeyFitsError(c, cfg, h, names)
+		// 探测结果会过期：用户在网页上改了分组绑定后，缓存里的
+		// “不支持”会让一把现在可用的 Key 凭空消失，而用户无从得知。
+		//
+		// 所以失败前必须重探一次。放在失败路径上而不是设 TTL：
+		// 顺利时零开销，出事时自愈。
+		if reprobe(c, cfg, creds, names) {
+			if fit = fitting(cfg, names, h); len(fit) == 1 {
+				return bindKey(c, cfg, h, fit[0])
+			}
+		}
+		if len(fit) == 0 {
+			return "", noKeyFitsError(c, cfg, h, names)
+		}
 	case 1:
 		return bindKey(c, cfg, h, fit[0])
 	}
@@ -82,6 +88,34 @@ func resolveKey(c *Context, cfg *config.Config, creds *config.Credentials, h *ha
 		return "", err
 	}
 	return bindKey(c, cfg, h, fit[idx])
+}
+
+// fitting 返回能跑该 harness 的 Key。
+//
+// 未探测过的 Key 一律视为可用 —— 没有证据就不拦。
+func fitting(cfg *config.Config, names []string, h *harness.Harness) []string {
+	var out []string
+	for _, n := range names {
+		if cfg.Keys[n].Supports(string(h.Protocol)) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// reprobe 重新探测所有 Key，报告是否有任何结果发生变化。
+func reprobe(c *Context, cfg *config.Config, creds *config.Credentials, names []string) bool {
+	before := fmt.Sprint(cfg.Keys)
+	c.UI.Logf("%s", c.UI.Dim(c.UI.T("重新检查各 Key 的可用协议…", "re-checking what each key allows…")))
+	for _, n := range names {
+		cred, ok := creds.Get(n)
+		if !ok {
+			continue
+		}
+		probeAndStore(cfg, n, cfg.HostOf(n), cred.Key)
+	}
+	_ = cfg.Save()
+	return fmt.Sprint(cfg.Keys) != before
 }
 
 // bindKey 记住绑定关系。写盘失败不阻断启动。

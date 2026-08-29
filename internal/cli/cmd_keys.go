@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
@@ -20,18 +21,11 @@ func newKeysCommand() *Command {
 }
 
 func runKeys(c *Context) error {
-	paths, err := config.DefaultPaths()
+	st, err := loadState(c)
 	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("无法定位配置目录", "cannot locate the config directory")).WithCause(err)
+		return err
 	}
-	cfg, err := config.Load(paths)
-	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
-	}
-	creds, _, err := config.LoadCredentials(paths)
-	if err != nil {
-		return ui.Errf(ui.CodeCredentialsRead, c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
-	}
+	cfg, creds := st.cfg, st.creds
 
 	names := creds.Names()
 	if len(names) == 0 {
@@ -39,30 +33,43 @@ func runKeys(c *Context) error {
 			WithHint("tkr login")
 	}
 
-	type row struct {
-		Name      string   `json:"name"`
-		Host      string   `json:"host"`
-		Key       string   `json:"key"`
+	type scope struct {
+		Prefix    string   `json:"prefix,omitempty"`
 		Protocols []string `json:"protocols,omitempty"`
 		Harnesses []string `json:"harnesses"`
-		BoundTo   []string `json:"bound_to,omitempty"`
 	}
+	type row struct {
+		Name    string   `json:"name"`
+		Host    string   `json:"host"`
+		Key     string   `json:"key"`
+		Scopes  []scope  `json:"scopes"`
+		BoundTo []string `json:"bound_to,omitempty"`
+		Probed  bool     `json:"probed"`
+	}
+
 	rows := make([]row, 0, len(names))
 	for _, name := range names {
 		cred, _ := creds.Get(name)
 		meta := cfg.Keys[name]
-		r := row{Name: name, Host: cfg.HostOf(name), Key: config.Mask(cred.Key)}
-		if meta != nil {
-			r.Protocols = meta.ProtocolSummary()
+		r := row{Name: name, Host: cfg.HostOf(name), Key: config.Mask(cred.Key), Probed: meta.Probed()}
+
+		// 复合 Key 一把横跨多个分组，各分组能跑的 harness 不同。
+		// 笼统地说这把 Key「能跑 claude codex」是谎报。
+		for _, prefix := range scopesOf(meta) {
+			sc := scope{Prefix: prefix}
+			if meta != nil {
+				sc.Protocols = meta.Protocols[prefix]
+			}
+			for _, h := range harness.All {
+				if meta.SupportsIn(prefix, string(h.Protocol)) {
+					sc.Harnesses = append(sc.Harnesses, h.Name)
+				}
+			}
+			r.Scopes = append(r.Scopes, sc)
 		}
 		for _, h := range harness.All {
-			if meta.Supports(string(h.Protocol)) {
-				r.Harnesses = append(r.Harnesses, h.Name)
-			}
-		}
-		for _, hname := range sortedHarnessNames(cfg) {
-			if cfg.Harnesses[hname].Key == name {
-				r.BoundTo = append(r.BoundTo, hname)
+			if hc, ok := cfg.Harnesses[h.Name]; ok && hc.Key == name {
+				r.BoundTo = append(r.BoundTo, h.Name)
 			}
 		}
 		rows = append(rows, r)
@@ -71,24 +78,34 @@ func runKeys(c *Context) error {
 	c.UI.Emit("keys", rows, func() {
 		for _, r := range rows {
 			c.UI.Printf("%s  %s\n", c.UI.Bold(r.Name), c.UI.Dim(r.Key))
-			c.UI.Printf("  %-10s %s\n", c.UI.T("可跑", "can run"), strings.Join(r.Harnesses, " "))
+			for _, sc := range r.Scopes {
+				label := sc.Prefix
+				if label == "" {
+					label = c.UI.T("可跑", "can run")
+				}
+				c.UI.Printf("  %-10s %s\n", label, strings.Join(sc.Harnesses, " "))
+			}
 			if len(r.BoundTo) > 0 {
 				c.UI.Printf("  %-10s %s\n", c.UI.T("已绑定", "bound to"), strings.Join(r.BoundTo, " "))
 			}
-			if len(r.Protocols) == 0 {
-				c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("协议未探测，启动时会自动补上", "protocols not probed yet; will be filled in at launch")))
+			if !r.Probed {
+				c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("协议未探测，启动时会自动补上",
+					"protocols not probed yet; will be filled in at launch")))
 			}
 		}
 	})
 	return nil
 }
 
-func sortedHarnessNames(cfg *config.Config) []string {
-	out := make([]string, 0, len(cfg.Harnesses))
-	for _, h := range harness.All {
-		if _, ok := cfg.Harnesses[h.Name]; ok {
-			out = append(out, h.Name)
-		}
+// scopesOf 列出该 Key 的作用域：复合 Key 是各分组前缀，普通 Key 是单个空串。
+func scopesOf(meta *config.KeyMeta) []string {
+	if meta == nil || len(meta.Protocols) == 0 {
+		return []string{config.GroupScope}
 	}
+	out := make([]string, 0, len(meta.Protocols))
+	for prefix := range meta.Protocols {
+		out = append(out, prefix)
+	}
+	sort.Strings(out)
 	return out
 }

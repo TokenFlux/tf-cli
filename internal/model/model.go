@@ -85,19 +85,6 @@ func (r Ref) Display() string {
 	return r.Base + "-" + r.Effort
 }
 
-// IsComposite 报告这份模型列表是否来自复合 Key。
-//
-// 复合 Key 的 /v1/models 会给每个 ID 加好分组前缀，所以出现斜杠
-// 就是充分信号，不需要额外接口判断。
-func IsComposite(ids []string) bool {
-	for _, id := range ids {
-		if strings.Contains(id, "/") {
-			return true
-		}
-	}
-	return false
-}
-
 // Prefixes 按出现顺序列出所有分组前缀。
 func Prefixes(ids []string) []string {
 	seen := map[string]bool{}

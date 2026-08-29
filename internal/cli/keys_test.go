@@ -182,3 +182,20 @@ func TestFilterByProtocolSkipsUnprobed(t *testing.T) {
 		t.Errorf("unprobed key should not filter: %v", got)
 	}
 }
+
+// 探测结果过期时必须自愈：用户在网页上改了分组绑定后，
+// 缓存的「不支持」会让一把现在可用的 Key 凭空消失且无法解释。
+func TestResolveKeyReprobesBeforeFailing(t *testing.T) {
+	codex, _ := harness.Lookup("codex")
+	cfg, creds := fixture(t, map[string][]string{"only": {"anthropic_messages"}})
+
+	// 一把都不合格 → 触发重探。这里没有网络，重探不会改变结果，
+	// 因此仍应报错，而不是卡住或误选。
+	_, err := resolveKey(testCtx(), cfg, creds, codex)
+	if err == nil {
+		t.Fatal("expected an error when nothing fits even after re-probing")
+	}
+	if e, ok := err.(*ui.Error); !ok || e.Code != ui.CodeProtocolMismatch {
+		t.Fatalf("error = %v, want TKR_PROTOCOL_MISMATCH", err)
+	}
+}

@@ -105,7 +105,7 @@ func complete(words []string) []string {
 	case "model":
 		return filter(completeModel(rest, cur), cur)
 	case "config":
-		return filter([]string{"path", "show"}, cur)
+		return nil
 	case "completions":
 		return filter([]string{"bash", "zsh", "fish"}, cur)
 	case "login":

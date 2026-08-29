@@ -36,19 +36,11 @@ func newLaunchCommand(h *harness.Harness) *Command {
 }
 
 func runLaunch(c *Context, h *harness.Harness) error {
-	paths, err := config.DefaultPaths()
+	st, err := loadState(c)
 	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("无法定位配置目录", "cannot locate the config directory")).WithCause(err)
+		return err
 	}
-	cfg, err := config.Load(paths)
-	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
-	}
-
-	creds, _, err := config.LoadCredentials(paths)
-	if err != nil {
-		return ui.Errf(ui.CodeCredentialsRead, c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
-	}
+	cfg, creds := st.cfg, st.creds
 
 	keyName, err := resolveKey(c, cfg, creds, h)
 	if err != nil {

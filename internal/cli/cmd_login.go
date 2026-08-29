@@ -31,14 +31,11 @@ func newLoginCommand() *Command {
 }
 
 func runLogin(c *Context) error {
-	paths, err := config.DefaultPaths()
+	st, err := loadState(c)
 	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("无法定位配置目录", "cannot locate the config directory")).WithCause(err)
+		return err
 	}
-	cfg, err := config.Load(paths)
-	if err != nil {
-		return ui.Errf(ui.CodeConfigRead, c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
-	}
+	cfg, creds := st.cfg, st.creds
 
 	// 标签来源：位置参数 > --key。都没有时先落到 default，
 	// 冲突时再询问。显式指定则不追问。
@@ -87,10 +84,6 @@ func runLogin(c *Context) error {
 		ids = append(ids, m.ID)
 	}
 
-	creds, _, err := config.LoadCredentials(paths)
-	if err != nil {
-		return ui.Errf(ui.CodeCredentialsRead, c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
-	}
 	keyName, err = resolveLoginName(c, creds, cfg, keyName, explicit, key, ids)
 	if err != nil {
 		return err

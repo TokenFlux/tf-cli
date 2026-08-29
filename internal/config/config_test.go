@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -160,49 +159,6 @@ func TestSupportsWithoutProbe(t *testing.T) {
 	}
 }
 
-// 旧的 profiles/current 结构要能迁到 keys/harnesses，且不丢已选模型。
-func TestMigrateFromProfiles(t *testing.T) {
-	paths := testPaths(t)
-	old := map[string]any{
-		"version": 1,
-		"current": "work",
-		"profiles": map[string]any{
-			"default": map[string]any{"host": DefaultHost},
-			"work": map[string]any{
-				"host": "https://gw.example.com",
-				"harnesses": map[string]any{
-					"codex": map[string]string{"default": "gpt-5.6-sol"},
-				},
-			},
-		},
-	}
-	data, _ := json.MarshalIndent(old, "", "  ")
-	if err := os.MkdirAll(paths.ConfigDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(paths.ConfigFile(), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := Load(paths)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cfg.Keys) != 2 {
-		t.Fatalf("expected both profiles to become keys, got %v", cfg.KeyNames())
-	}
-	if got := cfg.HostOf("work"); got != "https://gw.example.com" {
-		t.Errorf("host lost in migration: %q", got)
-	}
-	// 旧的全局 current 变成各 harness 的初始绑定。
-	if got := cfg.Harness("codex").Key; got != "work" {
-		t.Errorf("codex binding = %q, want work", got)
-	}
-	if got := cfg.Harness("codex").Slots[SlotDefault]; got != "gpt-5.6-sol" {
-		t.Errorf("slot lost in migration: %q", got)
-	}
-}
-
 // 凭据按名字分开存：删一把不能影响另一把。
 func TestCredentialsRemoveIsPerName(t *testing.T) {
 	paths := testPaths(t)
@@ -228,32 +184,6 @@ func TestCredentialsRemoveIsPerName(t *testing.T) {
 	}
 	if cred, ok := reloaded.Get("default"); !ok || cred.Key != "sk-aaa" {
 		t.Errorf("default credential was disturbed: %+v", cred)
-	}
-}
-
-// 模型缓存按 Key 分开，避免跨 Key 污染补全与降级。
-func TestModelsCacheIsPerKey(t *testing.T) {
-	paths := testPaths(t)
-	if err := paths.WriteCache(ModelsCacheKey("default"), []string{"claude-opus-5"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := paths.WriteCache(ModelsCacheKey("gpt"), []string{"gpt-5.4"}); err != nil {
-		t.Fatal(err)
-	}
-
-	var got []string
-	if _, err := paths.ReadCache(ModelsCacheKey("default"), &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0] != "claude-opus-5" {
-		t.Errorf("cache polluted: %v", got)
-	}
-
-	if err := paths.RemoveCache(ModelsCacheKey("gpt")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := paths.ReadCache(ModelsCacheKey("default"), &got); err != nil {
-		t.Errorf("removing one key's cache removed another's: %v", err)
 	}
 }
 
@@ -301,19 +231,5 @@ func TestProtocolsArePerGroupPrefix(t *testing.T) {
 	// 没探到的前缀不拦。
 	if !m.SupportsIn("Unknown", "openai_responses") {
 		t.Error("an unprobed prefix must not be filtered out")
-	}
-}
-
-// 旧配置把 protocols 写成数组，要能读成「普通 Key 的唯一作用域」。
-func TestProtocolsBackwardCompatible(t *testing.T) {
-	var m KeyMeta
-	if err := json.Unmarshal([]byte(`{"host":"h","protocols":["anthropic_messages"]}`), &m); err != nil {
-		t.Fatal(err)
-	}
-	if !m.SupportsIn(GroupScope, "anthropic_messages") {
-		t.Error("flat array should map onto the default scope")
-	}
-	if m.SupportsIn(GroupScope, "openai_responses") {
-		t.Error("flat array should still filter")
 	}
 }
