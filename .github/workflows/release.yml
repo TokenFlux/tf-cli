@@ -32,6 +32,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # 发布必须先过自检。
+      #
+      # 之前 release 与 ci 是两条独立流水线：一个编译不过的提交打上 tag
+      # 就直接发了产物出去，而 ci 那边正红着。产物本身能跑 —— 坏的是测试，
+      # 不是代码 —— 但这条路同样能放过真正坏掉的代码。
+      - name: 自检
+        run: go vet ./... && go test ./...
+
       - name: 确定版本号
         id: v
         run: |
