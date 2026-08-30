@@ -286,7 +286,7 @@ func bindKey(c *Context, cfg *config.Config, h *harness.Harness, name string) {
 // reprobe 重新探测所有 Key，报告是否有任何结果发生变化。
 func reprobe(c *Context, cfg *config.Config, creds *config.Credentials, names []string) bool {
 	before := fmt.Sprint(cfg.Keys)
-	c.UI.Logf("%s", c.UI.Dim(c.UI.T("重新检查各 Key 的准入…", "re-checking what each key allows…")))
+	c.UI.Logf("%s", c.UI.Dim(c.UI.T("重新检查各 Key 能用于哪些 harness…", "re-checking what each key allows…")))
 	for _, n := range names {
 		cred, ok := creds.Get(n)
 		if !ok {

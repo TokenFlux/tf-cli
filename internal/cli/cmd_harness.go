@@ -127,7 +127,7 @@ func EnsureInstalled(c *Context, h *harness.Harness) error {
 	items = append(items, ui.Item{Label: c.UI.T("退出", "quit")})
 
 	idx, err := c.UI.Select(
-		fmt.Sprintf(c.UI.T("未检测到 %s，要现在装吗？", "%s is not installed. Install it now?"), h.Name),
+		fmt.Sprintf(c.UI.T("未检测到 %s，现在安装？", "%s is not installed. Install it now?"), h.Name),
 		items,
 	)
 	if err != nil {

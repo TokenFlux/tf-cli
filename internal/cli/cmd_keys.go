@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
@@ -13,7 +12,7 @@ func newKeysCommand() *Command {
 		Name:  "keys",
 		Usage: "tkr keys",
 		Summary: func(u *ui.UI) string {
-			return u.T("列出本机的 Key 及其能跑的 harness", "List local keys and what each can run")
+			return u.T("列出本机的 Key 及其可用的 harness", "List local keys and what each can run")
 		},
 		Flags: []Flag{
 			{Name: "refresh", Kind: KindBool,
@@ -45,12 +44,11 @@ func runKeys(c *Context) error {
 		Harnesses []string `json:"harnesses"`
 	}
 	type row struct {
-		Name    string   `json:"name"`
-		Host    string   `json:"host"`
-		Key     string   `json:"key"`
-		Scopes  []scope  `json:"scopes"`
-		BoundTo []string `json:"bound_to,omitempty"`
-		Probed  bool     `json:"probed"`
+		Name   string  `json:"name"`
+		Host   string  `json:"host"`
+		Key    string  `json:"key"`
+		Scopes []scope `json:"scopes"`
+		Probed bool    `json:"probed"`
 	}
 
 	rows := make([]row, 0, len(names))
@@ -70,11 +68,6 @@ func runKeys(c *Context) error {
 			}
 			r.Scopes = append(r.Scopes, sc)
 		}
-		for _, h := range harness.All {
-			if hc, ok := cfg.Harnesses[h.Name]; ok && hc.Key == name {
-				r.BoundTo = append(r.BoundTo, h.Name)
-			}
-		}
 		rows = append(rows, r)
 	}
 
@@ -84,16 +77,13 @@ func runKeys(c *Context) error {
 			for _, sc := range r.Scopes {
 				label := sc.Prefix
 				if label == "" {
-					label = c.UI.T("可跑", "can run")
+					label = c.UI.T("可用于", "can run")
 				}
 				c.UI.Printf("  %s %s\n", ui.Pad(label, 10), strings.Join(sc.Harnesses, " "))
 			}
-			if len(r.BoundTo) > 0 {
-				c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("已绑定", "bound to"), 10), strings.Join(r.BoundTo, " "))
-			}
 			if !r.Probed {
-				c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("协议未探测，启动时会自动补上",
-					"protocols not probed yet; will be filled in at launch")))
+				c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("尚未检查，启动时会自动补上",
+					"not checked yet; will be filled in at launch")))
 			}
 		}
 	})

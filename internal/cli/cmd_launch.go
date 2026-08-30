@@ -19,7 +19,7 @@ func newLaunchCommand(h *harness.Harness) *Command {
 		Passthrough: true,
 		Usage:       fmt.Sprintf("tkr %s [tkr flags] [%s args...]", h.Name, h.Name),
 		Summary: func(u *ui.UI) string {
-			return fmt.Sprintf(u.T("用 TokenFlux 环境启动 %s", "Launch %s against TokenFlux"), h.Name)
+			return fmt.Sprintf(u.T("通过 TokenFlux 启动 %s", "Launch %s against TokenFlux"), h.Name)
 		},
 		Flags: []Flag{
 			{Name: "model", Short: "m", Kind: KindOptString,
@@ -49,7 +49,15 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	if err != nil {
 		return err
 	}
-	cred, _ := creds.Get(keyName)
+	// 这个 ok 绝不能丢：丢掉就是 nil 解引用，用户看到的是一屏 panic
+	// 而不是一句话。resolveTarget 理应已经保证 Key 有效，
+	// 但「理应」不该由下游用崩溃来验证。
+	cred, ok := creds.Get(keyName)
+	if !ok {
+		return ui.Errf(ui.CodeKeyNotFound, fmt.Sprintf(
+			c.UI.T("没有名为 %q 的 Key", "no key named %q"), keyName)).
+			WithHint("tkr login")
+	}
 	host := cfg.HostOf(keyName)
 	if hv := c.Flags.String("host"); hv != "" {
 		host = normalizeHost(hv)
@@ -184,6 +192,21 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		}
 		keyName = cands[pick].Key
 		slots[config.SlotDefault] = cands[pick].Model
+	}
+
+	// 主模型决定用哪把 Key。
+	//
+	// 绑定可能压根不存在（tkr model --set 只写槽位，它无从知道该绑谁），
+	// 也可能指向一把已经 logout 的 Key。两种都是合法状态，
+	// 之前会一路把空名字带到 creds.Get 那里去崩掉。
+	if !contains(keys, keyName) {
+		k, ok := ownerOf(cands, slots[config.SlotDefault])
+		if !ok {
+			return "", nil, ui.Errf(ui.CodeKeyNotFound, fmt.Sprintf(
+				c.UI.T("没有 Key 能提供 %s", "no key offers %s"), slots[config.SlotDefault])).
+				WithHint(fmt.Sprintf("tkr model %s", h.Name))
+		}
+		keyName = k
 	}
 
 	// 其余槽只能取自同一把 Key —— 一次启动只注入一把 Key。

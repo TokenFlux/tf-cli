@@ -62,7 +62,7 @@ func runModel(c *Context) error {
 		slot, model, found := strings.Cut(c.Flags.String("set"), "=")
 		if !found || slot == "" || model == "" {
 			return ui.Errf(ui.CodeUsage,
-				c.UI.T("--set 需要 slot=model 形式", "--set expects slot=model")).
+				c.UI.T("--set 的格式是 slot=model", "--set expects slot=model")).
 				WithHint(fmt.Sprintf("tkr model %s --set default=<model>", h.Name))
 		}
 		if !hasSlot(h, slot) {

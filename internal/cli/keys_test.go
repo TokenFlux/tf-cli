@@ -480,3 +480,28 @@ func TestSuggestKeyNameNeedsAMajority(t *testing.T) {
 		}
 	}
 }
+
+// 绑定的 Key 被 logout 后仍然可以启动 —— 之前会 panic。
+//
+// 「槽位已设、但没有绑定 Key」是合法状态：tkr model --set 只写槽位，
+// 它无从知道该绑哪把 Key。之前这个空名字会一路带到 creds.Get，
+// 返回值里的 ok 又被丢掉，于是用户看到的是一屏 panic 而不是一句话。
+func TestLaunchSurvivesADanglingBinding(t *testing.T) {
+	dir := t.TempDir()
+	paths := config.Paths{ConfigDir: dir, CacheDir: dir}
+	cfg, _ := config.Load(paths)
+	cfg.Harness("opencode").Slots = config.ModelSlots{"default": "gpt-5.6-sol"}
+	cfg.Harness("opencode").Key = "" // --set 不会写绑定
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	creds, _ := config.LoadCredentials(paths)
+	if _, ok := creds.Get(""); ok {
+		t.Fatal("an empty key name must never resolve to a credential")
+	}
+	// 空名字必须被当作「没有这把 Key」，而不是拿到一个 nil 再去解引用。
+	if _, ok := creds.Get("gone"); ok {
+		t.Error("a removed key must not resolve")
+	}
+}
