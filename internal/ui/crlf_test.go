@@ -47,3 +47,24 @@ func TestTerminalWriterLeavesPipesAlone(t *testing.T) {
 		t.Error("a pipe must not get CRLF translation")
 	}
 }
+
+// 直接写 /dev/tty 的地方必须自带 \r：那条路径绕开了 crlfWriter，
+// 而终端可能处于 raw 模式（ONLCR 关闭）。
+//
+// 具体的坑：ReadSecret 关了回显，用户按的回车不会被终端回显，
+// 换行得由我们补。只补 \n 的话，光标停在提示语末列，
+// 下一行就从那里开始 —— 「✓ saved as key」会被顶到半屏之后。
+func TestDirectTTYWritesCarryCR(t *testing.T) {
+	src, err := os.ReadFile("prompt.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{`fmt.Fprintln(tty)`, `fmt.Fprint(tty, "\n")`} {
+		if bytes.Contains(src, []byte(bad)) {
+			t.Errorf("%s writes a bare LF to the terminal; use \\r\\n", bad)
+		}
+	}
+	if !bytes.Contains(src, []byte(`fmt.Fprint(tty, "\r\n")`)) {
+		t.Error("ReadSecret must emit CRLF after the hidden input")
+	}
+}

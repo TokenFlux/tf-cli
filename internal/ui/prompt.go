@@ -77,9 +77,20 @@ func (u *UI) ReadLine(prompt string) (string, error) {
 	}
 	defer tty.Close()
 
+	saved, err := sttyCapture(tty, "-g")
+	if err != nil {
+		return "", ErrNotInteractive
+	}
+	// 与 ReadSecret 同理：不能假设终端本来就是行模式。
+	// 区别只是这里要回显，用户得看见自己输入了什么。
+	if err := sttyRun(tty, "echo", "icanon", "icrnl", "isig"); err != nil {
+		return "", ErrNotInteractive
+	}
+	defer func() { _ = sttyRun(tty, saved) }()
+
 	fmt.Fprintf(tty, "%s ", prompt)
 	line, err := bufio.NewReader(tty).ReadString('\n')
-	if err != nil {
+	if err != nil && line == "" {
 		return "", ErrNotInteractive
 	}
 	return strings.TrimSpace(line), nil
@@ -110,7 +121,10 @@ func (u *UI) ReadSecret(prompt string) (string, error) {
 	}
 	defer func() {
 		_ = sttyRun(tty, saved)
-		fmt.Fprintln(tty)
+		// 回显是关的，用户按的回车不会被终端回显，得由我们补一个换行。
+		// 必须写 \r\n：此刻终端已恢复原状，而原状可能是 raw（ONLCR 关闭），
+		// 只写 \n 会让光标停在提示语的末列，下一行就从那里开始。
+		fmt.Fprint(tty, "\r\n")
 	}()
 
 	fmt.Fprintf(tty, "%s ", prompt)
