@@ -2,7 +2,9 @@
 
 ## 报告漏洞
 
-请发邮件到 security@tokenflux.dev，不要开公开 issue。
+请到仓库的 [Security 页面](https://github.com/TokenFlux/tkr/security/advisories/new)提交，不要开公开 issue。
+
+报告只有维护者可见，修复后再一并公开。
 
 ## tf 如何处理你的凭据
 
