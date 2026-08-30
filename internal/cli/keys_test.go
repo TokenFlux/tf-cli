@@ -320,3 +320,27 @@ func TestHiddenKeysAreExplained(t *testing.T) {
 		t.Errorf("must not mention keys that were used: %q", out)
 	}
 }
+
+// 全部协议都判定为拒绝时不能记进配置。
+//
+// claude_code_only 靠拒绝文案识别，网关改词就会退化成「全部拒绝」；
+// 若照单全收，一把好端端的 Key 会从所有 harness 里消失且毫无线索。
+// 没有证据就不过滤 —— 让网关在启动时明确报错，比静默抹掉可恢复得多。
+func TestAllDeniedIsTreatedAsUnknown(t *testing.T) {
+	dir := t.TempDir()
+	cfg, _ := config.Load(config.Paths{ConfigDir: dir, CacheDir: dir})
+	meta := cfg.KeyMetaOf("k")
+	meta.Models = []string{"claude-opus-5"}
+
+	// 模拟探测「什么都不准入」：不该留下任何过滤依据。
+	meta.Protocols = map[string][]string{}
+	meta.ClaudeCodeOnly = map[string]bool{}
+
+	if meta.Probed() {
+		t.Error("an empty probe result must not count as probed")
+	}
+	claude, _ := harness.Lookup("claude")
+	if !canRun(meta, config.GroupScope, claude) {
+		t.Error("without evidence tkr must not filter the key out")
+	}
+}

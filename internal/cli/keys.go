@@ -313,6 +313,16 @@ func probeAndStore(cfg *config.Config, name, host, key string) {
 			meta.ClaudeCodeOnly[prefix] = true
 			continue
 		}
+		// 一个协议都不准入，多半是我们没读懂回答，而不是真有一个
+		// 什么都做不了的分组。此时宁可不记 —— 没有证据就不过滤。
+		//
+		// 这条是给文案变化留的余地：claude_code_only 靠拒绝文案识别，
+		// 网关一旦改词，这里会退化成「全部拒绝」，进而把一把好端端的
+		// Key 从所有 harness 里抹掉，且没有任何线索。相比之下，
+		// 放它进候选、让网关在启动时明确报错要好得多。
+		if len(adm.Protocols) == 0 {
+			continue
+		}
 		list := make([]string, 0, len(adm.Protocols))
 		for _, p := range adm.Protocols {
 			list = append(list, string(p))
