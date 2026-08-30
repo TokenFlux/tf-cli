@@ -1,9 +1,16 @@
 # tf
 
-用 [TokenFlux](https://tokenflux.dev) 或自建的 TokenRouter 启动 Claude Code、Codex、opencode。
-只注入环境变量与命令行参数，不改动 harness 自己的配置文件，可与 CC-Switch 这类配置管理器共存。
+[![Release](https://img.shields.io/github/v/release/tokenflux/tkr)](https://github.com/tokenflux/tkr/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-v0。已在 Claude Code 2.1、Codex 0.151、opencode 1.18 上实测。Windows 能编译，交互路径未验证。
+用 [TokenFlux](https://tokenflux.dev) 或自建的 TokenRouter 启动 Claude Code、Codex、opencode。
+
+```sh
+tf claude
+```
+
+v0。三个 harness 均已端到端实测：Claude Code 2.1.251、Codex 0.151.0、opencode 1.18.20。
+Windows 能编译，交互路径未验证。
 
 ## 安装
 
@@ -11,65 +18,98 @@ v0。已在 Claude Code 2.1、Codex 0.151、opencode 1.18 上实测。Windows �
 curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 ```
 
-装到 `~/.local/bin`，不需要 sudo。从源码构建：
+仓库名 tkr，装出来的二进制叫 `tf`。安装位置是 `~/.local/bin`，不需要 sudo，
+`TF_INSTALL_DIR` 可以改。也可以从源码构建：
 
 ```sh
 git clone https://github.com/tokenflux/tkr && cd tkr && make build
 ```
 
+`tf update` 升级，校验 SHA256 后原子替换；`tf update --check` 只查有无新版。
+用包管理器装的不自替换，只打印对应的升级命令。
+卸载：`rm ~/.local/bin/tf`，再删掉 `tf config` 打印的配置目录（默认 `~/.tf`）。
+
 ## 快速开始
 
-```sh
-tf login     # 粘贴 API Key，输入不回显，当场校验
-tf claude    # 选一个主模型，之后直接启动
+```console
+$ tf login
+粘贴 API Key（不回显）：
+✓ 已保存为 Key "work"
+  网关     https://tokenflux.dev
+  Key      sk-d61…5b1c
+  模型     14 claude-opus-5, claude-sonnet-5, gpt-5.6-sol, …
+  协议     anthropic_messages / openai_responses
+  可用于   claude codex opencode
+
+$ tf claude
+为 claude 选择主模型
+❯ claude-opus-5  Claude/
+  claude-sonnet-5  Claude/
+  claude-haiku-4-5  Claude/
+
+╭───────────────────────────────╮
+│ ✻ Welcome to Claude Code      │
+╰───────────────────────────────╯
 ```
 
-harness 没装时 tf 列出可用的包管理器让你选。`--yes`、`--json`、无终端时只打印安装命令。
+模型选过一次就记住，之后 `tf claude` 直接启动。harness 没装时 tf 会列出可用的包管理器
+让你选；`--yes`、`--json`、无终端时只打印安装命令。
 
-## 命令
-
-| | |
-| --- | --- |
-| `tf claude` `tf codex` `tf opencode` | 启动 harness |
-| `tf login [名称]` | 保存一把 Key |
-| `tf keys` | 列出 Key，及各自能跑哪些 harness |
-| `tf model [harness]` | 查看或编辑模型槽 |
-| `tf config` | 打印配置文件路径 |
-| `tf update` | 升级自身 |
-
-启动时的一次性参数，都不写盘：
+启动时可以临时改，都不写盘：
 
 ```sh
 tf claude -m              # 换模型，进入选择界面
-tf claude -e high         # 调思考强度
+tf codex  -e high         # 调思考强度（claude 没有这个开关，用模型变体代替）
 tf codex  -k work         # 指定用哪把 Key
 tf claude -- --resume     # -- 之后的参数原样交给 harness
 ```
 
 改默认值用 `tf model claude --set fast=claude-haiku-4-5-20251001`。
 
-## Key 与模型
+## 工作方式
 
-Key 的绑定属于 harness，不存在全局的「当前 Key」：
+tf 解析出 Key、分组和每个模型槽，再按各 harness 自己的方式传进去，全部是进程级的：
 
+| harness | 注入 | 实测 |
+| --- | --- | --- |
+| Claude Code | `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_DEFAULT_*_MODEL`，并清空 `ANTHROPIC_API_KEY` 与 bedrock / vertex 变量 | 2.1.251 通过 |
+| Codex | `-c model_provider=…`、`-c model_providers.*.base_url=…`、`env_key`，不设环境变量 | 0.151.0 通过 |
+| opencode | `OPENCODE_CONFIG_CONTENT` 内联 JSON，`model` 与 `small_model` 一起注入 | 1.18.20 通过 |
+
+`~/.claude/settings.json`、`~/.codex/config.toml` 不被读写，可与 CC-Switch 这类配置管理器共存。
+
+每个 harness 的后台任务用的是独立模型槽，漏配就会静默失败，所以 tf 把槽位一起管起来：
+
+```console
+$ tf model claude
+claude
+  default   claude-sonnet-5           — 主对话
+  fast      claude-haiku-4-5-20251001 — 后台任务：标题、文件摘要
+  heavy     未配置                    — /model 切到最强档时
 ```
-tf codex   → 用能跑 codex 的那把
-tf claude  → 用能跑 claude 的那把
-```
 
-多把都符合时问一次并记住。启动前 tf 探测每把 Key 的分组允许哪些客户端协议，不消耗 token，
-不可用的 Key 和模型不进候选。
+槽位由 harness 决定：codex 是 `default` 与 `review`，opencode 是 `default` 与 `small`，
+两个都必填，缺 `small` 时 opencode 会回落到内置的 `gpt-5.4-nano`，该模型通常不在分组里。
 
-`claude_code_only` 分组（如 Claude Max）按客户端指纹放行，只有 Claude Code 过得去，
-它的模型只出现在 `tf claude` 里。
+## 模型为什么会不见
 
-一把复合 Key 横跨多个分组，各分组能力不同，按分组前缀分别判断：
+`claude_code_only` 分组（如 Claude Max）按客户端指纹放行，只接受 Claude Code，
+它的模型不会出现在 `tf codex` 和 `tf opencode` 的候选里。
 
-```
+其余情况是启动前的协议探测把不可用的 Key 和模型过滤掉了。探测不消耗 token。
+
+## 多把 Key
+
+绑定属于 harness，不存在全局的“当前 Key”。多把都符合时询问一次并记住。
+一把复合 Key 横跨多个分组、各分组能力不同，按分组前缀分别判断：
+
+```console
 $ tf keys
 work  sk-d61…5b1c
-  Claude     claude
-  GPT        codex opencode
+  Claude/    claude
+  GPT/       codex opencode
+personal  sk-9f2…a047
+  ChatGPT/   codex opencode
 ```
 
 ## 自建 TokenRouter
@@ -88,25 +128,20 @@ tf login work --host https://router.acme.com
 
 优先级：`--host` > Key 保存的 host > 编译期默认值。
 
-## 配置与环境变量
+## 配置
 
-`tf config` 打印路径。
+`tf config` 打印配置目录，默认 `~/.tf`，设了 `XDG_CONFIG_HOME` 时是 `$XDG_CONFIG_HOME/tf`。
 
-- `config.json` 0644：Key 标签、host、harness 绑定与模型槽
-- `credentials.json` 0600：只存密钥本身，权限过宽会被自动收紧
-- `TKR_API_KEY` 优先于已保存的凭据，不写盘，供容器与 CI 使用
-- `TKR_LANG` 取 `zh` 或 `en`，默认跟随系统 locale
+- `config.json`：Key 标签、host、harness 绑定与模型槽，可分享
+- `credentials.json`：只存密钥本身
+- `TF_API_KEY` 优先于已保存的凭据，不写盘，供容器与 CI 使用
+- `TF_LANG` 取 `zh` 或 `en`，默认跟随系统 locale
 
-凭据处理与安全边界见 [SECURITY.md](SECURITY.md)。
+文件权限与凭据处理见 [SECURITY.md](SECURITY.md)。
 
-## 升级
+## 反馈
 
-```sh
-tf update            # 校验 SHA256 后原子替换
-tf update --check    # 只查有无新版
-```
-
-用包管理器装的不自替换，只打印对应的升级命令。
+用法问题和 bug 请提 [issue](https://github.com/tokenflux/tkr/issues)。安全问题见 SECURITY.md，不要开公开 issue。
 
 ## 许可
 
