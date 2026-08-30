@@ -30,7 +30,7 @@ func newCompletionsCommand() *Command {
 		},
 		Flags: []Flag{
 			{Name: "install", Kind: KindBool,
-				Desc: "写入该 shell 的补全目录|Write it into the shell's completion directory"},
+				Desc: "写入该 shell 的补全目录||Write it into the shell's completion directory"},
 		},
 		Run: func(c *Context) error {
 			if len(c.Args) == 0 {

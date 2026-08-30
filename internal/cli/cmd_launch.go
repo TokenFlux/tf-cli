@@ -23,9 +23,9 @@ func newLaunchCommand(h *harness.Harness) *Command {
 		},
 		Flags: []Flag{
 			{Name: "model", Short: "m", Kind: KindOptString,
-				Desc: "本次使用的主模型；不带值则进入选择|Main model for this run; omit the value to pick interactively"},
+				Desc: "本次使用的主模型；不带值则进入选择||Main model for this run; omit the value to pick interactively"},
 			{Name: "effort", Short: "e", Kind: KindString,
-				Desc: "思考强度：minimal|low|medium|high|xhigh|Reasoning effort: minimal|low|medium|high|xhigh"},
+				Desc: "思考强度：minimal|low|medium|high|xhigh||Reasoning effort: minimal|low|medium|high|xhigh"},
 		},
 		Run: func(c *Context) error { return runLaunch(c, h) },
 	}

@@ -16,7 +16,7 @@ func newLogoutCommand() *Command {
 			return u.T("删除本机保存的 API Key", "Remove the API key stored on this machine")
 		},
 		Flags: []Flag{
-			{Name: "all", Kind: KindBool, Desc: "删除本机保存的所有 Key|Remove every key stored locally"},
+			{Name: "all", Kind: KindBool, Desc: "删除本机保存的所有 Key||Remove every key stored locally"},
 		},
 		Run: runLogout,
 	}

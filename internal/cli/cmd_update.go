@@ -21,7 +21,7 @@ func newUpdateCommand() *Command {
 		},
 		Flags: []Flag{
 			{Name: "check", Kind: KindBool,
-				Desc: "只检查有无新版，不安装|Only check for a newer version"},
+				Desc: "只检查有无新版，不安装||Only check for a newer version"},
 		},
 		Run: runUpdate,
 	}

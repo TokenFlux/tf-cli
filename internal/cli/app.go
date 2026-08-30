@@ -127,8 +127,13 @@ func (a *App) runVersion(u *ui.UI) int {
 }
 
 // desc 从 "中文|English" 中取出对应语言。
+// desc 取标志描述的中文或英文那一半。
+//
+// 分隔符是 "||" 而不是 "|"：描述里本来就会出现单个竖线
+// （思考强度那条列的就是 minimal|low|medium|high|xhigh），
+// 用单竖线切会把描述从中间劈开，帮助里显示成一串乱码。
 func desc(u *ui.UI, s string) string {
-	zh, en, ok := strings.Cut(s, "|")
+	zh, en, ok := strings.Cut(s, "||")
 	if !ok {
 		return s
 	}

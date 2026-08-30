@@ -16,7 +16,7 @@ func newKeysCommand() *Command {
 		},
 		Flags: []Flag{
 			{Name: "refresh", Kind: KindBool,
-				Desc: "重新探测各 Key 的准入情况|Re-probe what each key allows"},
+				Desc: "重新探测各 Key 的准入情况||Re-probe what each key allows"},
 		},
 		Run: runKeys,
 	}

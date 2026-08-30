@@ -18,9 +18,9 @@ func newModelCommand() *Command {
 			return u.T("查看与修改各 harness 的模型槽", "Inspect and change per-harness model slots")
 		},
 		Flags: []Flag{
-			{Name: "list", Kind: KindBool, Desc: "列出全部 harness 的槽位|List slots for every harness"},
-			{Name: "set", Kind: KindString, Desc: "设置一个槽，形如 slot=model|Set one slot, as slot=model"},
-			{Name: "reset", Kind: KindBool, Desc: "清空该 harness 的槽位|Clear this harness's slots"},
+			{Name: "list", Kind: KindBool, Desc: "列出全部 harness 的槽位||List slots for every harness"},
+			{Name: "set", Kind: KindString, Desc: "设置一个槽，形如 slot=model||Set one slot, as slot=model"},
+			{Name: "reset", Kind: KindBool, Desc: "清空该 harness 的槽位||Clear this harness's slots"},
 		},
 		Run: runModel,
 	}

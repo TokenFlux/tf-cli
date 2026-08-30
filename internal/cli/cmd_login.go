@@ -23,8 +23,8 @@ func newLoginCommand() *Command {
 		},
 		Flags: []Flag{
 			// 保留作为显式写法；管道输入本来就会自动识别，不必写。
-			{Name: "with-key", Kind: KindBool, Desc: "从 stdin 或隐藏输入读取 Key|Read the key from stdin or a hidden prompt"},
-			{Name: "force", Kind: KindBool, Desc: "覆盖已有凭据，不询问|Overwrite the existing credential without asking"},
+			{Name: "with-key", Kind: KindBool, Desc: "从 stdin 或隐藏输入读取 Key||Read the key from stdin or a hidden prompt"},
+			{Name: "force", Kind: KindBool, Desc: "覆盖已有凭据，不询问||Overwrite the existing credential without asking"},
 		},
 		Run: runLogin,
 	}
