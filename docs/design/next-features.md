@@ -6,16 +6,16 @@
 
 ## 0. 一条贯穿始终的产品定位
 
-**tkr 不改用户的配置文件，只做「每次启动时的进程内注入」。**
+**tf 不改用户的配置文件，只做「每次启动时的进程内注入」。**
 
-这是和 CC-Switch 的根本分工：CC-Switch 是配置管理器，把供应商写进 `~/.claude/settings.json`、`~/.codex/config.toml` 并持久化；tkr 是启动器，env + CLI flag + 进程私有临时文件，**退出后什么都不留**。
+这是和 CC-Switch 的根本分工：CC-Switch 是配置管理器，把供应商写进 `~/.claude/settings.json`、`~/.codex/config.toml` 并持久化；tf 是启动器，env + CLI flag + 进程私有临时文件，**退出后什么都不留**。
 
 它带来两个直接结论：
 
-- 用户可以同时用 CC-Switch（日常）和 tkr（临时切分组/切模型跑一次），互不打架。
+- 用户可以同时用 CC-Switch（日常）和 tf（临时切分组/切模型跑一次），互不打架。
 - 但两者**会在同一进程里冲突**（CC-Switch 写的配置可能压过注入值），所以 `doctor` 是必需品而不是加分项。
 
-顺带一个几乎零成本的能力：`tkr run -- <任意命令>`，把同一套注入喂给任意进程（`tkr run -- python eval.py`、`tkr run -- curl ...`）。适配表已经有了，多这一个子命令等于白送。
+顺带一个几乎零成本的能力：`tf run -- <任意命令>`，把同一套注入喂给任意进程（`tf run -- python eval.py`、`tf run -- curl ...`）。适配表已经有了，多这一个子命令等于白送。
 
 ---
 
@@ -65,7 +65,7 @@ clear:       ANTHROPIC_{BEDROCK,VERTEX,FOUNDRY,GOOGLE_CLOUD,AWS}_BASE_URL
              CLAUDE_CODE_OAUTH_TOKEN、ANTHROPIC_UNIX_SOCKET
 model:       ANTHROPIC_MODEL / ANTHROPIC_DEFAULT_{HAIKU,SONNET,OPUS}_MODEL
 headers:     ANTHROPIC_CUSTOM_HEADERS
-settings:    写进程私有的 <cwd>/.tkr/claude-<pid>.json 用 --settings 传入，
+settings:    写进程私有的 <cwd>/.tf/claude-<pid>.json 用 --settings 传入，
              用户自己传了 --settings/--setting-sources 时让路，24h 前的残留自动清理
 ```
 待验证：`ENABLE_TOOL_SEARCH` 在 TokenFlux 的 Anthropic 分组下是否生效（上游是真 Anthropic 账号，理论上可行；能省近一半系统提示词 token，值得实测）。
@@ -84,7 +84,7 @@ settings:    写进程私有的 <cwd>/.tkr/claude-<pid>.json 用 --settings 传�
             或 auth.command='sh' auth.args=['-c','echo $TOKENFLUX_API_KEY']（ori 的做法，更通用）
   [-m <model>] [-c model_reasoning_effort=<effort>]
 ```
-注意教程目前教用户写 `auth.json` + `requires_openai_auth=true`，那是持久化方案；tkr 用 `-c` 就完全不落盘。`wire_api` 必须能按分组降级——TokenRouter 文档明确 `preserve_client_protocol` 下 Chat 请求只走 `/v1/chat/completions`，Anthropic 格式分组接 responses 是另一条转换路径，要实测。
+注意教程目前教用户写 `auth.json` + `requires_openai_auth=true`，那是持久化方案；tf 用 `-c` 就完全不落盘。`wire_api` 必须能按分组降级——TokenRouter 文档明确 `preserve_client_protocol` 下 Chat 请求只走 `/v1/chat/completions`，Anthropic 格式分组接 responses 是另一条转换路径，要实测。
 
 **opencode** — protocol: openai-chat
 ```
@@ -99,13 +99,13 @@ conflicts: ~/.local/share/opencode/auth.json 里的同名 provider key 会压过
 
 三个 harness 都能注入自定义 header。每次启动生成一个 session id 打进 `X-Session-Id`，就同时得到：
 - TokenRouter 侧的**账号粘性**（同一会话稳定命中同一上游账号，减少 context 抖动）
-- 用量归因（`tkr history` 能把一次启动和网关侧用量对上）
+- 用量归因（`tf history` 能把一次启动和网关侧用量对上）
 
 这是 ori 也做了的事，但对 TokenRouter 的价值更大，因为粘性调度本来就是它的核心能力之一。
 
 ---
 
-## 3. 分组协议预检 —— 我认为这是 tkr 最该做对的一件事
+## 3. 分组协议预检 —— 我认为这是 tf 最该做对的一件事
 
 **问题**：Key 绑错分组，线上返回 403 `This group does not allow ... requests`。用户在终端看到的是 harness 转述后的模糊报错，得去翻文档才知道是分组选错了。这是**纯粹的信息缺失**，而信息在本地就拿得到。
 
@@ -130,14 +130,14 @@ conflicts: ~/.local/share/opencode/auth.json 里的同名 provider key 会压过
 | opencode | `openai_chat_completions` | `openai_responses`（待确认其 AI SDK provider 走哪条）| 本地拦下 |
 | hermes | `openai_chat_completions` | — | 本地拦下 |
 
-**关键推论：`openai_chat_completions` 和 `openai_responses` 不能笼统当成「OpenAI 格式」。** 一个只开 `openai_chat_completions` 的分组，opencode / hermes / Cherry Studio 都能跑，**但 `tkr codex` 跑不了**。这正是预检最该抓的一类错配——分组名字写着「OpenAI格式」，用户很自然会以为 codex 能用。
+**关键推论：`openai_chat_completions` 和 `openai_responses` 不能笼统当成「OpenAI 格式」。** 一个只开 `openai_chat_completions` 的分组，opencode / hermes / Cherry Studio 都能跑，**但 `tf codex` 跑不了**。这正是预检最该抓的一类错配——分组名字写着「OpenAI格式」，用户很自然会以为 codex 能用。
 
 ### 3.2 复合 Key：检查粒度是「模型解析后的最终分组」
 
 文档写得很明确：准入用的是**认证后最终选中的分组**；复合 Key 要先解析正文才知道打到哪个子分组。所以预检不能按 Key 做，得按 `(模型 → 最终分组)` 做：
 
 - 普通 Key：一个分组，直接比。
-- 复合 Key：先按模型前缀解析出目标分组，再比该分组的集合。同一把 Key 里，`claude-*` 走的分组可能支持 `anthropic_messages`，`gpt-*` 走的分组只支持 `openai_chat_completions` —— **同一把 Key 对 `tkr claude` 可用、对 `tkr codex` 也可用，但换个模型就不一定**。这个组合关系必须在 `tkr models` 里显式展示出来。
+- 复合 Key：先按模型前缀解析出目标分组，再比该分组的集合。同一把 Key 里，`claude-*` 走的分组可能支持 `anthropic_messages`，`gpt-*` 走的分组只支持 `openai_chat_completions` —— **同一把 Key 对 `tf claude` 可用、对 `tf codex` 也可用，但换个模型就不一定**。这个组合关系必须在 `tf models` 里显式展示出来。
 
 ### 3.3 预检只能证伪，不能证真（措辞要诚实）
 
@@ -157,20 +157,20 @@ conflicts: ~/.local/share/opencode/auth.json 里的同名 provider key 会压过
 3. 拦下时给出可执行的修复路径：
 
 ```
-tkr claude 需要 anthropic_messages 协议。
+tf claude 需要 anthropic_messages 协议。
 当前 Key「macbook」→ 分组「DeepSeek（OpenAI格式）」只开放：
   openai_responses, openai_chat_completions
 
 可选：
-  · 换分组：tkr use-group "Claude（Anthropic格式）"
-  · 换 harness：这个分组可以跑 tkr codex / tkr opencode
+  · 换分组：tf use-group "Claude（Anthropic格式）"
+  · 换 harness：这个分组可以跑 tf codex / tf opencode
   · 在 https://tokenflux.dev/keys 新建一把绑定 Anthropic 分组的 Key
   · 开启复合 Key，一把 Key 绑多个分组，用模型前缀切换
 ```
 
 第二条「换 harness」是反向建议——既然本地已经知道这个分组开放了哪些协议，就顺手告诉用户**手上这把 Key 能跑什么**，而不只是说它不能跑什么。
 
-4. 新增 `tkr groups`：直接把矩阵摊开给用户看，一屏解决所有困惑。
+4. 新增 `tf groups`：直接把矩阵摊开给用户看，一屏解决所有困惑。
 
 ```
 分组                         anth_msg  oai_resp  oai_chat  gemini   可用 harness
@@ -179,7 +179,7 @@ DeepSeek（OpenAI格式）          ·         ✓         ✓        ·      co
 Gemini                          ·         ·         ·        ✓      （暂无适配）
 ```
 
-5. 复合 Key 的**模型前缀自动补全**：用户写 `--model deepseek-v3`，tkr 知道这把 Key 是复合的、该模型属于哪个分组，自动补成 `<prefix>/deepseek-v3`。这是另一个高频踩坑点。
+5. 复合 Key 的**模型前缀自动补全**：用户写 `--model deepseek-v3`，tf 知道这把 Key 是复合的、该模型属于哪个分组，自动补成 `<prefix>/deepseek-v3`。这是另一个高频踩坑点。
 6. `--model` 和缓存的 `/v1/models` 对一遍，模型名打错在本地就报，并给出最接近的候选。
 
 预检要能一键跳过（`--no-precheck`），缓存过期或网络不通时**降级为放行 + 提示**，绝不因为预检本身失败而挡住启动。
@@ -197,7 +197,7 @@ Key 的 model_mapping                    ← 服务端重定向，本地只需�
 harness 前缀    tokenflux/ds/deepseek-v3（opencode）/ 原样（claude、codex）
 ```
 
-建议做成一个纯函数 `resolveModel(userInput, key, harness) -> {sent, display, warnings}`，所有 harness 共用，单测覆盖。`tkr models` 直接把四种写法都列出来，用户一眼看清。
+建议做成一个纯函数 `resolveModel(userInput, key, harness) -> {sent, display, warnings}`，所有 harness 共用，单测覆盖。`tf models` 直接把四种写法都列出来，用户一眼看清。
 
 ---
 
@@ -219,8 +219,8 @@ harness 前缀    tokenflux/ds/deepseek-v3（opencode）/ 原样（claude、code
 
 数据都在 login 和预检时拉过了，成本很低：
 
-- `tkr status`：余额、订阅、今日消耗、当前 profile/host/分组/Key 名。
-- `tkr models`：`/v1/models` + 分组可用性 + 四种模型写法 + 价格（`/api/v1/groups/rates`）。
+- `tf status`：余额、订阅、今日消耗、当前 profile/host/分组/Key 名。
+- `tf models`：`/v1/models` + 分组可用性 + 四种模型写法 + 价格（`/api/v1/groups/rates`）。
 - 两者都默认人类可读、管道时输出 JSON。
 
 ---
@@ -235,7 +235,7 @@ harness 前缀    tokenflux/ds/deepseek-v3（opencode）/ 原样（claude、code
 
 （原来的「codex wire_api 兼容边界」已经不用测了——读 `allowed_client_protocols` 即可确定。）
 
-三条都可以做成 `tkr harness test` 的契约用例，以后回归也用它。
+三条都可以做成 `tf harness test` 的契约用例，以后回归也用它。
 
 ## 给后端的诉求（按价值排序）
 
@@ -248,5 +248,5 @@ harness 前缀    tokenflux/ds/deepseek-v3（opencode）/ 原样（claude、code
    客户端只能靠模型集合反推分组，且 Grok 三档模型完全相同、推不出来。
 
 3. **`/api/v1/marketplace/models` 加 `allowed_client_protocols`。**
-   现在 tkr 只能靠发探针、读拒绝文案来反推，文案一改就失灵。
+   现在 tf 只能靠发探针、读拒绝文案来反推，文案一改就失灵。
    `claude_code_only` 同理 —— 那本该是一个字段。

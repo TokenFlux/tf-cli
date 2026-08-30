@@ -15,7 +15,7 @@
 profile 里已存有该 harness 的模型槽 → **直接启动，不打断**，只在启动横幅打一行：
 
 ```
-tkr → claude   模型 gpt-5.6-sol · 分组 ChatGPT ×4 · 可用率 99.2%
+tf → claude   模型 gpt-5.6-sol · 分组 ChatGPT ×4 · 可用率 99.2%
 ```
 
 启动器的本分是快，每次弹选择器是灾难。但用户必须**知道**自己在用什么，所以这一行不能省。
@@ -30,19 +30,19 @@ tkr → claude   模型 gpt-5.6-sol · 分组 ChatGPT ×4 · 可用率 99.2%
 
 ### 第三层：非 TTY 或 `--yes` → 启发式自动选
 
-CI、脚本、`tkr run --` 场景绝不能卡住。自动选完打印结果，并提示怎么固定下来：
+CI、脚本、`tf run --` 场景绝不能卡住。自动选完打印结果，并提示怎么固定下来：
 
 ```
 未配置默认模型，自动选择 gpt-5.6-sol。
-固定：tkr config set model.default gpt-5.6-sol
+固定：tf config set model.default gpt-5.6-sol
 ```
 
 ### 显式请求选择：`-m` 不带值
 
 ```
-tkr claude -m          → 进选择器（本次生效，可选择是否记住）
-tkr claude -m gpt-5.4  → 直接用
-tkr claude             → 用默认
+tf claude -m          → 进选择器（本次生效，可选择是否记住）
+tf claude -m gpt-5.4  → 直接用
+tf claude             → 用默认
 ```
 
 这样「默认不打断」和「想选随时能选」两个需求都满足，不需要额外的子命令。
@@ -66,7 +66,7 @@ tkr claude             → 用默认
 
 要点：
 
-- **和 `tkr models` 复用同一套渲染**，一套代码两个入口。
+- **和 `tf models` 复用同一套渲染**，一套代码两个入口。
 - 复合 Key 时按分组分组显示，并标出每个分组的倍率差异（实测倍率从 0.8 到 50，这个差异用户必须看见）。
 - 只列**该 harness 协议可用**的分组里的模型（预检前置到这里，用户根本选不到会 403 的组合）。
 - 分组只有一个模型时（如 ChatGPT Image）**直接用，不弹选择器**。
@@ -102,17 +102,17 @@ claude 需要三个模型档位，已按价格自动推荐：
 
 ---
 
-## 修改接口：`tkr model`
+## 修改接口：`tf model`
 
 选择不是一锤子买卖，必须能随时改。交互与非交互两条路都要有：
 
 ```bash
-tkr model                       # 交互：先选 harness，再一屏编辑其全部槽位
-tkr model claude                # 直接编辑 claude 的槽位
-tkr model --list                # 表格展示所有 harness 的当前槽位
+tf model                       # 交互：先选 harness，再一屏编辑其全部槽位
+tf model claude                # 直接编辑 claude 的槽位
+tf model --list                # 表格展示所有 harness 的当前槽位
 
-tkr model claude --set default=gpt-5.6-sol --set fast=gpt-5.4   # 非交互，可脚本化
-tkr model claude --reset        # 清空，下次启动重新引导
+tf model claude --set default=gpt-5.6-sol --set fast=gpt-5.4   # 非交互，可脚本化
+tf model claude --reset        # 清空，下次启动重新引导
 ```
 
 约束：
@@ -121,8 +121,8 @@ tkr model claude --reset        # 清空，下次启动重新引导
   校验不过直接拒绝并列出可选项 —— 不要等到启动 harness 时才炸。
 - `--list` 要标出**未配置**的槽位，因为未配置意味着 harness 会用它的内置默认值，
   而那个值大概率不在分组里。
-- 与启动期的 `-m` 分工明确：`tkr claude -m` 是**本次运行**改主模型，
-  `tkr model claude` 是**持久修改全部槽位**。
+- 与启动期的 `-m` 分工明确：`tf claude -m` 是**本次运行**改主模型，
+  `tf model claude` 是**持久修改全部槽位**。
 
 **档位不足时的回退**：分组模型少于三个时，多个槽填同一个模型（比如只有一个模型就三槽全填）。要明确告诉用户「该分组模型不足三档，`/model` 切换不会有区别」，否则用户会以为切了没生效。
 
@@ -156,7 +156,7 @@ tkr model claude --reset        # 清空，下次启动重新引导
 
 # 附：harness 未安装时的处理（E 项定案）
 
-定为**交互式选择：退出 / 由 tkr 安装**。需要配套的护栏：
+定为**交互式选择：退出 / 由 tf 安装**。需要配套的护栏：
 
 1. **必须展示将要执行的完整命令**，用户看着它按回车，而不是「正在安装…」。
    ```
@@ -166,7 +166,7 @@ tkr model claude --reset        # 清空，下次启动重新引导
    ```
 2. **非交互环境（非 TTY / `--yes` / `--json`）默认拒绝安装**，只打印命令并以非零退出。自动化场景里静默装东西是不可接受的。
 3. **绝不 sudo，绝不切换用户的包管理器**。检测到什么用什么（npm / pnpm / bun / brew），检测不到就只打印命令。
-4. **记录安装来源**，`tkr doctor` 能说清「claude 是 tkr 在某时用某命令装的」，卸载时有据可循。
+4. **记录安装来源**，`tf doctor` 能说清「claude 是 tf 在某时用某命令装的」，卸载时有据可循。
 5. 安装失败时输出原始错误，不做包装，让用户能直接搜。
 
-（未登录的情形与此不同：目录类命令 `models` / `groups` 公开可用，仍正常工作；只有需要凭据的操作才提示 `tkr login`。）
+（未登录的情形与此不同：目录类命令 `models` / `groups` 公开可用，仍正常工作；只有需要凭据的操作才提示 `tf login`。）

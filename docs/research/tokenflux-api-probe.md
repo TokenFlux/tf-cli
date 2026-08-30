@@ -1,6 +1,6 @@
 # TokenFlux 生产环境实测记录
 
-2026-08-29，对 `https://tokenflux.dev` 的实测。用于校正 tkr 的预检与适配设计。
+2026-08-29，对 `https://tokenflux.dev` 的实测。用于校正 tf 的预检与适配设计。
 （测试用的 API Key 与 JWT 不记录在本文件中。）
 
 ---
@@ -27,9 +27,9 @@
 
 推论：
 
-- `tkr models` / `tkr groups` **完全未登录就能工作**——`pnpx tkr models` 开箱即用，首次体验很好。
+- `tf models` / `tf groups` **完全未登录就能工作**——`pnpx tf models` 开箱即用，首次体验很好。
 - 但**协议准入仍只能靠 JWT 或主动探测**（§3）。
-- v0.5 的「导入 tkr」按钮价值因此被大幅抬高：页面持有 JWT，能把 Key **连同完整分组元数据（含协议集合）**一起推给 CLI。它不再只是「省一次粘贴」，而是**唯一能一次性拿齐预检数据的路径**。
+- v0.5 的「导入 tf」按钮价值因此被大幅抬高：页面持有 JWT，能把 Key **连同完整分组元数据（含协议集合）**一起推给 CLI。它不再只是「省一次粘贴」，而是**唯一能一次性拿齐预检数据的路径**。
 
 ### 公开 marketplace 端点的内容（意外丰富）
 
@@ -50,8 +50,8 @@
 
 直接可用的产品机会：
 
-- **比价**：同一个模型在多个分组里时，`tkr models <id>` 直接列出哪个分组更便宜（分段价 + 倍率）。
-- **健康度**：`tkr groups` 显示「Claude Max 当前并发 15/310、3 天可用率 99.2%」——零成本、网页上也不一眼可见。
+- **比价**：同一个模型在多个分组里时，`tf models <id>` 直接列出哪个分组更便宜（分段价 + 倍率）。
+- **健康度**：`tf groups` 显示「Claude Max 当前并发 15/310、3 天可用率 99.2%」——零成本、网页上也不一眼可见。
 - **离线模型→分组映射**：复合 Key 前缀补全、模型名纠错、「这个模型在哪些分组有」都能本地算。
 
 ⚠️ **marketplace 不等于可用集合**：公开 12 个 vs JWT 下 `groups/available` 14 个（少了「百炼（Anthropic格式）」和「Grok (Super Grok)」）。marketplace 是**上架展示子集**，CLI 不能拿它当权威可用列表，文案上要区分「市场上有」和「你能用」。
@@ -80,18 +80,18 @@
 ### 直接结论
 
 1. **协议集合的差异是真实存在的、且分布很广**，不是理论情况：
-   - 只有 `anthropic_messages` 的分组（DeepSeek/百炼 Anthropic 格式）→ `tkr codex`、`tkr opencode`、`tkr hermes` **全部不可用**
-   - 没有 `anthropic_messages` 的分组（DeepSeek/百炼 OpenAI 格式、ChatGPT Image）→ `tkr claude` **不可用**
+   - 只有 `anthropic_messages` 的分组（DeepSeek/百炼 Anthropic 格式）→ `tf codex`、`tf opencode`、`tf hermes` **全部不可用**
+   - 没有 `anthropic_messages` 的分组（DeepSeek/百炼 OpenAI 格式、ChatGPT Image）→ `tf claude` **不可用**
    - `Google Image` 只有 `gemini_generate_content` → **目前所有 harness 都不可用**
 2. **分组名字完全不能用来推断能力**：叫「Google」的分组，`platform` 是 **anthropic**。这一条本身就足以证明「本地预检」比「让用户看文档猜」有价值。
-3. **倍率差异极大**（0.8 ~ 50），`tkr groups` / `tkr models` 展示倍率是高价值信息。
+3. **倍率差异极大**（0.8 ~ 50），`tf groups` / `tf models` 展示倍率是高价值信息。
 
 ### 意料之外的字段（原设计完全没覆盖）
 
 - **`claude_code_only: true`** —— 真实存在（Claude Max，倍率 20）。分组可以限定只给 Claude Code 用。
   - 预检必须加这一维：非 claude harness 选到这类分组要本地拦下。
-  - 反过来这是 tkr 的卖点：`tkr claude` 是用上这类高价值分组的正规方式。
-  - 待确认：网关靠什么识别 Claude Code（UA？特定 header？）——tkr 启动的是真 `claude` 二进制，理论上天然满足，但要实测确认注入的 header 不会破坏识别。
+  - 反过来这是 tf 的卖点：`tf claude` 是用上这类高价值分组的正规方式。
+  - 待确认：网关靠什么识别 Claude Code（UA？特定 header？）——tf 启动的是真 `claude` 二进制，理论上天然满足，但要实测确认注入的 header 不会破坏识别。
 - **`max_reasoning_effort` / `reasoning_effort_mappings`** —— 字段已存在（当前值为空）。说明 effort 是**三层**而不是两层：
   ```
   用户输入 → harness 能力表 → 分组上限/映射 → 最终请求
@@ -160,7 +160,7 @@ Gemini 那条用空 body 也能拿到 403，证明准入确实在 body 解析之
 
 ---
 
-## 6. Key DTO 里对 tkr 有用的字段
+## 6. Key DTO 里对 tf 有用的字段
 
 `GET /api/v1/keys`（JWT）返回，本账号 20 把 Key：
 
@@ -173,6 +173,6 @@ current_concurrency, expires_at, fallback_to_default_group_when_unavailable,
 data_sharing_confirmed_group_id, data_sharing_notice_version, ip_whitelist, ip_blacklist
 ```
 
-**关键**：Key 对象里**嵌套了完整的 group 对象**。所以「导入 tkr」按钮只要推送这一个对象，CLI 就拿到了预检所需的全部信息，不需要再拼第二个接口。
+**关键**：Key 对象里**嵌套了完整的 group 对象**。所以「导入 tf」按钮只要推送这一个对象，CLI 就拿到了预检所需的全部信息，不需要再拼第二个接口。
 
-`usage_{5h,1d,7d}` + `window_*_start` + `current_concurrency` 让 `tkr status` 能显示「限速窗口还剩多少、什么时候重置」，这是网页上也不容易一眼看到的信息。
+`usage_{5h,1d,7d}` + `window_*_start` + `current_concurrency` 让 `tf status` 能显示「限速窗口还剩多少、什么时候重置」，这是网页上也不容易一眼看到的信息。

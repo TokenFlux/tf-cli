@@ -1,4 +1,4 @@
-# tkr 认证与 Key 发放：与后端讨论用的事实与议题
+# tf 认证与 Key 发放：与后端讨论用的事实与议题
 
 本文只做两件事：把 TokenRouter 现状**查清楚写下来**，再列出需要后端拍板的问题。不预设实现。
 
@@ -24,7 +24,7 @@
 ### 需要后端拍板（登录侧）
 
 1. **走标准还是走自订？**
-   - A. 把 TokenRouter 做成最小 OAuth 2.0 authorization server：只服务 first-party client `tkr`，只支持 `authorization_code + PKCE`（public client、无 client_secret）。收益是以后 CC-Switch、编辑器插件、第三方工具能统一接，`device_code` 顺带解决无浏览器场景；成本是要引入 client 注册 / scope / consent 三个新概念。
+   - A. 把 TokenRouter 做成最小 OAuth 2.0 authorization server：只服务 first-party client `tf`，只支持 `authorization_code + PKCE`（public client、无 client_secret）。收益是以后 CC-Switch、编辑器插件、第三方工具能统一接，`device_code` 顺带解决无浏览器场景；成本是要引入 client 注册 / scope / consent 三个新概念。
    - B. 非标准的一次性 code 交换（`grant` + `exchange` 两个接口）。实现最小，语义清楚，但只能自己用。
    - 我的倾向：**先 B 后 A**，B 的接口形状按 OAuth 命名（`code_challenge`/`code_verifier`/`S256`），将来升级 A 不破坏 CLI。
 2. **授权码存哪**：Redis（项目已重度依赖，且有 fail-close 惯例）还是 DB？建议 Redis、TTL 60s、一次性消费、`S256(verifier)==challenge` 校验。
@@ -82,13 +82,13 @@ exchange 时服务端顺手建 key。
 ### 需要后端拍板（Key 侧）
 
 1. **可识别与可撤销**：CLI 发的 Key 是否需要标记来源？
-   - 轻方案：命名约定 `tkr@<hostname>`，零后端改动。
+   - 轻方案：命名约定 `tf@<hostname>`，零后端改动。
    - 重方案：给 api_key 加 `source`/`origin` 字段，`/keys` 页能筛选出「CLI 授权的 Key」并一键撤销。
    - 这是需要确认的取舍点。
 2. **默认参数**：CLI Key 默认 `scope=personal`？默认给 `expires_in_days` 吗？默认 quota / rate limit 给不给？
-3. **重复授权**：同一台机器第二次 `tkr login`，是复用同名 Key 还是每次建新的？（建议复用，靠 `Idempotency-Key` + 命名判重）
+3. **重复授权**：同一台机器第二次 `tf login`，是复用同名 Key 还是每次建新的？（建议复用，靠 `Idempotency-Key` + 命名判重）
 4. **团队场景**：团队成员用 CLI 时默认建 personal Key，还是允许选 team scope（付款走 Owner）？
-5. **撤销回路**：用户在网页删掉这把 Key 后，CLI 侧应该收到什么错误码，才能提示「请重新 `tkr login`」而不是笼统 401？
+5. **撤销回路**：用户在网页删掉这把 Key 后，CLI 侧应该收到什么错误码，才能提示「请重新 `tf login`」而不是笼统 401？
 
 ---
 
@@ -96,7 +96,7 @@ exchange 时服务端顺手建 key。
 
 浏览器流解决不了纯终端环境，需要一条兜底路径。三选一，也需要讨论：
 
-1. `tkr login --with-key`：用户从 `/keys` 页复制粘贴。**零后端改动，v0 就该先做这个。**
+1. `tf login --with-key`：用户从 `/keys` 页复制粘贴。**零后端改动，v0 就该先做这个。**
 2. `--no-browser`：打印 URL，用户在别的设备打开，页面显示一段一次性 code 粘回终端（device-code 变体，需要后端支持轮询或粘贴码）。
 3. 标准 `device_code` 流（若走上面的方案 A）。
 

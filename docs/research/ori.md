@@ -1,7 +1,7 @@
-# Ori 调研 + tkr 设计草案
+# Ori 调研 + tf 设计草案
 
 调研对象：`ori`（OpenRouter 官方 CLI，2026-08 发布）
-目标：为 TokenFlux（托管）与 TokenRouter（自托管）做一个同类工具 `tkr`。
+目标：为 TokenFlux（托管）与 TokenRouter（自托管）做一个同类工具 `tf`。
 
 ---
 
@@ -108,15 +108,15 @@ effort 能力表（不支持的档位直接报错并列出可用档）：
 
 ---
 
-## 二、tkr 设计草案
+## 二、tf 设计草案
 
 ### 定位
 
-`tkr` = TokenFlux / TokenRouter 的 harness 启动器 + 账号自省工具。相对 ori 的差异点：
+`tf` = TokenFlux / TokenRouter 的 harness 启动器 + 账号自省工具。相对 ori 的差异点：
 
 - **双目标**：托管的 TokenFlux（`https://tokenflux.dev`）与用户自托管的 TokenRouter 实例，同一套命令用 profile 切换。
-- **TokenRouter 有完整的用户 API**（`/api/v1/auth/login`、`/api/v1/keys`、`/api/v1/groups/available`、`/api/v1/user/*`），所以 `tkr login` 可以**直接登录并自动创建/复用 API Key**，比 ori 的 OAuth 换 key 更进一步。
-- **分组（group）概念是 TokenFlux 独有的坑**：分组按协议格式区分（OpenAI 格式 vs Anthropic 格式），选错返回 403 `This group does not allow ... requests`；复合 Key 还要求模型 ID 带前缀。这些 ori 都没有，正好是 `tkr` 的核心价值：**启动前就校验"这个 harness 需要的协议 × 这个 Key 的分组能力"，把 403 提前到本地**。
+- **TokenRouter 有完整的用户 API**（`/api/v1/auth/login`、`/api/v1/keys`、`/api/v1/groups/available`、`/api/v1/user/*`），所以 `tf login` 可以**直接登录并自动创建/复用 API Key**，比 ori 的 OAuth 换 key 更进一步。
+- **分组（group）概念是 TokenFlux 独有的坑**：分组按协议格式区分（OpenAI 格式 vs Anthropic 格式），选错返回 403 `This group does not allow ... requests`；复合 Key 还要求模型 ID 带前缀。这些 ori 都没有，正好是 `tf` 的核心价值：**启动前就校验"这个 harness 需要的协议 × 这个 Key 的分组能力"，把 403 提前到本地**。
 
 ### 端点事实（来自 TokenDocs / TokenRouter docs）
 
@@ -131,28 +131,28 @@ effort 能力表（不支持的档位直接报错并列出可用档）：
 ### 命令面（v0）
 
 ```
-tkr login [--host <url>] [--with-key] [--local] [--no-browser]
-tkr auth                      # 当前目录解析到哪个凭据、余额、分组能力、协议支持
-tkr profile list|use|add      # tokenflux / 自托管实例切换
-tkr claude | codex | opencode | hermes | cherry(?)   # 启动，透传 argv
-tkr models [--group g] [--format openai|anthropic]   # 拉 /v1/models，标注分组可用性
-tkr doctor [harness]          # 冲突变量、CC-Switch 残留配置、旧端点 token.memoh.net 检测
-tkr status                    # 余额/订阅/今日用量（/api/v1/user/*）
-tkr update / version
+tf login [--host <url>] [--with-key] [--local] [--no-browser]
+tf auth                      # 当前目录解析到哪个凭据、余额、分组能力、协议支持
+tf profile list|use|add      # tokenflux / 自托管实例切换
+tf claude | codex | opencode | hermes | cherry(?)   # 启动，透传 argv
+tf models [--group g] [--format openai|anthropic]   # 拉 /v1/models，标注分组可用性
+tf doctor [harness]          # 冲突变量、CC-Switch 残留配置、旧端点 token.memoh.net 检测
+tf status                    # 余额/订阅/今日用量（/api/v1/user/*）
+tf update / version
 ```
 
 全局 flag 与 ori 对齐：`--model`、`--reasoning-effort`、`--json`（管道即 JSON，单文档 `{ok,command,data}`）、`--human`、`--completions`。
 
 ### 关键实现点
 
-1. **凭据存储**：`~/.tkr/credentials.json`（多 profile：host + key + label），工作区 `.tkr/credentials.json` 优先；env `TOKENFLUX_API_KEY` / `TKR_API_KEY` 最高。文件 0600。
+1. **凭据存储**：`~/.tf/credentials.json`（多 profile：host + key + label），工作区 `.tf/credentials.json` 优先；env `TOKENFLUX_API_KEY` / `TKR_API_KEY` 最高。文件 0600。
 2. **harness 适配表**：一张 `harness × {协议格式, 环境变量, CLI flag, 配置文件写法, effort 映射}` 的数据表，逻辑与数据分离，新增 harness 只加一行。
    - claude → `ANTHROPIC_BASE_URL=<host>`、`ANTHROPIC_AUTH_TOKEN=<key>`、清空 `ANTHROPIC_API_KEY` 与全部 bedrock/vertex/gateway 变量、`--settings` 临时文件。
    - codex → 全 `-c` 覆盖 `model_providers.tokenflux.base_url='<host>/v1'`，`wire_api` 按分组能力选 `chat`/`responses`（TokenRouter 文档明确 `preserve_client_protocol` 下 Chat 只走 `/v1/chat/completions`）。
    - opencode → `OPENCODE_CONFIG_CONTENT` 内联自定义 provider（OpenAI 兼容 + baseURL），检测 `~/.local/share/opencode/auth.json` 冲突。
-3. **冲突诊断**：CC-Switch 是官方推荐的配置管理器，它写的配置会和注入值打架 → `tkr doctor` 必须识别 CC-Switch/`~/.claude/settings.json`/`.codex/config.toml`/旧 `token.memoh.net` 端点。
+3. **冲突诊断**：CC-Switch 是官方推荐的配置管理器，它写的配置会和注入值打架 → `tf doctor` 必须识别 CC-Switch/`~/.claude/settings.json`/`.codex/config.toml`/旧 `token.memoh.net` 端点。
 4. **分组预检**：启动前用 key 调 `/api/v1/groups/available` 或直接读 `/v1/models`，若 harness 需要 Anthropic 协议而 Key 绑的是 OpenAI 格式分组，本地直接给出可读错误 + 修复指引，而不是让用户去猜 403。复合 Key 自动补模型前缀。
-5. **分发**：TokenRouter 已是 Go + goreleaser（`Dockerfile.goreleaser`、`Makefile`），**建议 tkr 也用 Go**，复用发布链路，产出跨平台单文件 + `SHA256SUMS` + `install.sh`，走独立的 `tkr-releases`（或直接 TokenRouter repo 的 release）。若追求与 harness 生态一致的 JS 配置注入能力，Bun 单文件也可行，但 Go 与现有工程更省事。
+5. **分发**：TokenRouter 已是 Go + goreleaser（`Dockerfile.goreleaser`、`Makefile`），**建议 tf 也用 Go**，复用发布链路，产出跨平台单文件 + `SHA256SUMS` + `install.sh`，走独立的 `tf-releases`（或直接 TokenRouter repo 的 release）。若追求与 harness 生态一致的 JS 配置注入能力，Bun 单文件也可行，但 Go 与现有工程更省事。
 6. **telemetry**：默认关或明确 opt-in（国内用户对此敏感），别照抄 ori 的默认开启。
 
 ### 建议的落地顺序
@@ -166,7 +166,7 @@ tkr update / version
 ### 待确认
 
 - 是否需要 `vault-tunnel` 式的容器场景支持（后续再说）。
-- 名字：`tkr` 与 TokenRouter 同名，若要同时服务 TokenFlux，考虑 `tf` / `tflux` 作为别名。
+- 名字：`tf` 与 TokenRouter 同名，若要同时服务 TokenFlux，考虑 `tf` / `tflux` 作为别名。
 
 ---
 
@@ -174,8 +174,8 @@ tkr update / version
 
 > **已决策（2026-08-29）**：本节的 PKCE 浏览器授权流**不采用**。
 > 结论见 [`../design/import-from-web.md`](../design/import-from-web.md)：
-> - **v0** 只做 `tkr login --with-key`（粘贴 Key，零后端改动，同时是 SSH/容器场景的永久兜底）
-> - **v0.5** CLI 起 127.0.0.1 本地服务，网页 keys 页加「导入 tkr」按钮推送 Key；只动前端，安全性靠终端侧带 Origin 的预览确认
+> - **v0** 只做 `tf login --with-key`（粘贴 Key，零后端改动，同时是 SSH/容器场景的永久兜底）
+> - **v0.5** CLI 起 127.0.0.1 本地服务，网页 keys 页加「导入 tf」按钮推送 Key；只动前端，安全性靠终端侧带 Origin 的预览确认
 > - PKCE / 授权服务器留到「要开放给第三方工具」时再谈，届时价值是开放能力而非省事
 >
 > 下面的内容保留，作为 ori 做法的调研记录与将来做授权服务器时的参考。
@@ -185,20 +185,20 @@ tkr update / version
 ### 浏览器授权流（照抄 ori 的 PKCE，但授权页是自家前端）
 
 ```
-tkr login
+tf login
   1. 生成 code_verifier(32B base64url) + code_challenge = S256(verifier)
   2. 本地监听 127.0.0.1:<随机端口>
   3. 打开 https://tokenflux.dev/cli/auth
          ?callback_url=http://127.0.0.1:PORT/callback
-         &code_challenge=...&code_challenge_method=S256&label=tkr
+         &code_challenge=...&code_challenge_method=S256&label=tf
   4. 前端新页面（未登录先走正常登录流程，质询在浏览器里过）：
-     显示「授权 tkr 访问你的账号」+ 分组下拉 + Key 名称
+     显示「授权 tf 访问你的账号」+ 分组下拉 + Key 名称
      用户确认 → 用现有用户 JWT 调 POST /api/v1/keys 建 Key
                 → POST /api/v1/auth/cli/grant {code_challenge, key_id}
                   服务端存一次性 code → key 映射（TTL 60s）
      → 302 到 http://127.0.0.1:PORT/callback?code=...
   5. CLI 用 code + code_verifier 调 POST /api/v1/auth/cli/exchange
-     → 拿到明文 Key，写入 ~/.tkr/credentials.json (0600)
+     → 拿到明文 Key，写入 ~/.tf/credentials.json (0600)
   6. 浏览器页面显示「可以关掉这个标签页了」
 ```
 
@@ -206,21 +206,21 @@ tkr login
 
 - 后端只需两个新接口：`POST /api/v1/auth/cli/grant`（用户 JWT）与 `POST /api/v1/auth/cli/exchange`（公开、一次性、校验 `S256(verifier)==challenge`、60s 过期、绑定创建时的 IP 段可选）。前端只需一个 `/cli/auth` 路由（现有 router 已有大量 `/auth/*` callback 页，风格一致）。
 - **`exchange` 这条路径必须在 Cloudflare 上和网关 `/v1/*` 一样豁免 bot fight / managed challenge**，否则又被拦。最稳的是挂在已经必须放行的 API 网关同一规则下，或用独立子域 `cli.tokenflux.dev`。
-- CLI 的 UA 要显式设成 `tkr/<ver> (+https://tokenflux.dev)`，别用 Go 默认 UA（`Go-http-client/2.0` 是 WAF 的重点关照对象）。
-- **质询兜底诊断**：任何请求收到 403/503 且响应含 `cf-mitigated` / `Just a moment` / `cf-chl` 特征时，不要报「网络错误」，直接告诉用户「被 Cloudflare 质询拦下，请改用 `tkr login --with-key` 或在浏览器里完成授权」。这是 ori 没有、但你这边必然高频的错误分支。
+- CLI 的 UA 要显式设成 `tf/<ver> (+https://tokenflux.dev)`，别用 Go 默认 UA（`Go-http-client/2.0` 是 WAF 的重点关照对象）。
+- **质询兜底诊断**：任何请求收到 403/503 且响应含 `cf-mitigated` / `Just a moment` / `cf-chl` 特征时，不要报「网络错误」，直接告诉用户「被 Cloudflare 质询拦下，请改用 `tf login --with-key` 或在浏览器里完成授权」。这是 ori 没有、但你这边必然高频的错误分支。
 - **无浏览器环境**（SSH / 容器 / WSL 无 GUI）：`--no-browser` 打印 URL 让用户在别的设备打开；页面在拿不到本地回调时退化成显示一段一次性 code，用户粘回终端（device-code 变体）。
-- **v0 最小可用**：先只做 `tkr login --with-key`（stdin 管道或隐藏输入，从 https://tokenflux.dev/keys 复制），完全不改后端就能发第一版；浏览器流作为 v0.2，改动只在自家前后端，风险可控。
+- **v0 最小可用**：先只做 `tf login --with-key`（stdin 管道或隐藏输入，从 https://tokenflux.dev/keys 复制），完全不改后端就能发第一版；浏览器流作为 v0.2，改动只在自家前后端，风险可控。
 - 自托管 TokenRouter 同一套流程，`--host https://my.gateway` 即可，因为前后端是同一份代码。
 
 ---
 
-## 四、分发：Go 二进制 + npm 平台包（`pnpx tkr` 照样能用）
+## 四、分发：Go 二进制 + npm 平台包（`pnpx tf` 照样能用）
 
 用 Go 不等于放弃 npx/pnpx。业界标准做法（esbuild、biome、swc、turbo 都是这个结构）：**主包是纯 JS shim，二进制放在按平台切分的 optionalDependencies 里**。
 
 ```
-tkr                          (主包，~5KB)
-├─ bin/tkr.js                shim：resolve 平台包里的二进制并 exec，透传 argv/stdio/退出码
+tf                          (主包，~5KB)
+├─ bin/tf.js                shim：resolve 平台包里的二进制并 exec，透传 argv/stdio/退出码
 └─ optionalDependencies:
    @tokenflux/tkr-darwin-arm64   { "os": ["darwin"], "cpu": ["arm64"] }
    @tokenflux/tkr-darwin-x64
@@ -232,7 +232,7 @@ tkr                          (主包，~5KB)
 
 包管理器按 `os`/`cpu`/`libc` 字段只装匹配的那一个，于是：
 
-- `pnpx tkr login` / `npx tkr claude` 开箱即用，只下 ~10MB。
+- `pnpx tf login` / `npx tf claude` 开箱即用，只下 ~10MB。
 - **没有 postinstall 下载脚本**——不受 `--ignore-scripts`、企业内网、离线 registry 镜像影响，这点比「postinstall 里 curl 二进制」的方案稳得多。
 - Go 二进制约 10–15MB，装进 npm 完全合理；对比 ori 的 Bun `--compile` 产物 80MB，**Go 在这条路上反而是优势**。
 
@@ -242,7 +242,7 @@ shim 注意事项：`execFileSync(bin, process.argv.slice(2), { stdio: 'inherit'
 
 - `curl -fsSL https://tokenflux.dev/install.sh | bash`（照抄 ori：探测平台 → 下载 → `SHA256SUMS` 校验 → 装 `~/.local/bin`）
 - Homebrew tap / Scoop（goreleaser 内建 `brews`、`scoops`）
-- `tkr update`（自更新，stable/alpha 双通道可选）
+- `tf update`（自更新，stable/alpha 双通道可选）
 
 ### 与「纯 TS/Bun 实现」的取舍
 
@@ -252,4 +252,4 @@ shim 注意事项：`execFileSync(bin, process.argv.slice(2), { stdio: 'inherit'
 | Bun `--compile` 单文件 | 勉强（80MB 进 npm 不现实） | 80MB | 新增 Bun 工具链 | 快 |
 | 纯 TS 跑在 node 上 | ✅ 原生 | 最小 | 新增 Node 依赖，要求用户装 node | 慢，且依赖用户 node 版本 |
 
-**推荐 Go + npm 平台包**：既留住 `pnpx tkr`，又没丢单文件、无运行时依赖、和后端同栈的好处。
+**推荐 Go + npm 平台包**：既留住 `pnpx tf`，又没丢单文件、无运行时依赖、和后端同栈的好处。

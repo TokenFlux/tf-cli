@@ -2,14 +2,14 @@
 
 ## 病灶
 
-`tkr use` 引入了一个全局可变模式：一个看不见的「当前 profile」，静默决定之后
+`tf use` 引入了一个全局可变模式：一个看不见的「当前 profile」，静默决定之后
 每一条命令用哪把 Key。
 
-这违反 tkr 自己的产品理念。我们当初正是因为「不做持久化模式切换」才和 CC-Switch
+这违反 tf 自己的产品理念。我们当初正是因为「不做持久化模式切换」才和 CC-Switch
 划清界限（见 product-decisions.md），结果又把同一个模型搬进了 profile 层。
 
 实际后果已经发生：用户 login 后存进 `gpt`，当前 profile 仍是 `default`，
-下一条 `tkr codex` 继续用旧 Key，列出一堆 claude 模型且毫无提示。
+下一条 `tf codex` 继续用旧 Key，列出一堆 claude 模型且毫无提示。
 
 修掉那次遗漏不解决问题。**只要存在隐藏的全局模式，就永远存在「我以为在 A 实际在 B」。**
 
@@ -20,10 +20,10 @@
 用户的心智是「codex 用我的 gpt key，claude 用我的 Claude Max key」——
 绑定关系天然属于 harness，不属于某个全局状态。
 
-而且**哪把 Key 能跑 codex，tkr 是知道的**：协议准入 + 模型列表都拿得到。
+而且**哪把 Key 能跑 codex，tf 是知道的**：协议准入 + 模型列表都拿得到。
 既然知道，就不该让用户去管。
 
-`tkr codex` 列出 claude 模型，根因不是 profile 选错，是**那把 Key 压根不该出现在
+`tf codex` 列出 claude 模型，根因不是 profile 选错，是**那把 Key 压根不该出现在
 codex 的候选里**。
 
 ## 新模型
@@ -74,11 +74,11 @@ codex 的候选里**。
 - 探测结果**只能证伪**：账号级 endpoint capability 可能更窄，通过不代表一定能跑。
   因此候选为空时才拦，候选非空时静默放行，绝不给「配置正确」的承诺。
 - 能力会变（用户改分组），所以带 TTL，并在启动失败时主动失效重探。
-- `tkr keys` 展示每把 Key 的协议矩阵与可用 harness，替代 `tkr use` 的查看职能。
+- `tf keys` 展示每把 Key 的协议矩阵与可用 harness，替代 `tf use` 的查看职能。
 
 ## 处置
 
-- 删除 `tkr use`。它的「切换」职能没了，「查看」职能归 `tkr keys`。
+- 删除 `tf use`。它的「切换」职能没了，「查看」职能归 `tf keys`。
 - `--profile` 更名 `--key`，语义从「切换模式」变成「本次用哪把」。
 - `config.current` 迁移为各 harness 的初始绑定。
 
@@ -121,7 +121,7 @@ codex 的候选里**。
 | `internal/config/cache.go` | 模型列表合并进 config 后整个文件无人调用。 |
 | `gateway.Reachable` / `model.IsComposite` / `Family.HasVariants` | 「顺手先写上」的导出函数，零调用者。 |
 | `CodeConfigPerm` / `CodeProfileNotFound` | 零使用的错误码。 |
-| `tkr config show` | 与 `tkr keys` 有 80% 重叠。同一份信息两处维护，必然走样。`config` 只回答「东西在哪」。 |
+| `tf config show` | 与 `tf keys` 有 80% 重叠。同一份信息两处维护，必然走样。`config` 只回答「东西在哪」。 |
 
 ## 复查：修正的设计缺陷
 
@@ -130,7 +130,7 @@ codex 的候选里**。
 
 修法是在**失败路径上**重探，而不是设 TTL：顺利时零开销，出事时自愈。
 
-**复合 Key 的能力展示曾是谎报。** `tkr keys` 用「任一分组支持」来回答
+**复合 Key 的能力展示曾是谎报。** `tf keys` 用「任一分组支持」来回答
 「这把 Key 能跑什么」，于是一把 GPT+Claude 的复合 Key 会显示能跑全部三个
 harness —— 而实际上 `GPT/*` 跑不了 claude。现在按分组前缀分行展示。
 

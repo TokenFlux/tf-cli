@@ -59,7 +59,7 @@ model=gpt-5.4-nano  small=true  agent=title
 1. 模型槽设计必须覆盖**所有** harness 会用到的槽位，不只是主模型。
 2. 预检要校验全部槽位，只验主模型会漏掉这一类。
 3. TokenDocs 的 opencode 教程里 `small_model: openai/gpt-5.6-luna` 在本测试 Key 的分组中同样不存在
-   —— 文档给的是固定值，而分组可用模型因人而异。tkr 从分组实际模型列表里选，正好解决这个问题。
+   —— 文档给的是固定值，而分组可用模型因人而异。tf 从分组实际模型列表里选，正好解决这个问题。
 
 ---
 
@@ -78,7 +78,7 @@ model=gpt-5.4-nano  small=true  agent=title
 对 M5 错误分类器的要求：
 
 - 不能只按状态码分类，必须按 `(入口, 状态码, 文案)` 三元组。
-- 命中 responses 的 404 时，tkr 应自行调 `/v1/models` 补出可用模型列表，
+- 命中 responses 的 404 时，tf 应自行调 `/v1/models` 补出可用模型列表，
   把一条没法行动的错误变成可行动的。
 
 至此已知的网关错误形状：
@@ -99,7 +99,7 @@ model=gpt-5.4-nano  small=true  agent=title
 需要先安装对应 harness：
 
 - **claude** —— 最高风险项：`claude_code_only` 分组（Claude Max，倍率 20）
-  在 tkr 的 exec 路径下能否正常通过 UA + TLS 指纹识别；
+  在 tf 的 exec 路径下能否正常通过 UA + TLS 指纹识别；
   以及 `HTTPS_PROXY` 存在时是否破坏识别。
 - **codex** —— `-c` 覆盖 + `env_key` 是否足以完全避免落盘；
   `wire_api` 只剩 `responses` 后与 `openai_responses` 准入的对应关系。
@@ -131,7 +131,7 @@ AI SDK 按 `item_id` 跟踪文本片段，而这个 id 从未通过
 `response.output_item.added` 宣告过，于是直接抛错、整轮失败。
 
 保活应当发 SSE 注释行（`: keepalive`），那是协议里专门为此保留的形式，
-任何解析器都会忽略。**这要在网关侧修**：tkr 不在请求路径上，
+任何解析器都会忽略。**这要在网关侧修**：tf 不在请求路径上，
 为此建一个本地代理去过滤流会违背「绝不 MITM」的定位，
 代价远大于收益。
 

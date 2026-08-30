@@ -23,23 +23,23 @@ ori 用的是「24 小时前的残留文件自动清理」——**这正是它�
 
 ### B. 参数透传规则，以及 `--model` 归谁
 
-`tkr claude --model x --resume ...` 里，哪些参数 tkr 吃掉、哪些原样传给 harness？`--model` 两边都有，是最直接的冲突。
+`tf claude --model x --resume ...` 里，哪些参数 tf 吃掉、哪些原样传给 harness？`--model` 两边都有，是最直接的冲突。
 
 建议规则：
 
-1. tkr 只认**一小组自己的 flag**（`--model` `--reasoning-effort` `--profile` `--host` `--json` `--no-precheck` `--yes`），且必须紧跟在子命令之后。
+1. tf 只认**一小组自己的 flag**（`--model` `--reasoning-effort` `--profile` `--host` `--json` `--no-precheck` `--yes`），且必须紧跟在子命令之后。
 2. 遇到第一个不认识的参数，**从那里开始全部原样透传**，不再解析。
-3. `--` 之后无条件全部透传（逃生阀，用于传一个和 tkr 同名的 flag）。
-4. **`--model` 由 tkr 吃掉**，因为要做前缀补全、拼写校验、分组解析，然后翻译成各 harness 自己的形式注入。
+3. `--` 之后无条件全部透传（逃生阀，用于传一个和 tf 同名的 flag）。
+4. **`--model` 由 tf 吃掉**，因为要做前缀补全、拼写校验、分组解析，然后翻译成各 harness 自己的形式注入。
 
 ### C. 配置与凭据的存储形态
 
 建议：
 
 ```
-~/.tkr/config.json        0644  profile、默认模型槽、缓存策略 —— 可以分享/进工单
-~/.tkr/credentials.json   0600  仅凭据，独立文件
-~/.tkr/cache/             0700  目录数据、探测结果
+~/.tf/config.json        0644  profile、默认模型槽、缓存策略 —— 可以分享/进工单
+~/.tf/credentials.json   0600  仅凭据，独立文件
+~/.tf/cache/             0700  目录数据、探测结果
 ```
 
 - **分开存**，不要合一：config 要能贴给别人看、贴进 issue，凭据不能。
@@ -60,7 +60,7 @@ TokenFlux 的用户以中文为主，但 CLI 惯例是英文，且错误信息�
 
 ### E. 未登录 / harness 没装时的行为
 
-- 未登录时 `tkr claude`：**不要直接报错**，提示「运行 `tkr login`」并且——因为 `models`/`groups` 是公开可读的——仍然可以正常展示目录类命令。
+- 未登录时 `tf claude`：**不要直接报错**，提示「运行 `tf login`」并且——因为 `models`/`groups` 是公开可读的——仍然可以正常展示目录类命令。
 - harness 没装时：**绝不自动安装**，只打印检测到的包管理器对应的安装命令。ori 有代为安装的能力，但一个启动器擅自往用户机器上装东西是越界的，而且装错版本的锅得我们背。
 
 ### F. `--json` 的触发方式
@@ -82,7 +82,7 @@ ori 的做法是**检测到管道就自动输出 JSON**。这在 CI 里有坑：
 
 ### H. 自更新与安装来源识别
 
-`tkr update` 有个真实的坑：**npm 装的和 curl 装的更新路径不同**。npm 装的自更新会和下次 `npm i` 打架。
+`tf update` 有个真实的坑：**npm 装的和 curl 装的更新路径不同**。npm 装的自更新会和下次 `npm i` 打架。
 
 建议启动时识别安装来源（二进制路径是否在 node_modules 下），npm 装的提示用 npm 更新，只有 curl 装的才允许 self-update。
 

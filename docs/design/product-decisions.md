@@ -4,10 +4,10 @@
 
 ## 0. 由此产生的硬约束（不是待议项，是已定）
 
-tkr 只设置环境变量后 `exec` 真正的 harness 二进制，**自己不在请求路径上**。所以 claude 发出的请求，UA 和 TLS 指纹都是它自己的，识别天然成立。由此得到三条硬规则：
+tf 只设置环境变量后 `exec` 真正的 harness 二进制，**自己不在请求路径上**。所以 claude 发出的请求，UA 和 TLS 指纹都是它自己的，识别天然成立。由此得到三条硬规则：
 
-1. **tkr 永远不做本地代理 / 不 MITM 流量。** 任何"起一个本地 HTTP 代理来注入 header"的方案都会改变 TLS 指纹，直接废掉 `claude_code_only` 分组（Claude Max，倍率 20）。ori 有个 `vault-tunnel` 的 CONNECT 代理，**这个不能学**。
-2. **绝不覆盖 harness 的 User-Agent。** tkr 自己发的请求（models / groups 查询）才带 `tkr/x.y` UA；注入给 harness 的环境里不含任何 UA 覆盖。
+1. **tf 永远不做本地代理 / 不 MITM 流量。** 任何"起一个本地 HTTP 代理来注入 header"的方案都会改变 TLS 指纹，直接废掉 `claude_code_only` 分组（Claude Max，倍率 20）。ori 有个 `vault-tunnel` 的 CONNECT 代理，**这个不能学**。
+2. **绝不覆盖 harness 的 User-Agent。** tf 自己发的请求（models / groups 查询）才带 `tf/x.y` UA；注入给 harness 的环境里不含任何 UA 覆盖。
 3. **`HTTPS_PROXY` 是风险项。** 用户环境里的代理会改变 TLS 指纹 → `doctor` 必须检查：如果目标分组是 `claude_code_only` 且环境里有代理变量，明确警告"这会导致识别失败"。这是一条非常具体、别人想不到的诊断规则。
 
 另外，预检文案要直说：非 claude harness **无法**使用 `claude_code_only` 分组，这是设计如此，不是配置问题。
@@ -18,7 +18,7 @@ tkr 只设置环境变量后 `exec` 真正的 harness 二进制，**自己不在
 
 ### 问题
 
-tkr 要同时服务两类目标：TokenFlux（托管，单一权威 host）和 TokenRouter（自托管，任意 host，用户可能有多个：公司网关、个人实例、测试实例）。需要一个模型来回答"我现在指向哪、用哪把 Key"。
+tf 要同时服务两类目标：TokenFlux（托管，单一权威 host）和 TokenRouter（自托管，任意 host，用户可能有多个：公司网关、个人实例、测试实例）。需要一个模型来回答"我现在指向哪、用哪把 Key"。
 
 ### 三种形态
 
@@ -26,27 +26,27 @@ tkr 要同时服务两类目标：TokenFlux（托管，单一权威 host）和 T
 最简单，切换靠重新 login。缺点：多实例用户反复 login，且无法在两个项目里用不同网关。
 
 **形态二：Profile（推荐）**
-命名 profile = `{host, key, 默认模型槽}`，存 `~/.tkr/config.json`，一个 `current` 指针。
+命名 profile = `{host, key, 默认模型槽}`，存 `~/.tf/config.json`，一个 `current` 指针。
 
 ```
-tkr login                                  → 写 default profile（指向 tokenflux.dev）
-tkr login --profile work --host https://gw.corp.internal
-tkr use work                               → 切换当前
-tkr --profile work claude                  → 单次覆盖
-TKR_PROFILE=work tkr claude                → 环境变量覆盖
+tf login                                  → 写 default profile（指向 tokenflux.dev）
+tf login --profile work --host https://gw.corp.internal
+tf use work                               → 切换当前
+tf --profile work claude                  → 单次覆盖
+TKR_PROFILE=work tf claude                → 环境变量覆盖
 ```
 
 优先级：`--profile` flag > `TKR_PROFILE` > 项目级配置 > 全局 current。
 
 **形态三：项目级绑定**（配合形态二）
-仓库里放 `.tkr/config.json`，**只存 profile 名，不存 Key**：
+仓库里放 `.tf/config.json`，**只存 profile 名，不存 Key**：
 
 ```json
 { "profile": "work" }
 ```
 
 价值：公司项目自动走公司网关，团队共享这个约定，进 git 也无所谓。
-安全：**明确禁止内联 Key**。ori 支持把凭据写进 repo 本地的 `.ori/credentials.json`，我认为这个不该学 —— 误提交的代价太大，而收益只是省一次 `tkr use`。
+安全：**明确禁止内联 Key**。ori 支持把凭据写进 repo 本地的 `.ori/credentials.json`，我认为这个不该学 —— 误提交的代价太大，而收益只是省一次 `tf use`。
 
 ### 几个实际细节
 
@@ -64,7 +64,7 @@ TKR_PROFILE=work tkr claude                → 环境变量覆盖
 
 ### 为什么这件事非做不可
 
-harness 自带的默认模型是**官方模型 id**（`claude-sonnet-4-5` 之类）。网关分组里的 id 不一定同名（实测这个站是 `gpt-5.6-sol`、`gpt-5.4` 这种）。如果 tkr 不注入默认模型，harness 会用自带默认发请求，直接撞上：
+harness 自带的默认模型是**官方模型 id**（`claude-sonnet-4-5` 之类）。网关分组里的 id 不一定同名（实测这个站是 `gpt-5.6-sol`、`gpt-5.4` 这种）。如果 tf 不注入默认模型，harness 会用自带默认发请求，直接撞上：
 
 ```
 403 The current group does not support the requested model "claude-sonnet-4-5".
@@ -89,7 +89,7 @@ codex / opencode 只用 `default`（opencode 还有 `small_model` 可选）。
 
 1. **自动**：login 后用 marketplace 公开数据（模型列表 + 定价 + 模态）按启发式填：最贵的 → heavy，最便宜的 → fast，`sort_order` 最靠前 → default。
 2. **交互确认**：首次启动时把自动选的结果展示一次，让用户确认或改（一次性，之后记住）。
-3. **随时改**：`tkr config set model.fast <id>`，或 `tkr models --set`。
+3. **随时改**：`tf config set model.fast <id>`，或 `tf models --set`。
 4. **兜底**：分组只有一个模型时（如 ChatGPT Image），三个槽都填它。
 
 ### 分组的默认
@@ -101,23 +101,23 @@ codex / opencode 只用 `default`（opencode 还有 `small_model` 可选）。
 
 ## 3. Telemetry：建议默认关（与 ori 相反）
 
-ori 默认开启匿名遥测，`ORI_TELEMETRY=0` 关闭。我建议 tkr 反过来，三条理由：
+ori 默认开启匿名遥测，`ORI_TELEMETRY=0` 关闭。我建议 tf 反过来，三条理由：
 
-**（1）用户群体的敏感度不同。** ori 背后是 OpenRouter 的品牌和隐私政策；tkr 的用户里很大比例是中国用户 + 通过第三方网关用模型，对"CLI 往外发数据"的容忍度低得多。而这个工具本身就在处理 API Key，任何非必要的外发都会被放大解读。
+**（1）用户群体的敏感度不同。** ori 背后是 OpenRouter 的品牌和隐私政策；tf 的用户里很大比例是中国用户 + 通过第三方网关用模型，对"CLI 往外发数据"的容忍度低得多。而这个工具本身就在处理 API Key，任何非必要的外发都会被放大解读。
 
 **（2）信任成本不对称。** 默认开启换来的是产品分析数据；代价是一旦有人发现"这个 CLI 会上报"，哪怕完全匿名，在这个用户群里也是灾难性的口碑事件。收益有限，风险无上限。
 
 **（3）最关键：我们本来就不需要单独的遥测通道。** 用户的请求本来就要经过我们自己的网关，服务端能看到 UA、模型、分组、用量。CLI 版本信息可以直接写进**自己发的那部分请求**的 UA：
 
 ```
-tkr/0.1.0 (darwin/arm64)     ← 只用于 tkr 自己的 models/groups 查询
+tf/0.1.0 (darwin/arm64)     ← 只用于 tf 自己的 models/groups 查询
 ```
 
 这是零额外隐私成本的遥测 —— 没有新增任何一次原本不存在的网络请求。
 
-**注意与第 0 节的冲突**：UA 只能加在 **tkr 自己发的请求**上。注入给 harness 的环境**绝不能改 UA**，否则破坏 `claude_code_only` 的识别。这两条必须一起遵守。
+**注意与第 0 节的冲突**：UA 只能加在 **tf 自己发的请求**上。注入给 harness 的环境**绝不能改 UA**，否则破坏 `claude_code_only` 的识别。这两条必须一起遵守。
 
-**例外**：崩溃报告做成显式主动上报（`tkr feedback` 生成一份可读的诊断包，用户自己决定发不发），而不是自动。
+**例外**：崩溃报告做成显式主动上报（`tf feedback` 生成一份可读的诊断包，用户自己决定发不发），而不是自动。
 
 ---
 
@@ -125,7 +125,7 @@ tkr/0.1.0 (darwin/arm64)     ← 只用于 tkr 自己的 models/groups 查询
 
 ### 是否受 TokenRouter 的 LGPL 传染
 
-不受。TokenRouter 是 LGPL-3.0-or-later，但 tkr 是**独立的 CLI**，不链接也不衍生自它的代码，只通过 HTTP 调用。License 可以自由选。
+不受。TokenRouter 是 LGPL-3.0-or-later，但 tf 是**独立的 CLI**，不链接也不衍生自它的代码，只通过 HTTP 调用。License 可以自由选。
 
 ### 三个选项
 
@@ -137,7 +137,7 @@ tkr/0.1.0 (darwin/arm64)     ← 只用于 tkr 自己的 models/groups 查询
 - **npm provenance**：`npm publish --provenance` 需要公开仓库 + CI 构建，能给出可验证的供应链证明。对一个会接触 API Key 的 npm 包，这是很强的信任信号。
 
 **（2）闭源发二进制（ori 的做法）**
-OpenRouter 能这么做是靠品牌背书，我们没有。而且 tkr 的核心价值在网关侧，CLI 闭源保护不了任何有价值的东西，只是徒增用户疑虑。
+OpenRouter 能这么做是靠品牌背书，我们没有。而且 tf 的核心价值在网关侧，CLI 闭源保护不了任何有价值的东西，只是徒增用户疑虑。
 
 **（3）BSL / Elastic 这类限制商用协议**
 对一个启动器属于过度设计，还会挡住包管理器收录。不考虑。
