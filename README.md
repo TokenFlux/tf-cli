@@ -83,6 +83,11 @@ harness 会几种协议就按几种算：opencode 内置 openai 与 anthropic �
 provider，所以它在只开 anthropic_messages 的分组上照样能跑，注入配方
 会跟着换。
 
+有一类分组任何 harness 都替代不了 Claude Code：`claude_code_only`
+（如 Claude Max）按客户端指纹放行，只有 Claude Code 本身过得去。
+这类分组的模型只会出现在 `tkr claude` 的候选里，别处会明确告诉你
+藏了多少个、为什么藏 —— tkr 不伪装成别的客户端。
+
 复合 Key 一把横跨多个分组，各分组能力不同，tkr 按分组前缀分别判断：
 
 ```

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -280,5 +281,42 @@ func TestSlotsMustComeFromOneKey(t *testing.T) {
 		if k, _ := ownerOf(cands, v); k != "gpt" {
 			t.Errorf("slot %s = %q comes from key %q, want gpt", name, v, k)
 		}
+	}
+}
+
+// 静默过滤是最难排查的行为：用户看到「我的模型不见了」，却没有线索。
+// 能藏就必须能解释。
+func TestHiddenKeysAreExplained(t *testing.T) {
+	dir := t.TempDir()
+	cfg, _ := config.Load(config.Paths{ConfigDir: dir, CacheDir: dir})
+	cfg.KeyMetaOf("max").ClaudeCodeOnly = map[string]bool{config.GroupScope: true}
+	cfg.KeyMetaOf("max").Models = []string{"claude-opus-5", "claude-haiku-4-5"}
+	cfg.KeyMetaOf("gpt").Protocols = map[string][]string{
+		config.GroupScope: {"openai_responses"},
+	}
+	cfg.KeyMetaOf("gpt").Models = []string{"gpt-5.6-sol"}
+
+	oc, _ := harness.Lookup("opencode")
+	// 不能用 JSON 模式的 UI：Logf 在那种模式下是静默的。
+	var buf bytes.Buffer
+	c := &Context{UI: ui.New(false), Flags: newValues()}
+	c.UI.Err = &buf
+
+	noteHiddenKeys(c, cfg, []string{"gpt", "max"}, []string{"gpt"}, oc)
+
+	out := buf.String()
+	if !strings.Contains(out, "max") {
+		t.Errorf("must name the hidden key: %q", out)
+	}
+	if !strings.Contains(out, "Claude Code") {
+		t.Errorf("must give the reason: %q", out)
+	}
+	if !strings.Contains(out, "2") {
+		t.Errorf("must say how many models were hidden: %q", out)
+	}
+
+	// 用上的 Key 不该被提及 —— 那只是噪音。
+	if strings.Contains(out, `"gpt"`) {
+		t.Errorf("must not mention keys that were used: %q", out)
 	}
 }

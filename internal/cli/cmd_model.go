@@ -99,6 +99,7 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 	if len(cands) == 0 {
 		return showHarnessSlots(c, st.cfg, h)
 	}
+	noteHiddenKeys(c, st.cfg, st.creds.Names(), keys, h)
 
 	slots := st.cfg.Harness(h.Name).Slots
 	if slots == nil {

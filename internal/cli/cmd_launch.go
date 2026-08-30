@@ -154,6 +154,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	if len(cands) == 0 {
 		return "", nil, noModelError(c, cfg, keys, h)
 	}
+	noteHiddenKeys(c, cfg, creds.Names(), keys, h)
 
 	// -m 指定了具体模型：认出它属于哪把 Key。
 	if override != "" {

@@ -337,3 +337,36 @@ func runnableIn(meta *config.KeyMeta, prefix string) []string {
 	}
 	return out
 }
+
+// noteHiddenKeys 说明哪些 Key 的模型没有出现在候选里，以及为什么。
+//
+// 静默过滤是最难排查的一种行为：用户看到的是「我的模型不见了」，
+// 而没有任何线索指向原因。能藏就必须能解释。
+func noteHiddenKeys(c *Context, cfg *config.Config, all, used []string, h *harness.Harness) {
+	for _, name := range all {
+		if contains(used, name) {
+			continue
+		}
+		meta := cfg.Keys[name]
+		n := len(meta.Models)
+		if n == 0 {
+			continue
+		}
+
+		var why string
+		switch {
+		case meta.LockedToClaudeCode(config.GroupScope):
+			why = c.UI.T("该分组只接受 Claude Code 客户端",
+				"that group only accepts the Claude Code client")
+		default:
+			why = fmt.Sprintf(c.UI.T("该分组不允许 %s 需要的协议（%s）",
+				"that group does not allow what %s needs (%s)"), h.Name, protocolList(h))
+		}
+
+		if c.UI.Lang == ui.LangZH {
+			c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("已隐藏 Key %q 的 %d 个模型：%s", name, n, why)))
+		} else {
+			c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("hiding %d models from key %q: %s", n, name, why)))
+		}
+	}
+}
