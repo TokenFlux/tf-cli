@@ -50,10 +50,31 @@ func (f Flag) names() []string {
 type Values struct {
 	set     map[string]string
 	present map[string]bool
+
+	// detached 记下哪些可选值 flag 的取值是分开写的（-m X 而非 -m=X）。
+	//
+	// 分开写时无法在解析期断定那个词是取值还是位置参数：
+	// tf codex -m exec "hi" 里的 exec 是 codex 的子命令，
+	// tf claude -m "解释这段代码" 里那句是 prompt。
+	// 留个标记，等拿到候选集再判。
+	detached map[string]bool
 }
 
 func newValues() *Values {
-	return &Values{set: map[string]string{}, present: map[string]bool{}}
+	return &Values{set: map[string]string{}, present: map[string]bool{}, detached: map[string]bool{}}
+}
+
+// Detached 报告这个 flag 的取值是否与 flag 分开写。
+func (v *Values) Detached(name string) bool { return v.detached[name] }
+
+// Detach 把分开写的取值退回去：清掉取值，返回那个词。
+//
+// 用于取值其实不是取值的时候 —— 那个词该还给位置参数。
+func (v *Values) Detach(name string) string {
+	val := v.set[name]
+	v.set[name] = ""
+	delete(v.detached, name)
+	return val
 }
 
 // String 返回字符串值。
@@ -201,6 +222,7 @@ func parse(cmd *Command, args []string) (*Context, error) {
 				continue
 			}
 			vals.set[f.Name] = args[i+1]
+			vals.detached[f.Name] = true
 			i += 2
 		}
 	}

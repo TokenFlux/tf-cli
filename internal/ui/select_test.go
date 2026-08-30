@@ -110,3 +110,23 @@ func TestDisabledItems(t *testing.T) {
 		t.Errorf("seek with no enabled item = %d, want -1", got)
 	}
 }
+
+// 过滤要覆盖 Detail：屏幕上写着 ccmax/、work，用户就会照着敲，
+// 而分组前缀和 Key 名恰好只出现在 Detail 里。
+func TestFilterMatchesDetail(t *testing.T) {
+	s := &selector{all: []Item{
+		{Label: "claude-opus-5", Detail: "ccmax/"},
+		{Label: "gpt-5.4", Detail: "gpt/"},
+		{Label: "ccmax-lookalike", Detail: "gpt/"},
+	}}
+
+	s.query = "ccmax"
+	got := s.filtered()
+	if len(got) != 2 {
+		t.Fatalf("filtered %d items, want 2", len(got))
+	}
+	// Label 命中的排在前面。
+	if got[0].Label != "ccmax-lookalike" {
+		t.Errorf("label match should sort first, got %q", got[0].Label)
+	}
+}

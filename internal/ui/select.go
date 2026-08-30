@@ -168,15 +168,33 @@ type viewItem struct {
 }
 
 // filtered 按输入的子串过滤。列表长时这是必需的，短时也无害。
+//
+// Label 与 Detail 都参与匹配：屏幕上写着 ccmax/、work，用户就会照着敲，
+// 而分组前缀和 Key 名恰好只出现在 Detail 里。只匹配 Label 的结果是
+// 照着屏幕输入却得到「无匹配项」。
+//
+// Label 命中的排在前面：那是这一行的主体，比在备注里撞上更像用户要找的。
 func (s *selector) filtered() []viewItem {
-	out := make([]viewItem, 0, len(s.all))
 	q := strings.ToLower(s.query)
-	for i, it := range s.all {
-		if q == "" || strings.Contains(strings.ToLower(it.Label), q) {
+	if q == "" {
+		out := make([]viewItem, 0, len(s.all))
+		for i, it := range s.all {
 			out = append(out, viewItem{Item: it, index: i})
 		}
+		return out
 	}
-	return out
+
+	var primary, secondary []viewItem
+	for i, it := range s.all {
+		switch {
+		case strings.Contains(strings.ToLower(it.Label), q):
+			primary = append(primary, viewItem{Item: it, index: i})
+		case strings.Contains(strings.ToLower(it.Detail), q),
+			strings.Contains(strings.ToLower(it.Note), q):
+			secondary = append(secondary, viewItem{Item: it, index: i})
+		}
+	}
+	return append(primary, secondary...)
 }
 
 // seek 沿 step 方向找下一个可选项；没有则返回 -1。

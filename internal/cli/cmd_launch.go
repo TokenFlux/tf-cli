@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
@@ -178,6 +179,31 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		noteHiddenKeys(c, cfg, creds.Names(), keys, h)
 		return "", nil, noModelError(c, cfg, keys, h)
 	}
+	// -m 分开写时，那个词未必是取值。
+	//
+	// tf codex -m exec "hi" 的 exec 是 codex 的子命令，
+	// tf claude -m "解释这段代码" 那句是 prompt。解析期分不出来，
+	// 拿到候选集才分得出：不在候选里就退还给透传参数，-m 按裸写处理。
+	if override != "" && c.Flags.Detached("model") {
+		if _, ok := ownerOf(cands, override); !ok {
+			c.Passthr = append([]string{c.Flags.Detach("model")}, c.Passthr...)
+			override = ""
+			slots[config.SlotDefault] = ""
+			// 退还之后 -m 就是裸写，含义是「让我挑」。
+			explicitPick = true
+		}
+	}
+
+	// 命令行给的模型不存在：那是刚敲错的，不是环境变了。
+	//
+	// 「现在没有 Key 能提供 X」是为存量配置写的，用在刚输入的值上会
+	// 让人以为服务端撤了模型，转头去查网关 —— 而其实只是拼错了。
+	if override != "" {
+		if _, ok := ownerOf(cands, override); !ok {
+			return "", nil, unknownModelError(c, override, cands)
+		}
+	}
+
 	// 存着的模型现在没有 Key 能提供 —— Key 被 logout，或分组里撤了它。
 	//
 	// 能问就问，不要把人赶去另一条命令：选择器就在手边，而用户的目的
@@ -185,8 +211,8 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	// 留着旧槽会让新旧两把 Key 的模型混在一起。
 	if m := slots[config.SlotDefault]; m != "" {
 		if _, ok := ownerOf(cands, m); !ok {
-			c.UI.Warnf(c.UI.T("现在没有 Key 能提供 %s，请重新选一个",
-				"no key offers %s any more; pick another"), m)
+			c.UI.Warnf(c.UI.T("存着的模型 %s 现在没有 Key 能提供，请重新选一个",
+				"the saved model %s is no longer offered by any key; pick another"), m)
 			slots = config.ModelSlots{}
 		}
 	}
@@ -263,6 +289,56 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	return keyName, slots, nil
 }
 
+// unknownModelError 是命令行给了不存在的模型时的报错。
+//
+// 附上最接近的几个候选：拼错通常只差几个字符，把它们摆出来比让人
+// 自己去 tf model --list 里翻要快。
+func unknownModelError(c *Context, want string, cands []candidate) error {
+	err := ui.Errf(ui.CodeUsage,
+		fmt.Sprintf(c.UI.T("没有模型 %q", "no such model %q"), want))
+	if near := nearest(want, cands); len(near) > 0 {
+		return err.WithHint(strings.Join(near, "  "))
+	}
+	return err.WithHint(fmt.Sprintf("tf model %s --list", c.Command))
+}
+
+// nearest 挑出与 want 最像的几个候选。
+//
+// 判据是共同的子串而不是编辑距离：模型名的错法多是漏了日期后缀、
+// 记错了小版本号，共同前缀比逐字符距离更能抓住这类错。
+func nearest(want string, cands []candidate) []string {
+	type scored struct {
+		id string
+		n  int
+	}
+	var all []scored
+	w := strings.ToLower(model.Parse(want).Display())
+	for _, cd := range cands {
+		id := model.Parse(cd.Model).Display()
+		if n := commonPrefix(w, strings.ToLower(id)); n >= 3 {
+			all = append(all, scored{id, n})
+		}
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].n > all[j].n })
+
+	out := make([]string, 0, 3)
+	for _, s := range all {
+		if len(out) == 3 {
+			break
+		}
+		out = append(out, s.id)
+	}
+	return out
+}
+
+func commonPrefix(a, b string) int {
+	n := 0
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+	return n
+}
+
 // slotsComplete 报告必填槽是否都已填。
 //
 // 留空会让 harness 回落到它的内置默认模型，而那个模型通常不在用户的
@@ -306,8 +382,18 @@ func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []str
 
 		title := fmt.Sprintf(c.UI.T("%s.%s 用哪个模型？（%s）", "Which model for %s.%s? (%s)"),
 			h.Name, s.Name, s.Purpose(c.UI.Lang == ui.LangZH))
-		pick, err := c.UI.Select(title, items)
+		pick, err := c.UI.SelectWith(title, items, ui.SelectOpt{
+			CancelHint: c.UI.T("用推荐值补齐", "take the suggestions"),
+		})
 		if err != nil {
+			// esc 只该退掉这一屏，不该炸掉上游已完成的工作。
+			//
+			// 主模型是刚刚选完的，副槽是 tf 主动追问的 —— 因为不问就会
+			// 静默失败。用户对追问说「算了」，意思是「按你说的来」，
+			// 不是「把我选的主模型也扔掉」。剩下的槽用推荐值补齐。
+			if ui.AsError(err).Code == ui.CodeCancelled {
+				return nil
+			}
 			return err
 		}
 		if pick == 0 {

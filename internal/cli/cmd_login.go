@@ -55,10 +55,6 @@ func runLogin(c *Context) error {
 		host = normalizeHost(h)
 	}
 
-	if err := chooseLoginMethod(c); err != nil {
-		return err
-	}
-
 	key, err := readKey(c)
 	if err != nil {
 		return err
@@ -124,6 +120,7 @@ func runLogin(c *Context) error {
 
 	// 放在结果之后：先让用户看见登录成功，再问补全。
 	// 顺序反了会像是「还没成功就又要我做事」。
+	noteComingSoon(c)
 	offerCompletions(c, cfg)
 	return nil
 }
@@ -312,38 +309,17 @@ func leadingWord(id string) string {
 	return id
 }
 
-// chooseLoginMethod 让用户挑登录方式。
+// noteComingSoon 在登录成功后提一句还没做的登录方式。
 //
-// 网页导入还没做，但要在这里露出来 —— 直接不显示会让用户以为只能贴 Key，
-// 显示成可选又会白选一次。所以列出来、灰掉、写明原因。
-//
-// 只在真交互且没有别的输入渠道时才问：管道喂 Key、--with-key、非交互
-// 都已经表明了方式，再问一遍纯属打断。
-func chooseLoginMethod(c *Context) error {
-	if c.Flags.Present("with-key") || !c.UI.Interactive(c.Flags.Bool("no-input")) {
-		return nil
+// 之前这里是一个选择器：列出「粘贴 API Key」和灰掉的「从网页导入」，
+// 让人按一次回车去确认一个没有分支的选择。露出未来能力不该拦在必经
+// 路径上 —— 说一句就够了。
+func noteComingSoon(c *Context) {
+	if c.UI.JSON || !c.UI.Interactive(c.Flags.Bool("no-input")) {
+		return
 	}
-	if !isTerminal(os.Stdin) {
-		return nil // Key 正从管道进来
-	}
-
-	idx, err := c.UI.Select(c.UI.T("怎么登录？", "How do you want to sign in?"), []ui.Item{
-		{
-			Label:  c.UI.T("粘贴 API Key", "Paste an API key"),
-			Detail: c.UI.T("从 tokenflux.dev/keys 复制", "copy one from tokenflux.dev/keys"),
-		},
-		{
-			Label:    c.UI.T("从网页导入", "Import from the web"),
-			Detail:   c.UI.T("在浏览器里授权", "authorise in your browser"),
-			Note:     c.UI.Dim(c.UI.T("v0.5", "v0.5")),
-			Disabled: true,
-		},
-	})
-	if err != nil {
-		return err
-	}
-	_ = idx // 目前只有一个可选项；网页导入落地后在此分流
-	return nil
+	c.UI.Logf("%s", c.UI.Dim(c.UI.T(
+		"从网页导入将在 v0.5 支持", "importing from the web lands in v0.5")))
 }
 
 // isTerminal 报告文件是否是终端。

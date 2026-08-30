@@ -310,3 +310,50 @@ func TestLogoutAllRefusesToWipeSilently(t *testing.T) {
 		t.Errorf("--force should go through, got %v", err)
 	}
 }
+
+// -m 分开写时，取值要留下标记，以便拿到候选集后再判定。
+//
+// tf codex -m exec "hi" 的 exec 是 codex 的子命令，
+// tf claude -m "解释这段代码" 那句是 prompt。解析期分不出来。
+func TestDetachedOptValueIsMarked(t *testing.T) {
+	cmd := &Command{Name: "codex", Passthrough: true,
+		Flags: []Flag{{Name: "model", Short: "m", Kind: KindOptString}}}
+
+	ctx, err := parse(cmd, []string{"-m", "exec"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ctx.Flags.Detached("model") {
+		t.Error("separate value must be marked detached")
+	}
+	if got := ctx.Flags.Detach("model"); got != "exec" {
+		t.Errorf("Detach returned %q, want %q", got, "exec")
+	}
+	if ctx.Flags.String("model") != "" {
+		t.Error("Detach must clear the value so -m reads as bare")
+	}
+
+	// 写在一起的不算：那明确就是取值。
+	ctx, err = parse(cmd, []string{"-m=exec"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Flags.Detached("model") {
+		t.Error("inline value must not be marked detached")
+	}
+}
+
+// 拼错模型时要说「没有这个模型」，并给出最接近的候选。
+func TestNearestSuggestsCloseModels(t *testing.T) {
+	cands := []candidate{
+		{Model: "gpt/gpt-5.6-sol"}, {Model: "gpt/gpt-5.6-terra"},
+		{Model: "gpt/gpt-5.4"}, {Model: "ccmax/claude-opus-4-6"},
+	}
+	got := nearest("gpt-5.6-solar", cands)
+	if len(got) == 0 || got[0] != "gpt-5.6-sol" {
+		t.Errorf("nearest = %v, want gpt-5.6-sol first", got)
+	}
+	if n := nearest("zzz", cands); len(n) != 0 {
+		t.Errorf("nothing close should yield nothing, got %v", n)
+	}
+}
