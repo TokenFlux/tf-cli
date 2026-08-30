@@ -78,6 +78,11 @@ func runKeys(c *Context) error {
 				label := sc.Prefix
 				if label == "" {
 					label = c.UI.T("可用于", "can run")
+				} else {
+					// 加斜杠才看得出这是分组前缀，而不是又一个标签。
+					// 同一列里混着标签和数据时，「可用于」会被读成分组名。
+					// 斜杠也正好对上模型 ID 的写法：ccmax/claude-opus-5。
+					label += "/"
 				}
 				c.UI.Printf("  %s %s\n", ui.Pad(label, 10), strings.Join(sc.Harnesses, " "))
 			}

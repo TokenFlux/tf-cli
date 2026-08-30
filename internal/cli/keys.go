@@ -231,7 +231,11 @@ func fetchModels(ctx context.Context, host, key string) ([]string, error) {
 	for _, m := range models {
 		ids = append(ids, m.ID)
 	}
-	sort.Strings(ids)
+	// 保持网关给的顺序，不要按字典序重排。
+	//
+	// 网关把 codex-auto-review 这类专用模型放在末尾，字典序却把它顶到
+	// 第一个 —— 选择器默认高亮首项，回车就选中了一个当主模型必定失败的
+	// 模型。上游的排序本身就是信息，重排等于把它扔掉。
 	return ids, nil
 }
 
@@ -262,9 +266,13 @@ func candidateItems(cands []candidate) []ui.Item {
 	items := make([]ui.Item, 0, len(cands))
 	for _, c := range cands {
 		r := model.Parse(c.Model)
+		// 分组带斜杠，与 tkr keys 一致，也对上模型 ID 的写法。
 		detail := r.Prefix
+		if detail != "" {
+			detail += "/"
+		}
 		if multi {
-			detail = strings.TrimSpace(c.Key + " " + r.Prefix)
+			detail = strings.TrimSpace(c.Key + "  " + detail)
 		}
 		items = append(items, ui.Item{Label: r.Display(), Detail: detail})
 	}

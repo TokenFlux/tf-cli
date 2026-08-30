@@ -101,7 +101,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	// “模型列表没见过”，不写出来用户很难联想到是 Key 的问题。
 	banner := fmt.Sprintf("%s → %s", c.UI.Bold("tkr"), h.Name)
 	if len(creds.Names()) > 1 {
-		banner += "   " + c.UI.Dim(c.UI.T("key", "key")) + " " + keyName
+		banner += "   " + c.UI.Dim(c.UI.T("Key", "key")) + " " + keyName
 	}
 	banner += "   " + c.UI.Dim(c.UI.T("模型", "model")) + " " + slots[config.SlotDefault]
 	// 其它槽只在与主模型不同时才列出 —— 相同就是噪音。
@@ -175,10 +175,9 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 
 	cands := gatherCandidates(c, cfg, creds, keys, h)
 	if len(cands) == 0 {
+		noteHiddenKeys(c, cfg, creds.Names(), keys, h)
 		return "", nil, noModelError(c, cfg, keys, h)
 	}
-	noteHiddenKeys(c, cfg, creds.Names(), keys, h)
-
 	// 存着的模型现在没有 Key 能提供 —— Key 被 logout，或分组里撤了它。
 	//
 	// 能问就问，不要把人赶去另一条命令：选择器就在手边，而用户的目的
@@ -209,6 +208,11 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	}
 
 	if explicitPick {
+		// 只在真要选的时候说明藏了什么。已经定好用哪个模型时，
+		// 另一把 Key 的模型能不能用与这次启动无关 —— 每次启动都讲一遍
+		// 就成了噪音。
+		noteHiddenKeys(c, cfg, creds.Names(), keys, h)
+
 		// 目录里存在审查、嵌入、图像类的专用模型，拿它们当主模型会直接
 		// 报错（实测：codex-auto-review 在 opencode 下失败）。所以不预选。
 		pick, err := c.UI.Select(

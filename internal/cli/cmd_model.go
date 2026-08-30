@@ -187,6 +187,7 @@ func listModelSlots(c *Context, cfg *config.Config) error {
 		out = append(out, entry{Harness: h.Name, Slots: cfg.Harness(h.Name).Slots})
 	}
 
+	width := slotWidth(c, cfg, harness.All)
 	c.UI.Emit("model list", out, func() {
 		for _, h := range harness.All {
 			line := c.UI.Bold(h.Name)
@@ -194,7 +195,7 @@ func listModelSlots(c *Context, cfg *config.Config) error {
 				line += "   " + c.UI.Dim(c.UI.T("key", "key")) + " " + k
 			}
 			c.UI.Printf("%s\n", line)
-			printSlots(c, cfg.Harness(h.Name).Slots, h)
+			printSlots(c, cfg.Harness(h.Name).Slots, h, width)
 		}
 		// 这一屏只能看不能改，得说清楚改在哪儿。
 		c.UI.Logf("%s", c.UI.Dim(c.UI.T(
@@ -212,42 +213,48 @@ func showHarnessSlots(c *Context, cfg *config.Config, h *harness.Harness) error 
 			line += "   " + c.UI.Dim(c.UI.T("key", "key")) + " " + hc.Key
 		}
 		c.UI.Printf("%s\n", line)
-		printSlots(c, slots, h)
+		printSlots(c, slots, h, slotWidth(c, cfg, []*harness.Harness{h}))
 	})
 	return nil
 }
 
 // printSlots 必须显式标出未配置的槽 —— 未配置意味着 harness 会用它的
 // 内置默认模型，而那个模型多半不在用户的分组里。
-func printSlots(c *Context, slots config.ModelSlots, h *harness.Harness) {
-	// 未配置的值可能比模型名长得多，所以先量出这一屏真正需要的列宽，
-	// 再统一补齐 —— 写死宽度会让「未配置（启动时会询问）」把后面顶乱。
+// slotWidth 量出一屏里槽位值需要的列宽。
+//
+// 必须按整屏算，不能各算各的：tkr model 一次列出三个 harness，
+// 每块自己算宽度会让三块的模型列互相错开。
+func slotWidth(c *Context, cfg *config.Config, hs []*harness.Harness) int {
 	width := 0
-	values := make([]string, len(h.Slots))
-	for i, s := range h.Slots {
-		v := slots[s.Name]
-		if v == "" {
-			v = c.UI.T("未配置", "unset")
-			if s.Required {
-				v = c.UI.T("启动时询问", "asked at launch")
+	for _, h := range hs {
+		slots := cfg.Harness(h.Name).Slots
+		for _, sl := range h.Slots {
+			if w := ui.Width(slotValue(c, slots[sl.Name], sl)); w > width {
+				width = w
 			}
-		} else {
-			v = model.Parse(v).Display()
-		}
-		values[i] = v
-		if w := ui.Width(v); w > width {
-			width = w
 		}
 	}
+	return width
+}
 
-	for i, s := range h.Slots {
-		v := values[i]
-		if slots[s.Name] == "" {
-			v = c.UI.Dim(ui.Pad(v, width))
-		} else {
-			v = ui.Pad(v, width)
+// slotValue 是槽位在界面上的显示值。
+func slotValue(c *Context, v string, sl harness.Slot) string {
+	if v != "" {
+		return model.Parse(v).Display()
+	}
+	if sl.Required {
+		return c.UI.T("启动时询问", "asked at launch")
+	}
+	return c.UI.T("未配置", "unset")
+}
+
+func printSlots(c *Context, slots config.ModelSlots, h *harness.Harness, width int) {
+	for _, sl := range h.Slots {
+		v := ui.Pad(slotValue(c, slots[sl.Name], sl), width)
+		if slots[sl.Name] == "" {
+			v = c.UI.Dim(v)
 		}
-		c.UI.Printf("  %s %s %s\n", ui.Pad(s.Name, 9), v,
-			c.UI.Dim("— "+s.Purpose(c.UI.Lang == ui.LangZH)))
+		c.UI.Printf("  %s %s %s\n", ui.Pad(sl.Name, 9), v,
+			c.UI.Dim("— "+sl.Purpose(c.UI.Lang == ui.LangZH)))
 	}
 }

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -528,5 +529,26 @@ func TestStaleModelClearsAllSlots(t *testing.T) {
 	// 清空之后走的是「尚未选定主模型」那条路：能问就问，问不了才报错。
 	if slots[config.SlotDefault] != "" {
 		t.Error("the main slot must be empty so the picker opens")
+	}
+}
+
+// 模型顺序必须保持网关给的那个，不能按字典序重排。
+//
+// 网关把 codex-auto-review 这类专用模型放在末尾，字典序却把它顶到第一个 ——
+// 选择器默认高亮首项，回车就选中了一个当主模型必定失败的模型。
+// 上游的排序本身就是信息。
+func TestModelOrderIsNotResorted(t *testing.T) {
+	src, err := os.ReadFile("keys.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	start := strings.Index(body, "func fetchModels(")
+	if start < 0 {
+		t.Fatal("fetchModels not found")
+	}
+	end := strings.Index(body[start:], "\n}\n")
+	if strings.Contains(body[start:start+end], "sort.") {
+		t.Error("fetchModels must not reorder what the gateway returned")
 	}
 }
