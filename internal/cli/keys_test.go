@@ -465,6 +465,14 @@ func TestSuggestKeyNameNeedsAMajority(t *testing.T) {
 		// 三家分立，谁都代表不了。
 		{[]string{"gpt-5.4", "claude-opus-5", "gemini-3.1-pro"}, "multi"},
 		{[]string{"claude-opus-5", "claude-sonnet-5"}, "claude"},
+		// 同一分组里的少数派不必进名字：分组内所有模型的准入、倍率、
+		// 用的凭据完全相同，被少提一句不会让任何东西变得不可用。
+		// 这正是它与前缀的区别 —— 前缀背后是准入各异的不同分组。
+		{[]string{
+			"claude-opus-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8",
+			"claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-fable-5",
+			"deepseek-v3",
+		}, "claude"},
 	}
 	for _, tc := range cases {
 		if got := suggestKeyName(tc.ids, nil); got != tc.want {
