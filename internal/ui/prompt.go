@@ -84,3 +84,40 @@ func (u *UI) ReadLine(prompt string) (string, error) {
 	}
 	return strings.TrimSpace(line), nil
 }
+
+// ReadSecret 在控制终端上提示并读一行，不回显。
+//
+// 关键是**自己把行规程设成需要的样子**，而不是假设终端本来就正常：
+// 终端可能已经处于 raw 模式（上一个程序没收尾），那时回车送来的是 \r
+// 而不是 \n，只关回显的做法会永远等不到行尾 —— 表现就是卡死。
+//
+// 直接读写 /dev/tty 而不是 stdin：stdin 可能已被管道占用，
+// 但用户仍然坐在终端前。
+func (u *UI) ReadSecret(prompt string) (string, error) {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return "", ErrNotInteractive
+	}
+	defer tty.Close()
+
+	saved, err := sttyCapture(tty, "-g")
+	if err != nil {
+		return "", ErrNotInteractive
+	}
+	// icanon 给行编辑与行尾，icrnl 把回车规整成 \n，isig 保住 Ctrl-C。
+	if err := sttyRun(tty, "-echo", "icanon", "icrnl", "isig"); err != nil {
+		return "", ErrNotInteractive
+	}
+	defer func() {
+		_ = sttyRun(tty, saved)
+		fmt.Fprintln(tty)
+	}()
+
+	fmt.Fprintf(tty, "%s ", prompt)
+
+	line, err := bufio.NewReader(tty).ReadString('\n')
+	if err != nil && line == "" {
+		return "", ErrNotInteractive
+	}
+	return strings.TrimRight(line, "\r\n"), nil
+}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
@@ -327,35 +326,7 @@ func readKey(c *Context) (string, error) {
 			WithHint("echo $KEY | tkr login")
 	}
 
-	fmt.Fprintf(c.UI.Err, "%s ", c.UI.T("粘贴 API Key（输入不回显）：", "Paste your API key (input hidden):"))
-	defer fmt.Fprintln(c.UI.Err)
-
-	restore := disableEcho()
-	defer restore()
-
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil {
-		return "", ui.ErrNotInteractive
-	}
-	return strings.TrimSpace(line), nil
-}
-
-// disableEcho 借 stty 关闭回显，避免为此引入终端库。
-// 不可用时降级为可见输入，而不是失败。
-func disableEcho() func() {
-	if os.Getenv("OS") == "Windows_NT" {
-		return func() {}
-	}
-	cmd := exec.Command("stty", "-echo")
-	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		return func() {}
-	}
-	return func() {
-		restore := exec.Command("stty", "echo")
-		restore.Stdin = os.Stdin
-		_ = restore.Run()
-	}
+	return c.UI.ReadSecret(c.UI.T("粘贴 API Key（输入不回显）：", "Paste your API key (input hidden):"))
 }
 
 // normalizeHost 归一化用户输入的 host。
