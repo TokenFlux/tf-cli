@@ -84,7 +84,7 @@ func runHarnessInstall(c *Context, name string) error {
 	h, ok := harness.Lookup(name)
 	if !ok {
 		return ui.Errf(ui.CodeHarnessNotFound,
-			fmt.Sprintf(c.UI.T("未知 harness：%s", "unknown harness: %s"), name)).
+			fmt.Sprintf(c.UI.T("没有名为 %q 的 harness", "no harness named %q"), name)).
 			WithHint("tkr harness list")
 	}
 

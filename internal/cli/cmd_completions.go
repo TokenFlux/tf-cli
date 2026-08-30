@@ -42,7 +42,7 @@ func newCompletionsCommand() *Command {
 			script, ok := completionScripts[shell]
 			if !ok {
 				return ui.Errf(ui.CodeUsage,
-					fmt.Sprintf(c.UI.T("不支持的 shell：%s", "unsupported shell: %s"), shell)).
+					fmt.Sprintf(c.UI.T("不支持 shell %q", "unsupported shell %q"), shell)).
 					WithHint("bash | zsh | fish")
 			}
 			if c.Flags.Bool("install") {
@@ -292,7 +292,7 @@ func filter(candidates []string, prefix string) []string {
 // 脚本里一律用「用户实际输入的那个路径」回调，而不是写死 `tkr`。
 // 否则 ./bin/tkr 这种未入 PATH 的跑法会因找不到命令而静默无补全。
 var completionScripts = map[string]string{
-	"bash": `# tkr bash completion —— eval "$(tkr completions bash)"
+	"bash": `# tkr bash completion. eval "$(tkr completions bash)"
 _tkr_complete() {
     local IFS=$'\n'
     COMPREPLY=($("${COMP_WORDS[0]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
@@ -300,7 +300,7 @@ _tkr_complete() {
 # 同时注册裸命令名与常见的相对路径写法。
 complete -o default -F _tkr_complete tkr ./tkr ./bin/tkr bin/tkr
 `,
-	"zsh": `# tkr zsh completion —— eval "$(tkr completions zsh)"
+	"zsh": `# tkr zsh completion. eval "$(tkr completions zsh)"
 _tkr_complete() {
     local -a candidates
     candidates=(${(f)"$(${words[1]} __complete ${words[2,$CURRENT]} 2>/dev/null)"})
@@ -310,7 +310,7 @@ compdef _tkr_complete tkr
 # 模式注册：让 ./bin/tkr、/usr/local/bin/tkr 等写法也能补全。
 compdef _tkr_complete -p '*/tkr'
 `,
-	"fish": `# tkr fish completion —— tkr completions fish --install
+	"fish": `# tkr fish completion. tkr completions fish --install
 function __tkr_complete
     set -l tokens (commandline -opc) (commandline -ct)
     $tokens[1] __complete $tokens[2..-1] 2>/dev/null
