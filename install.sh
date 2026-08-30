@@ -3,11 +3,11 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 #
-# 装到 ~/.local/bin（不需要 sudo）。用 TKR_INSTALL_DIR 可以改。
+# 装到 ~/.local/bin（不需要 sudo）。用 TF_INSTALL_DIR 可以改。
 set -eu
 
-REPO="tokenflux/tf"
-DIR="${TKR_INSTALL_DIR:-$HOME/.local/bin}"
+REPO="tokenflux/tkr"
+DIR="${TF_INSTALL_DIR:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
