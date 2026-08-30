@@ -196,7 +196,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 
 	if oneShot {
 		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf(
-			c.UI.T("仅本次生效；固化用 tkr model %s", "this run only; make it stick with: tkr model %s"),
+			c.UI.T("仅本次生效，固化用 tkr model %s", "just this run — to keep it: tkr model %s"),
 			h.Name)))
 		return keyName, slots, nil
 	}
@@ -204,7 +204,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	hc.Slots = slots
 	bindKey(c, cfg, h, keyName)
 	if err := cfg.Save(); err != nil {
-		c.UI.Warnf(c.UI.T("模型选择未能写入配置：%v", "could not persist the model choice: %v"), err)
+		c.UI.Warnf(c.UI.T("模型选择没能写进配置：%v", "could not save the model choice: %v"), err)
 	}
 	return keyName, slots, nil
 }
@@ -362,8 +362,8 @@ func warnIdenticalSlots(c *Context, h *harness.Harness, slots config.ModelSlots)
 		}
 	}
 	c.UI.Warnf(c.UI.T(
-		"%s 的所有档位都指向 %s，harness 内部的模型切换将没有区别",
-		"every %s tier points at %s, so switching models inside the harness will do nothing"),
+		"%s 的每个档位都是 %s，在 harness 里切换模型不会有变化",
+		"every %s tier is %s, so switching models inside it does nothing"),
 		h.Name, first)
 }
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
@@ -73,7 +74,7 @@ func runHarnessList(c *Context) error {
 				}
 			}
 			c.UI.Printf("%s %s %s %s\n", mark, ui.Pad(r.Name, 10), ui.Pad(detail, 12),
-				c.UI.Dim(fmt.Sprintf("%s %v", c.UI.T("模型槽：", "slots:"), r.Slots)))
+				c.UI.Dim(fmt.Sprintf("%s %s", c.UI.T("模型槽", "slots"), strings.Join(r.Slots, " "))))
 		}
 	})
 	return nil

@@ -52,7 +52,7 @@ func (s *state) saveConfig(c *Context) error {
 func (s *state) saveCredentials(c *Context) error {
 	if err := s.creds.Save(); err != nil {
 		return ui.Errf(ui.CodeConfigWrite,
-			c.UI.T("凭据无法写入", "cannot write credentials")).WithCause(err)
+			c.UI.T("凭据文件无法写入", "cannot write the credentials file")).WithCause(err)
 	}
 	return nil
 }

@@ -102,7 +102,7 @@ func runLogin(c *Context) error {
 
 	creds.Set(keyName, &config.Credential{Key: key, Source: config.SourcePaste})
 	if err := creds.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据无法写入", "cannot write credentials")).WithCause(err)
+		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据文件无法写入", "cannot write the credentials file")).WithCause(err)
 	}
 	if err := cfg.Save(); err != nil {
 		return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
@@ -113,8 +113,8 @@ func runLogin(c *Context) error {
 		"key": config.Mask(key), "models": ids, "protocols": cfg.Keys[keyName].Protocols,
 	}, func() {
 		c.UI.Printf("✓ %s\n", fmt.Sprintf(c.UI.T("已保存为 Key %q", "saved as key %q"), keyName))
-		c.UI.Printf("  %s %s\n", ui.Pad("host", 8), host)
-		c.UI.Printf("  %s %s\n", ui.Pad("key", 8), config.Mask(key))
+		c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("网关", "host"), 8), host)
+		c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("Key", "key"), 8), config.Mask(key))
 		c.UI.Printf("  %s %d %s\n", ui.Pad(c.UI.T("模型", "models"), 8), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
 		if protos := cfg.Keys[keyName].ProtocolSummary(); len(protos) > 0 {
 			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("协议", "protocols"), 8), c.UI.Dim(strings.Join(protos, " / ")))
@@ -128,7 +128,7 @@ func runLogin(c *Context) error {
 //
 // 默认行为绝不能是静默覆盖：覆掉的 Key 本地无处可找，用户得重新
 // 去网页拿。但也不能要求用户自己想名字 —— 直接根据这把 Key 看得到的
-// 模型猫一个。
+// 模型挑一个。
 func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 	target string, explicit bool, key string, ids []string) (string, error) {
 
@@ -157,7 +157,7 @@ func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 		c.UI.T("%q 下已存着另一把 Key（%s）", "%q already holds a different key (%s)"),
 		target, config.Mask(existing.Key)), []ui.Item{
 		{Label: fmt.Sprintf(c.UI.T("另存为 %q", "save as %q"), suggestion),
-			Detail: c.UI.T("保留原有凭据", "keeps the existing one")},
+			Detail: c.UI.T("保留原有的", "keeps the existing one")},
 		{Label: fmt.Sprintf(c.UI.T("覆盖 %q", "replace %q"), target),
 			Detail: config.Mask(existing.Key) + " → " + config.Mask(key)},
 		{Label: c.UI.T("自订名称…", "custom name…"),
@@ -364,7 +364,7 @@ func readKey(c *Context) (string, error) {
 
 	if !c.UI.Interactive(c.Flags.Bool("yes")) {
 		return "", ui.Errf(ui.CodeUsage,
-			c.UI.T("非交互环境下请用管道提供 Key", "pipe the key in when running non-interactively")).
+			c.UI.T("非交互时用管道传 Key", "pipe the key in when non-interactive")).
 			WithHint("echo $KEY | tkr login")
 	}
 

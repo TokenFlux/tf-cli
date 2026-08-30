@@ -101,7 +101,10 @@ func (u *UI) Warnf(format string, a ...any) {
 	if u.JSON {
 		return
 	}
-	fmt.Fprintf(u.Err, "%s %s\n", u.paint("warning:", yellow), fmt.Sprintf(format, a...))
+	// 前缀也要跟着 locale 走，否则中文正文顶着英文标签。
+	// 分隔符写进译文：中文全角冒号自带间距。
+	fmt.Fprintf(u.Err, "%s%s\n", u.paint(u.T("警告：", "warning: "), yellow),
+		fmt.Sprintf(format, a...))
 }
 
 type color string
@@ -168,7 +171,8 @@ func (u *UI) Fail(command string, err error) {
 		})
 		return
 	}
-	fmt.Fprintf(u.Err, "%s %s\n", u.paint(u.T("错误：", "error:"), red), e.Message)
+	// 分隔符写进译文：中文全角冒号自带间距，再补空格会散开。
+	fmt.Fprintf(u.Err, "%s%s\n", u.paint(u.T("错误：", "error: "), red), e.Message)
 	// 底层原因必须显示。“update failed” 不带原因等于没说，
 	// 而用户没有别的途径知道到底差了什么。
 	if cause := causeText(e); cause != "" {
@@ -177,5 +181,7 @@ func (u *UI) Fail(command string, err error) {
 	if e.Hint != "" {
 		fmt.Fprintf(u.Err, "  %s\n", u.Dim(e.Hint))
 	}
-	fmt.Fprintf(u.Err, "  %s\n", u.Dim(string(e.Code)))
+	// 错误码是给搜索和报障用的，不是给阅读用的。单占一行会被误读成
+	// 又一条建议，缩进后跟在末尾并标注来源才不抢戏。
+	fmt.Fprintf(u.Err, "  %s\n", u.Dim("["+string(e.Code)+"]"))
 }

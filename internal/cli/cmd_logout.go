@@ -39,7 +39,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 
 	if !c.UI.Interactive(c.Flags.Bool("yes")) {
 		return "", ui.Errf(ui.CodeUsage,
-			c.UI.T("本机保存了多把凭据，请指定删哪一把", "several credentials are stored; say which one to remove")).
+			c.UI.T("本机存了多把 Key，指定删哪一把", "several keys are stored; say which one to remove")).
 			WithHint("tkr logout " + strings.Join(stored, " | "))
 	}
 
@@ -48,7 +48,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 		cred, _ := creds.Get(name)
 		items = append(items, ui.Item{Label: name, Detail: config.Mask(cred.Key)})
 	}
-	idx, err := c.UI.Select(c.UI.T("删除哪一把凭据？", "Which credential should be removed?"), items)
+	idx, err := c.UI.Select(c.UI.T("删除哪一把 Key？", "Which key should be removed?"), items)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +65,7 @@ func runLogout(c *Context) error {
 	stored := creds.Names()
 	if len(stored) == 0 {
 		return ui.Errf(ui.CodeNotLoggedIn,
-			c.UI.T("本机没有保存任何凭据", "no credentials are stored on this machine")).
+			c.UI.T("本机没有保存任何 Key", "no keys are stored on this machine")).
 			WithHint("tkr login")
 	}
 
@@ -82,7 +82,7 @@ func runLogout(c *Context) error {
 		cred, ok := creds.Get(name)
 		if !ok {
 			return ui.Errf(ui.CodeNotLoggedIn,
-				fmt.Sprintf(c.UI.T("%q 下没有保存凭据", "%q has no stored credential"), name)).
+				fmt.Sprintf(c.UI.T("%q 下没有 Key", "%q has no stored key"), name)).
 				WithHint(c.UI.T("已保存的：", "stored: ") + strings.Join(stored, " "))
 		}
 		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("%s  %s", name, config.Mask(cred.Key))))
@@ -91,7 +91,7 @@ func runLogout(c *Context) error {
 	}
 
 	if err := creds.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据无法写入", "cannot write credentials")).WithCause(err)
+		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据文件无法写入", "cannot write the credentials file")).WithCause(err)
 	}
 
 	// 模型列表是由这把 Key 推导出来的，退出登录时一并清掉，
@@ -114,7 +114,8 @@ func runLogout(c *Context) error {
 
 	c.UI.Emit("logout", map[string]any{"removed": removed}, func() {
 		c.UI.Printf("✓ %s\n", fmt.Sprintf(
-			c.UI.T("已删除本机凭据：%v", "removed local credentials: %v"), removed))
+			c.UI.T("已删除本机的 Key：%s", "removed local keys: %s"),
+			strings.Join(removed, ", ")))
 		// 必须说清楚：删本地文件不等于吊销 Key。
 		c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T(
 			"这只删除了本机保存的副本，Key 在服务端依然有效。要真正吊销请到：",

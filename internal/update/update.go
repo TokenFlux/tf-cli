@@ -26,7 +26,7 @@ import (
 )
 
 // Repo 是发布仓库。
-const Repo = "sst/opencode"
+const Repo = "tokenflux/tkr"
 
 // Source 是 tkr 自身的安装来源。
 type Source string
