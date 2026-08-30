@@ -64,10 +64,37 @@ func eligibleKeys(c *Context, cfg *config.Config, creds *config.Credentials, h *
 // claude_code_only 分组拦的是客户端指纹而不是协议：只有 Claude Code
 // 本身过得去，其它 harness 无论用什么协议都会被拒。
 func canRun(meta *config.KeyMeta, prefix string, h *harness.Harness) bool {
+	_, ok := pickProtocol(meta, prefix, h)
+	return ok
+}
+
+// pickProtocol 选出这次该走哪种协议。
+//
+// harness 会的协议按偏好排序，取第一个该分组也允许的。
+// 多数 harness 不止会一种：opencode 两个 provider 都内置，
+// 因此它在只开 anthropic_messages 的分组上照样能跑。
+func pickProtocol(meta *config.KeyMeta, prefix string, h *harness.Harness) (harness.Protocol, bool) {
 	if meta.LockedToClaudeCode(prefix) {
-		return h.IsClaudeCode
+		if h.IsClaudeCode {
+			return harness.ProtoAnthropicMessages, true
+		}
+		return "", false
 	}
-	return meta.SupportsIn(prefix, string(h.Protocol))
+	for _, p := range h.Protocols {
+		if meta.SupportsIn(prefix, string(p)) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// protocolList 列出该 harness 会的协议，用于解释为什么没有 Key 合格。
+func protocolList(h *harness.Harness) string {
+	out := make([]string, 0, len(h.Protocols))
+	for _, p := range h.Protocols {
+		out = append(out, string(p))
+	}
+	return strings.Join(out, " / ")
 }
 
 // fitting 返回至少有一个分组能跑该 harness 的 Key。未探测过的视为可用。
@@ -257,7 +284,7 @@ func noKeyFitsError(c *Context, cfg *config.Config, h *harness.Harness, names []
 	return ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
 		c.UI.T("没有一把 Key 的分组允许 %s 所需的协议（%s）",
 			"no key's group allows what %s needs (%s)"),
-		h.Name, h.Protocol)).
+		h.Name, protocolList(h))).
 		WithHint(strings.Join(lines, "; ") + "  →  " +
 			c.UI.T("换一个允许该协议的分组，或新建一把 Key",
 				"switch to a group that allows this protocol, or create another key"))

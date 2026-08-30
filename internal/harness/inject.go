@@ -14,6 +14,11 @@ type Input struct {
 	Slots  map[string]string // 槽名 → 模型 ID
 	Effort string            // 思考强度；已能用模型 ID 表达时调用方会置空
 	Args   []string          // 透传给 harness 的原始参数
+	// Protocol 是本次选定的客户端协议。
+	//
+	// 同一个 harness 在不同分组上可能走不同协议（opencode 两种都会），
+	// 注入配方必须跟着变，否则会被网关直接拒掉。
+	Protocol Protocol
 }
 
 // Plan 是一次启动的完整描述。
@@ -165,13 +170,18 @@ func planCodex(in Input) (*Plan, error) {
 // 内置的 gpt-5.4-nano 跑标题生成，该模型通常不在分组里，且失败是静默的。
 // 见 docs/research/harness-probe.md。
 func planOpencode(in Input) (*Plan, error) {
-	const provider = "openai"
+	// 覆盖哪个内置 provider，取决于这次走哪种协议。
+	// 分组只开 anthropic_messages 时，openai provider 会被网关直接拒掉。
+	provider, base := "openai", OpenAIBase(in.Host)
+	if in.Protocol == ProtoAnthropicMessages {
+		provider, base = "anthropic", AnthropicBase(in.Host)
+	}
 
 	cfg := map[string]any{
 		"provider": map[string]any{
 			provider: map[string]any{
 				"options": map[string]any{
-					"baseURL": OpenAIBase(in.Host),
+					"baseURL": base,
 					"apiKey":  in.Key,
 				},
 			},

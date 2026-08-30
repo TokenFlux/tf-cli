@@ -60,8 +60,13 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		return err
 	}
 
+	// 协议按本次选定的模型所在分组决定 —— 同一个 harness 在不同分组上
+	// 可能走不同协议，注入配方要跟着变。
+	proto, _ := pickProtocol(cfg.Keys[keyName], model.Parse(slots[config.SlotDefault]).Prefix, h)
+
 	plan, err := h.BuildPlan(harness.Input{
-		Host: host, Key: cred.Key, Slots: slots, Effort: effort, Args: c.Passthr,
+		Host: host, Key: cred.Key, Slots: slots, Effort: effort,
+		Args: c.Passthr, Protocol: proto,
 	})
 	if err != nil {
 		return ui.Errf(ui.CodeUsage, err.Error())
@@ -336,7 +341,7 @@ func noModelError(c *Context, cfg *config.Config, keys []string, h *harness.Harn
 		lines = append(lines, k+": "+strings.Join(cfg.Keys[k].ProtocolSummary(), " / "))
 	}
 	return ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
-		c.UI.T("没有 %s 能用的模型（需要 %s）", "no model %s can use (needs %s)"), h.Name, h.Protocol)).
+		c.UI.T("没有 %s 能用的模型（需要 %s）", "no model %s can use (needs %s)"), h.Name, protocolList(h))).
 		WithHint(strings.Join(lines, "; "))
 }
 

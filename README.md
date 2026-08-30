@@ -55,7 +55,8 @@ harness 没装时会问你要不要装，并列出可用的包管理器。非交
 
 ```sh
 tkr keys                          # 有哪些 Key，各自能跑什么
-tkr model claude                  # 交互编辑模型槽（选槽 → 选模型）
+tkr model                         # 看全部 harness 的模型槽
+tkr model claude                  # 交互编辑（选槽 → 选模型）
 tkr model claude --set fast=claude-haiku-4-5-20251001
 tkr claude -m                     # 本次换个模型（进选择器）
 tkr claude -e high                # 本次调思考强度
@@ -77,6 +78,10 @@ tkr claude  → 自动用能跑 claude 的那把
 
 有多把合格时问一次并记住，之后不再问。tkr 会在启动前探测每把 Key 的分组
 允许哪些协议（零 token 成本），跑不了的 Key 和模型根本不会出现在候选里。
+
+harness 会几种协议就按几种算：opencode 内置 openai 与 anthropic 两个
+provider，所以它在只开 anthropic_messages 的分组上照样能跑，注入配方
+会跟着换。
 
 复合 Key 一把横跨多个分组，各分组能力不同，tkr 按分组前缀分别判断：
 

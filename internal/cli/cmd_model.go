@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
@@ -189,9 +188,16 @@ func listModelSlots(c *Context, cfg *config.Config) error {
 
 	c.UI.Emit("model list", out, func() {
 		for _, h := range harness.All {
-			c.UI.Printf("%s\n", c.UI.Bold(h.Name))
+			line := c.UI.Bold(h.Name)
+			if k := cfg.Harness(h.Name).Key; k != "" {
+				line += "   " + c.UI.Dim(c.UI.T("key", "key")) + " " + k
+			}
+			c.UI.Printf("%s\n", line)
 			printSlots(c, cfg.Harness(h.Name).Slots, h)
 		}
+		// 这一屏只能看不能改，得说清楚改在哪儿。
+		c.UI.Logf("%s", c.UI.Dim(c.UI.T(
+			"改模型：tkr model <harness>", "to change models: tkr model <harness>")))
 	})
 	return nil
 }
@@ -213,24 +219,34 @@ func showHarnessSlots(c *Context, cfg *config.Config, h *harness.Harness) error 
 // printSlots 必须显式标出未配置的槽 —— 未配置意味着 harness 会用它的
 // 内置默认模型，而那个模型多半不在用户的分组里。
 func printSlots(c *Context, slots config.ModelSlots, h *harness.Harness) {
-	names := make([]string, 0, len(h.Slots))
-	for _, s := range h.Slots {
-		names = append(names, s.Name)
-	}
-	sort.Strings(names)
-
-	for _, s := range h.Slots {
+	// 未配置的值可能比模型名长得多，所以先量出这一屏真正需要的列宽，
+	// 再统一补齐 —— 写死宽度会让「未配置（启动时会询问）」把后面顶乱。
+	width := 0
+	values := make([]string, len(h.Slots))
+	for i, s := range h.Slots {
 		v := slots[s.Name]
 		if v == "" {
-			mark := c.UI.T("未配置", "unset")
+			v = c.UI.T("未配置", "unset")
 			if s.Required {
-				mark = c.UI.T("未配置（启动时会询问）", "unset (will ask at launch)")
+				v = c.UI.T("未配置（启动时会询问）", "unset (will ask at launch)")
 			}
-			c.UI.Printf("  %-9s %s %s\n", s.Name, c.UI.Dim(mark),
-				c.UI.Dim("— "+s.Purpose(c.UI.Lang == ui.LangZH)))
-			continue
+		} else {
+			v = model.Parse(v).Display()
 		}
-		c.UI.Printf("  %-9s %-18s %s\n", s.Name, v,
+		values[i] = v
+		if w := ui.Width(v); w > width {
+			width = w
+		}
+	}
+
+	for i, s := range h.Slots {
+		v := values[i]
+		if slots[s.Name] == "" {
+			v = c.UI.Dim(ui.Pad(v, width))
+		} else {
+			v = ui.Pad(v, width)
+		}
+		c.UI.Printf("  %s %s %s\n", ui.Pad(s.Name, 9), v,
 			c.UI.Dim("— "+s.Purpose(c.UI.Lang == ui.LangZH)))
 	}
 }

@@ -61,9 +61,12 @@ type Harness struct {
 	Name    string
 	Aliases []string
 	Bin     string
-	// Protocol 是启动该 harness 所必需的客户端协议。
-	// 分组不允许这个协议时，那把 Key 根本不该出现在候选里。
-	Protocol Protocol
+	// Protocols 是该 harness 能说的客户端协议，按偏好排序。
+	//
+	// 多数 harness 不止会一种：opencode 同时内置 openai 与 anthropic
+	// 两个 provider，所以它在只开 anthropic_messages 的分组上照样能跑。
+	// 把 harness 钉死成单协议会凭空砍掉一半可用分组。
+	Protocols []Protocol
 	// IsClaudeCode 表示这个 harness 就是 Anthropic 官方的 Claude Code。
 	//
 	// 只有它能通过 claude_code_only 分组的客户端指纹检查。
@@ -92,7 +95,8 @@ var All = []*Harness{
 		Bin:     "claude",
 		// 描述写用途而不写 Anthropic 的档位名：用户面对的是网关上的
 		// 模型列表，“sonnet 档”这类黑话无助于判断该填什么。
-		Protocol:     ProtoAnthropicMessages,
+		// Claude Code 只会 Anthropic 协议。
+		Protocols:    []Protocol{ProtoAnthropicMessages},
 		IsClaudeCode: true,
 		Slots: []Slot{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
@@ -108,10 +112,11 @@ var All = []*Harness{
 		DocsURL: "https://docs.tokenflux.dev/docs/agents/claude-code",
 	},
 	{
-		Name:     "codex",
-		Aliases:  []string{"cx"},
-		Bin:      "codex",
-		Protocol: ProtoOpenAIResponses,
+		Name:    "codex",
+		Aliases: []string{"cx"},
+		Bin:     "codex",
+		// codex 只认 responses：官方 config reference 里 wire_api 已只剩这一个值。
+		Protocols: []Protocol{ProtoOpenAIResponses},
 		Slots: []Slot{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			{Name: "review", Purpose: zhen("代码审查", "code review")},
@@ -125,9 +130,10 @@ var All = []*Harness{
 		DocsURL: "https://docs.tokenflux.dev/docs/agents/codex",
 	},
 	{
-		Name:     "opencode",
-		Bin:      "opencode",
-		Protocol: ProtoOpenAIResponses,
+		Name: "opencode",
+		Bin:  "opencode",
+		// 两种都会。顺序即偏好：responses 能拿到推理摘要，功能更全。
+		Protocols: []Protocol{ProtoOpenAIResponses, ProtoAnthropicMessages},
 		Slots: []Slot{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			// 不注入 small 会回落到内置的 gpt-5.4-nano，标题生成静默失败。
@@ -140,6 +146,16 @@ var All = []*Harness{
 		},
 		DocsURL: "https://docs.tokenflux.dev/docs/agents/opencode",
 	},
+}
+
+// Speaks 报告该 harness 会不会某个协议。
+func (h *Harness) Speaks(proto string) bool {
+	for _, p := range h.Protocols {
+		if string(p) == proto {
+			return true
+		}
+	}
+	return false
 }
 
 // Lookup 按名称或别名查找 harness。

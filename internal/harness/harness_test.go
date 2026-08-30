@@ -211,3 +211,73 @@ func envOf(env []string, key string) string {
 	}
 	return ""
 }
+
+// opencode 两个 provider 都内置，因此它在只开 anthropic_messages 的
+// 分组上照样能跑 —— 把 harness 钉死成单协议会凭空砍掉一半可用分组。
+func TestOpencodeSpeaksBothProtocols(t *testing.T) {
+	h, _ := Lookup("opencode")
+	if !h.Speaks("openai_responses") || !h.Speaks("anthropic_messages") {
+		t.Fatalf("opencode should speak both, got %v", h.Protocols)
+	}
+	// 顺序即偏好：responses 功能更全，排在前面。
+	if h.Protocols[0] != ProtoOpenAIResponses {
+		t.Errorf("preferred protocol = %v, want responses first", h.Protocols[0])
+	}
+
+	// codex 只认 responses；Claude Code 只会 Anthropic。
+	cx, _ := Lookup("codex")
+	if cx.Speaks("anthropic_messages") {
+		t.Error("codex has no anthropic wire_api")
+	}
+	cl, _ := Lookup("claude")
+	if cl.Speaks("openai_responses") {
+		t.Error("Claude Code speaks only anthropic_messages")
+	}
+}
+
+// 走 anthropic 协议时必须覆盖 anthropic provider，且用不带 /v1 的根地址。
+func TestOpencodeAnthropicRecipe(t *testing.T) {
+	h, _ := Lookup("opencode")
+	plan, err := h.BuildPlan(Input{
+		Host: "https://tokenflux.dev", Key: "sk-x",
+		Slots:    map[string]string{"default": "claude-opus-5", "small": "claude-haiku-4-5"},
+		Protocol: ProtoAnthropicMessages,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := envOf(plan.Env, "OPENCODE_CONFIG_CONTENT")
+	for _, want := range []string{
+		`"anthropic"`,
+		`"baseURL":"https://tokenflux.dev"`, // Anthropic 用根，不带 /v1
+		`"anthropic/claude-opus-5"`,
+		`"anthropic/claude-haiku-4-5"`, // 缺 small_model 会静默回落到内置模型
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Errorf("config %s\n missing %s", cfg, want)
+		}
+	}
+	if strings.Contains(cfg, "/v1") {
+		t.Errorf("anthropic base must not carry /v1: %s", cfg)
+	}
+}
+
+// 默认仍走 openai：/v1 与 openai provider。
+func TestOpencodeOpenAIRecipe(t *testing.T) {
+	h, _ := Lookup("opencode")
+	plan, err := h.BuildPlan(Input{
+		Host: "https://tokenflux.dev", Key: "sk-x",
+		Slots:    map[string]string{"default": "gpt-5.6-sol", "small": "gpt-5.4"},
+		Protocol: ProtoOpenAIResponses,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := envOf(plan.Env, "OPENCODE_CONFIG_CONTENT")
+	if !strings.Contains(cfg, `"baseURL":"https://tokenflux.dev/v1"`) {
+		t.Errorf("openai base needs /v1: %s", cfg)
+	}
+	if !strings.Contains(cfg, `"openai/gpt-5.6-sol"`) {
+		t.Errorf("model id needs the provider prefix: %s", cfg)
+	}
+}

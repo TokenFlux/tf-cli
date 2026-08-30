@@ -236,7 +236,7 @@ func cachedModels(harnessName string) []string {
 	}
 	out := make([]string, 0, len(meta.Models))
 	for _, id := range meta.Models {
-		if meta.SupportsIn(model.Parse(id).Prefix, string(h.Protocol)) {
+		if canRun(meta, model.Parse(id).Prefix, h) {
 			out = append(out, id)
 		}
 	}
