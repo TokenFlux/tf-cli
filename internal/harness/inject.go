@@ -105,6 +105,20 @@ func planClaude(in Input) (*Plan, error) {
 		set["ANTHROPIC_DEFAULT_OPUS_MODEL"] = m
 	}
 
+	// 模型名不在 Claude Code 的内置表里时，它会假定 200k 上下文窗口，
+	// 并在启动时打一段很长的告警（而且是在自己进入 raw 模式之后打的，
+	// 换行不回车，输出会错位）。
+	//
+	// 不去猜真实窗口大小：猜小了提前压缩上下文，猜大了直接溢出，
+	// 而 tkr 并不掌握这个数据。改为关掉这道强制检查，让 Claude Code
+	// 回到「以 API 返回为准」—— 网关才是知道窗口大小的那一方。
+	//
+	// 用户已经自己设过任一相关变量时不覆盖：那是明确的选择。
+	if os.Getenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS") == "" &&
+		os.Getenv("CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT") == "" {
+		set["CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT"] = "1"
+	}
+
 	// 清掉会把请求引去别处的变量，否则用户会看到「配置没生效」。
 	drop := []string{
 		"ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL",

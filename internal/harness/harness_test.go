@@ -161,3 +161,53 @@ func TestBaseURLShapes(t *testing.T) {
 		t.Errorf("openai base = %q", got)
 	}
 }
+
+// 模型名不在 Claude Code 的内置表里时，它会假定 200k 窗口并打一段长告警。
+// tkr 不猜真实窗口，而是让它以 API 返回为准。
+func TestClaudeDefersContextWindowToAPI(t *testing.T) {
+	h, _ := Lookup("claude")
+	plan, err := h.BuildPlan(Input{
+		Host: "https://tokenflux.dev", Key: "sk-x",
+		Slots: map[string]string{"default": "gpt-5.6-terra"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := envOf(plan.Env, "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT"); got != "1" {
+		t.Errorf("enforcement flag = %q, want 1", got)
+	}
+	// 绝不替用户猜窗口大小：猜错的两个方向都有害。
+	if got := envOf(plan.Env, "CLAUDE_CODE_MAX_CONTEXT_TOKENS"); got != "" {
+		t.Errorf("tkr must not invent a context window, got %q", got)
+	}
+}
+
+// 用户自己设过就不覆盖 —— 那是明确的选择。
+func TestClaudeRespectsExplicitContextWindow(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "1000000")
+
+	h, _ := Lookup("claude")
+	plan, err := h.BuildPlan(Input{
+		Host: "https://tokenflux.dev", Key: "sk-x",
+		Slots: map[string]string{"default": "gpt-5.6-terra"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := envOf(plan.Env, "CLAUDE_CODE_MAX_CONTEXT_TOKENS"); got != "1000000" {
+		t.Errorf("user's value = %q, want it kept", got)
+	}
+	if got := envOf(plan.Env, "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT"); got != "" {
+		t.Errorf("must not fight the user's explicit setting, got %q", got)
+	}
+}
+
+// envOf 取注入环境里某个变量的值。
+func envOf(env []string, key string) string {
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok && k == key {
+			return v
+		}
+	}
+	return ""
+}
