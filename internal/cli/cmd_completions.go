@@ -18,7 +18,7 @@ import (
 //     绝不为了补全去发 HTTP。
 //   - **透传边界之后停止补全**。tkr 不知道 harness 自己的 flag，
 //     猜测只会给出错误候选；沉默比乱猜诚实。
-//   - 脚本本身是薄的，逻辑全在 `tkr __complete` 里，这样升级 tkr
+//   - 脚本本身是薄的，逻辑全在 `tf __complete` 里，这样升级 tf
 //     就等于升级补全，用户不必重新安装脚本。
 
 func newCompletionsCommand() *Command {

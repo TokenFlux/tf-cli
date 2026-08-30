@@ -34,20 +34,6 @@ curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 git clone https://github.com/tokenflux/tkr && cd tkr && make build
 ```
 
-### 自建 TokenRouter
-
-网关地址在编译期定死，团队里的人照常 `tf login`，不必知道地址：
-
-```sh
-make build HOST=https://router.acme.com
-```
-
-用官方二进制指向自建网关，则在登录时给出地址，它随这把 Key 一起保存：
-
-```sh
-tf login work --host https://router.acme.com
-```
-
 ## 第一次运行
 
 ```sh
@@ -71,16 +57,16 @@ tf codex -k work                 # 本次使用哪把 Key
 tf claude -- --resume            # -- 之后的参数原样交给 harness
 ```
 
-flag 管这一次，`tf model` 管以后。`-m`、`-e`、`-k` 只影响本次运行，不写入磁盘。
+`-m`、`-e`、`-k` 只影响本次运行，不写入磁盘；持久修改用 `tf model`。
 
-升级：
+## 升级
 
 ```sh
 tf update            # 校验 SHA256 后原子替换
 tf update --check    # 只查看有无新版
 ```
 
-用包管理器安装的不会自替换，只给出对应的升级命令：自替换的结果会在下次
+用包管理器安装的不自替换，只打印对应的升级命令。自替换的结果会在下次
 `npm i -g` 时被换回旧版。
 
 ## 多把 Key 与分组
@@ -110,6 +96,23 @@ work  sk-d61…5b1c
   GPT        codex opencode
 ```
 
+## 自建 TokenRouter
+
+编译期写死网关地址，团队成员照常 `tf login`，不必知道地址：
+
+```sh
+make build HOST=https://router.acme.com
+```
+
+用官方二进制指向自建网关，则在登录时给出地址，它随这把 Key 一起保存：
+
+```sh
+tf login work --host https://router.acme.com
+```
+
+地址优先级：`--host` > 这把 Key 保存的 host > 编译期注入的默认值。
+换一个二进制不会改掉存量 Key 的归属。
+
 ## 文件与环境变量
 
 ```sh
@@ -118,9 +121,6 @@ tf config
 
 - `config.json` 0644：Key 标签、host、harness 绑定与模型槽
 - `credentials.json` 0600：只存密钥本身，权限过宽会被自动收紧
-
-地址的优先级：`--host` > 这把 Key 保存的 host > 编译期注入的默认值。
-换一个二进制不会改掉存量 Key 的归属。
 
 `TKR_API_KEY` 优先于已保存的凭据且不写入磁盘，供容器与 CI 使用。
 `TKR_LANG=zh` 或 `en` 覆盖界面语言，默认跟随系统 locale。
