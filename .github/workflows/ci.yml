@@ -31,6 +31,18 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+      # 发布矩阵里的每个目标都要能编译。
+      #
+      # 这条是补的：Windows 的 syscall.Read 签名不同，本机 go build
+      # 永远看不到，第一次打 tag 时才会在流水线最后一步炸掉。
+      - name: 交叉编译
+        run: |
+          set -eu
+          for t in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do
+            echo "→ $t"
+            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/tkr
+          done
+
       # 零第三方依赖是硬约束，不是偏好。
       - name: 依赖检查
         run: |
