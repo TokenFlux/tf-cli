@@ -40,7 +40,7 @@ func offerCompletions(c *Context, cfg *config.Config) {
 	defer func() { _ = cfg.Save() }()
 
 	idx, err := c.UI.Select(
-		fmt.Sprintf(c.UI.T("装上 %s 的命令补全？", "Install %s completions?"), shell),
+		fmt.Sprintf(c.UI.T("装 %s 的 Tab 补全？", "Install %s completions?"), shell),
 		[]ui.Item{
 			{Label: c.UI.T("装", "yes"), Detail: mustPath(shell)},
 			{Label: c.UI.T("不用", "no")},
