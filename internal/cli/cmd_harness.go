@@ -72,8 +72,8 @@ func runHarnessList(c *Context) error {
 					detail = r.Path
 				}
 			}
-			c.UI.Printf("%s %-10s %-12s %s\n", mark, r.Name, detail,
-				c.UI.Dim(fmt.Sprintf("slots: %v", r.Slots)))
+			c.UI.Printf("%s %s %s %s\n", mark, ui.Pad(r.Name, 10), ui.Pad(detail, 12),
+				c.UI.Dim(fmt.Sprintf("%s %v", c.UI.T("模型槽：", "slots:"), r.Slots)))
 		}
 	})
 	return nil

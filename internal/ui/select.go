@@ -13,6 +13,11 @@ type Item struct {
 	Label  string // 主文本，也是过滤依据
 	Detail string // 右侧灰色补充信息
 	Note   string // 行尾标记，如 ← 当前
+	// Disabled 的项会展示但不能选中，光标也会跳过它。
+	//
+	// 用于「功能存在但当前不可用」：直接不显示会让用户以为没有这个能力，
+	// 显示成可选又会让人白选一次。
+	Disabled bool
 }
 
 // Select 展示一个可用方向键操作的列表，返回选中项下标。
@@ -25,11 +30,26 @@ func (u *UI) Select(title string, items []Item) (int, error) {
 
 	tty, err := openRawTTY()
 	if err != nil {
+		// 降级到编号选择器时，不可用项也必须标出来，
+		// 否则用户会选一个号码然后被拒绝，却不知道为什么。
 		labels := make([]string, len(items))
 		for i, it := range items {
-			labels[i] = strings.TrimSpace(it.Label + "  " + it.Detail)
+			label := strings.TrimSpace(it.Label + "  " + it.Detail)
+			if it.Disabled {
+				label += "  " + u.T("（暂不可用）", "(unavailable)")
+			}
+			labels[i] = label
 		}
-		return u.Choose(title, labels)
+		for {
+			pick, err := u.Choose(title, labels)
+			if err != nil {
+				return 0, err
+			}
+			if !items[pick].Disabled {
+				return pick, nil
+			}
+			u.Warnf("%s", u.T("该选项暂不可用", "that option is not available yet"))
+		}
 	}
 
 	// 终端已进入 raw 模式，此时被信号打断会让终端处于不可用状态，
@@ -51,7 +71,7 @@ func (u *UI) Select(title string, items []Item) (int, error) {
 		tty.Restore()
 	}()
 
-	s := &selector{ui: u, tty: tty, title: title, all: items}
+	s := &selector{ui: u, tty: tty, title: title, all: items, cursor: firstEnabled(items)}
 	return s.run()
 }
 
@@ -69,23 +89,25 @@ type selector struct {
 func (s *selector) run() (int, error) {
 	for {
 		view := s.filtered()
-		if s.cursor >= len(view) {
-			s.cursor = max(0, len(view)-1)
+		// cursor 为 -1 表示「过滤条件变了，重新定位」。
+		if s.cursor < 0 || s.cursor >= len(view) {
+			s.cursor = firstEnabledView(view)
 		}
 		s.draw(view)
 
 		k, r := s.tty.readKey()
 		switch k {
 		case keyUp:
-			if s.cursor > 0 {
-				s.cursor--
+			if n := s.seek(view, s.cursor, -1); n >= 0 {
+				s.cursor = n
 			}
 		case keyDown:
-			if s.cursor < len(view)-1 {
-				s.cursor++
+			if n := s.seek(view, s.cursor, +1); n >= 0 {
+				s.cursor = n
 			}
 		case keyEnter:
-			if len(view) == 0 {
+			// 光标不会停在不可用项上，这里只是兼顾全都不可用的情形。
+			if len(view) == 0 || view[s.cursor].Disabled {
 				continue
 			}
 			s.clear()
@@ -96,11 +118,11 @@ func (s *selector) run() (int, error) {
 		case keyBackspace:
 			if s.query != "" {
 				s.query = s.query[:len(s.query)-1]
-				s.cursor = 0
+				s.cursor = -1 // 过滤后重新定位到首个可选项
 			}
 		case keyRune:
 			s.query += string(r)
-			s.cursor = 0
+			s.cursor = -1
 		}
 	}
 }
@@ -120,6 +142,39 @@ func (s *selector) filtered() []viewItem {
 		}
 	}
 	return out
+}
+
+// seek 沿 step 方向找下一个可选项；没有则返回 -1。
+//
+// 跨过不可用项而不是停在上面：光标停在一个按回车没反应的条目上，
+// 比不能选本身更让人困惑。
+func (s *selector) seek(view []viewItem, from, step int) int {
+	for i := from + step; i >= 0 && i < len(view); i += step {
+		if !view[i].Disabled {
+			return i
+		}
+	}
+	return -1
+}
+
+// firstEnabled 返回首个可选项的下标，全都不可选时返回 0。
+func firstEnabled(items []Item) int {
+	for i, it := range items {
+		if !it.Disabled {
+			return i
+		}
+	}
+	return 0
+}
+
+// firstEnabledView 同上，但作用于过滤后的视图。
+func firstEnabledView(view []viewItem) int {
+	for i, it := range view {
+		if !it.Disabled {
+			return i
+		}
+	}
+	return 0
 }
 
 // window 计算可见区间，保证光标始终在视野内。
@@ -157,7 +212,11 @@ func (s *selector) draw(view []viewItem) {
 		it := view[i]
 		marker := "  "
 		label := it.Label
-		if i == s.cursor {
+		switch {
+		case it.Disabled:
+			// 变灰即可，不需要额外标记 —— 灰掉本身就是「现在不能选」。
+			label = s.ui.Dim(label)
+		case i == s.cursor:
 			marker = s.ui.Bold("❯ ")
 			label = s.ui.Bold(label)
 		}

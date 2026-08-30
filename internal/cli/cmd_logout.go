@@ -11,12 +11,12 @@ import (
 func newLogoutCommand() *Command {
 	return &Command{
 		Name:  "logout",
-		Usage: "tkr logout [<profile>] [--all]",
+		Usage: "tkr logout [<名字>] [--all]",
 		Summary: func(u *ui.UI) string {
 			return u.T("删除本机保存的 API Key", "Remove the API key stored on this machine")
 		},
 		Flags: []Flag{
-			{Name: "all", Kind: KindBool, Desc: "删除全部 profile 的凭据|Remove credentials for every profile"},
+			{Name: "all", Kind: KindBool, Desc: "删除本机保存的所有 Key|Remove every key stored locally"},
 		},
 		Run: runLogout,
 	}
@@ -30,7 +30,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 	if len(c.Args) > 0 {
 		return c.Args[0], nil
 	}
-	if name := c.Flags.String("profile"); name != "" {
+	if name := c.Flags.String("key"); name != "" {
 		return name, nil
 	}
 	if len(stored) == 1 {
@@ -82,7 +82,7 @@ func runLogout(c *Context) error {
 		cred, ok := creds.Get(name)
 		if !ok {
 			return ui.Errf(ui.CodeNotLoggedIn,
-				fmt.Sprintf(c.UI.T("profile %q 没有保存凭据", "profile %q has no stored credential"), name)).
+				fmt.Sprintf(c.UI.T("%q 下没有保存凭据", "%q has no stored credential"), name)).
 				WithHint(c.UI.T("已保存的：", "stored: ") + strings.Join(stored, " "))
 		}
 		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("%s  %s", name, config.Mask(cred.Key))))

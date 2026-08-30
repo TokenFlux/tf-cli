@@ -83,10 +83,10 @@ func runKeys(c *Context) error {
 				if label == "" {
 					label = c.UI.T("可跑", "can run")
 				}
-				c.UI.Printf("  %-10s %s\n", label, strings.Join(sc.Harnesses, " "))
+				c.UI.Printf("  %s %s\n", ui.Pad(label, 10), strings.Join(sc.Harnesses, " "))
 			}
 			if len(r.BoundTo) > 0 {
-				c.UI.Printf("  %-10s %s\n", c.UI.T("已绑定", "bound to"), strings.Join(r.BoundTo, " "))
+				c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("已绑定", "bound to"), 10), strings.Join(r.BoundTo, " "))
 			}
 			if !r.Probed {
 				c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("协议未探测，启动时会自动补上",

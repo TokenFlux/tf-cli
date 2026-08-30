@@ -17,7 +17,7 @@ import (
 func newLoginCommand() *Command {
 	return &Command{
 		Name:  "login",
-		Usage: "tkr login [<profile>]",
+		Usage: "tkr login [<名字>]",
 		Summary: func(u *ui.UI) string {
 			return u.T("保存 API Key", "Store an API key")
 		},
@@ -53,6 +53,10 @@ func runLogin(c *Context) error {
 	}
 	if h := c.Flags.String("host"); h != "" {
 		host = normalizeHost(h)
+	}
+
+	if err := chooseLoginMethod(c); err != nil {
+		return err
 	}
 
 	key, err := readKey(c)
@@ -105,16 +109,16 @@ func runLogin(c *Context) error {
 	}
 
 	c.UI.Emit("login", map[string]any{
-		"profile": keyName, "host": host,
+		"name": keyName, "host": host,
 		"key": config.Mask(key), "models": ids, "protocols": cfg.Keys[keyName].Protocols,
 	}, func() {
-		c.UI.Printf("✓ %s\n", fmt.Sprintf(c.UI.T("已保存到 profile %q", "saved to profile %q"), keyName))
-		c.UI.Printf("  %-8s %s\n", "host", host)
-		c.UI.Printf("  %-8s %s\n", "key", config.Mask(key))
-		c.UI.Printf("  %-8s %d %s\n", c.UI.T("模型", "models"), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
+		c.UI.Printf("✓ %s\n", fmt.Sprintf(c.UI.T("已保存为 Key %q", "saved as key %q"), keyName))
+		c.UI.Printf("  %s %s\n", ui.Pad("host", 8), host)
+		c.UI.Printf("  %s %s\n", ui.Pad("key", 8), config.Mask(key))
+		c.UI.Printf("  %s %d %s\n", ui.Pad(c.UI.T("模型", "models"), 8), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
 		if protos := cfg.Keys[keyName].ProtocolSummary(); len(protos) > 0 {
-			c.UI.Printf("  %-8s %s\n", c.UI.T("协议", "protocols"), c.UI.Dim(strings.Join(protos, " / ")))
-			c.UI.Printf("  %-8s %s\n", c.UI.T("可跑", "can run"), strings.Join(runnable(cfg, keyName), " "))
+			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("协议", "protocols"), 8), c.UI.Dim(strings.Join(protos, " / ")))
+			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("可跑", "can run"), 8), strings.Join(runnable(cfg, keyName), " "))
 		}
 	})
 	return nil
@@ -144,13 +148,13 @@ func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 
 	if !c.UI.Interactive(c.Flags.Bool("yes")) {
 		return "", ui.Errf(ui.CodeUsage, fmt.Sprintf(
-			c.UI.T("profile %q 已保存另一把 Key（%s）", "profile %q already holds a different key (%s)"),
+			c.UI.T("%q 下已存着另一把 Key（%s）", "%q already holds a different key (%s)"),
 			target, config.Mask(existing.Key))).
 			WithHint(fmt.Sprintf("tkr login %s   |   tkr login --force", suggestion))
 	}
 
 	idx, err := c.UI.Select(fmt.Sprintf(
-		c.UI.T("profile %q 已有另一把 Key（%s）", "profile %q already holds a different key (%s)"),
+		c.UI.T("%q 下已存着另一把 Key（%s）", "%q already holds a different key (%s)"),
 		target, config.Mask(existing.Key)), []ui.Item{
 		{Label: fmt.Sprintf(c.UI.T("另存为 %q", "save as %q"), suggestion),
 			Detail: c.UI.T("保留原有凭据", "keeps the existing one")},
@@ -178,7 +182,7 @@ func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 func askProfileName(c *Context, creds *config.Credentials, suggestion string) (string, error) {
 	for {
 		name, err := c.UI.ReadLine(fmt.Sprintf(
-			c.UI.T("profile 名称 [%s]：", "profile name [%s]:"), suggestion))
+			c.UI.T("名字 [%s]：", "name [%s]:"), suggestion))
 		if err != nil {
 			return "", err
 		}
@@ -191,8 +195,8 @@ func askProfileName(c *Context, creds *config.Credentials, suggestion string) (s
 			continue
 		}
 		if old, exists := creds.Get(name); exists {
-			c.UI.Warnf(c.UI.T("profile %q 已存在（%s），保存将覆盖它",
-				"profile %q already exists (%s); saving will replace it"), name, config.Mask(old.Key))
+			c.UI.Warnf(c.UI.T("%q 已存在（%s），保存会覆盖它",
+				"%q already exists (%s); saving will replace it"), name, config.Mask(old.Key))
 		}
 		return name, nil
 	}
@@ -261,6 +265,49 @@ func leadingWord(id string) string {
 		}
 	}
 	return id
+}
+
+// chooseLoginMethod 让用户挑登录方式。
+//
+// 网页导入还没做，但要在这里露出来 —— 直接不显示会让用户以为只能贴 Key，
+// 显示成可选又会白选一次。所以列出来、灰掉、写明原因。
+//
+// 只在真交互且没有别的输入渠道时才问：管道喂 Key、--with-key、非交互
+// 都已经表明了方式，再问一遍纯属打断。
+func chooseLoginMethod(c *Context) error {
+	if c.Flags.Present("with-key") || !c.UI.Interactive(c.Flags.Bool("yes")) {
+		return nil
+	}
+	if !isTerminal(os.Stdin) {
+		return nil // Key 正从管道进来
+	}
+
+	idx, err := c.UI.Select(c.UI.T("怎么登录？", "How do you want to sign in?"), []ui.Item{
+		{
+			Label:  c.UI.T("粘贴 API Key", "Paste an API key"),
+			Detail: c.UI.T("从 tokenflux.dev/keys 复制", "copy one from tokenflux.dev/keys"),
+		},
+		{
+			Label:    c.UI.T("从网页导入", "Import from the web"),
+			Detail:   c.UI.T("在浏览器里授权", "authorise in your browser"),
+			Note:     c.UI.Dim(c.UI.T("v0.5", "v0.5")),
+			Disabled: true,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	_ = idx // 目前只有一个可选项；网页导入落地后在此分流
+	return nil
+}
+
+// isTerminal 报告文件是否是终端。
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 // readKey 依次尝试：管道 stdin → 隐藏输入。

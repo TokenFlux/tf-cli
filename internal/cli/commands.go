@@ -56,10 +56,10 @@ func runConfigPath(c *Context, paths config.Paths) error {
 		"cache_dir":   paths.CacheDir,
 	}
 	c.UI.Emit("config path", data, func() {
-		c.UI.Printf("%-14s %s\n", c.UI.T("配置目录", "config dir"), paths.ConfigDir)
-		c.UI.Printf("%-14s %s\n", c.UI.T("配置文件", "config file"), paths.ConfigFile())
-		c.UI.Printf("%-14s %s\n", c.UI.T("凭据文件", "credentials"), paths.CredentialsFile())
-		c.UI.Printf("%-14s %s\n", c.UI.T("缓存目录", "cache dir"), paths.CacheDir)
+		c.UI.Printf("%s %s\n", ui.Pad(c.UI.T("配置目录", "config dir"), 14), paths.ConfigDir)
+		c.UI.Printf("%s %s\n", ui.Pad(c.UI.T("配置文件", "config file"), 14), paths.ConfigFile())
+		c.UI.Printf("%s %s\n", ui.Pad(c.UI.T("凭据文件", "credentials"), 14), paths.CredentialsFile())
+		c.UI.Printf("%s %s\n", ui.Pad(c.UI.T("缓存目录", "cache dir"), 14), paths.CacheDir)
 	})
 	return nil
 }

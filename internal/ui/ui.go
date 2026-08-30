@@ -168,7 +168,7 @@ func (u *UI) Fail(command string, err error) {
 		})
 		return
 	}
-	fmt.Fprintf(u.Err, "%s %s\n", u.paint("error:", red), e.Message)
+	fmt.Fprintf(u.Err, "%s %s\n", u.paint(u.T("错误：", "error:"), red), e.Message)
 	// 底层原因必须显示。“update failed” 不带原因等于没说，
 	// 而用户没有别的途径知道到底差了什么。
 	if cause := causeText(e); cause != "" {
