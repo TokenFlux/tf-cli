@@ -298,22 +298,22 @@ func TestNoInputAcceptsOldName(t *testing.T) {
 	}
 }
 
-// --all 一把删光，且删完只能回网页重新拿，所以不能静默执行。
-// 问不了的时候要求 --force，而不是默认放行。
-func TestLogoutAllRefusesToWipeSilently(t *testing.T) {
+// 删 Key 不能静默执行：删完只能回网页重新拿。
+// 问不了的时候要求 --force，而不是默认放行。删单把同样如此。
+func TestLogoutRefusesToRemoveSilently(t *testing.T) {
 	// JSON 模式即非交互，等价于管道 / CI 里的处境。
 	c := &Context{UI: ui.New(true), Flags: newValues(), Command: "logout"}
 
-	err := confirmAll(c, []string{"work", "personal"})
+	err := confirm(c, []string{"work", "personal"})
 	if err == nil {
 		t.Fatal("expected a refusal when confirmation is impossible")
 	}
-	if got := ui.AsError(err).Hint; got != "tf logout --all --force" {
+	if got := ui.AsError(err).Hint; got != "tf logout work personal --force" {
 		t.Errorf("hint = %q, want the --force command", got)
 	}
 
 	c.Flags.Set("force", "true")
-	if err := confirmAll(c, []string{"work", "personal"}); err != nil {
+	if err := confirm(c, []string{"work", "personal"}); err != nil {
 		t.Errorf("--force should go through, got %v", err)
 	}
 }

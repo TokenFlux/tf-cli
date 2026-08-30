@@ -28,7 +28,14 @@ vet:
 	go vet ./...
 
 # CI 与提交前的统一入口。
+# check 成功时只留最后一行，失败时 make 自己会以非零退出。
+#
+# 加这一行是因为我习惯用 grep 筛 check 的输出，而 go vet 的
+# 错误既不以 FAIL 也不以 --- 开头 —— 筛掉之后，一次编译不过的测试
+# 一路过了本地、进了提交、红在 CI 上。结论要由命令自己说，不该靠
+# 调用者挑着看。
 check: fmt vet test
+	@echo "check ok"
 
 install:
 	go install -ldflags "$(LDFLAGS)" ./cmd/tf
