@@ -496,7 +496,7 @@ func TestLaunchSurvivesADanglingBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	creds, _ := config.LoadCredentials(paths)
+	creds, _, _ := config.LoadCredentials(paths)
 	if _, ok := creds.Get(""); ok {
 		t.Fatal("an empty key name must never resolve to a credential")
 	}
