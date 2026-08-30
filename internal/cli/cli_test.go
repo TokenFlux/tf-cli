@@ -2,6 +2,7 @@ package cli
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -196,5 +197,25 @@ func TestCompletionHasNoDuplicates(t *testing.T) {
 			t.Errorf("duplicate candidate %q in %v", c, got)
 		}
 		seen[c] = true
+	}
+}
+
+// zsh 脚本里的数组展开必须加引号并用 (@)。
+//
+// 不加的话 zsh 会丢掉末尾的空词：用户按下 tf codex <TAB> 时，
+// __complete 收到的是「codex」而不是「codex ""」，于是以为对方还在敲
+// 命令名，把 codex 又补了一遍 —— 屏幕上出现 tf codex codex。
+//
+// bash 那份用的是 "${COMP_WORDS[@]:...}"，本来就带引号，所以只有 zsh 中招。
+func TestZshScriptQuotesWordArray(t *testing.T) {
+	zsh := completionScripts["zsh"]
+	if !strings.Contains(zsh, `"${(@)words[2,$CURRENT]}"`) {
+		t.Error("zsh script must quote the word array with (@), or the trailing empty word is dropped")
+	}
+	if strings.Contains(zsh, `__complete ${words[`) {
+		t.Error("unquoted array expansion found; zsh drops empty elements")
+	}
+	if !strings.Contains(completionScripts["bash"], `"${COMP_WORDS[@]:1:COMP_CWORD}"`) {
+		t.Error("bash script must quote COMP_WORDS too")
 	}
 }

@@ -317,7 +317,10 @@ complete -o default -F _tf_complete tf ./tf ./bin/tf bin/tf
 	"zsh": `# tf zsh completion. eval "$(tf completions zsh)"
 _tf_complete() {
     local -a candidates
-    candidates=(${(f)"$(${words[1]} __complete ${words[2,$CURRENT]} 2>/dev/null)"})
+    # (@) 加引号：不加的话 zsh 会丢掉末尾的空词，__complete 收到的是
+    # 「tf codex」而不是「tf codex ""」，于是以为你还在敲命令名，
+    # 把 codex 又补了一遍。
+    candidates=(${(f)"$(${words[1]} __complete "${(@)words[2,$CURRENT]}" 2>/dev/null)"})
     compadd -a candidates
 }
 compdef _tf_complete tf
@@ -329,7 +332,7 @@ function __tf_complete
     set -l tokens (commandline -opc) (commandline -ct)
     $tokens[1] __complete $tokens[2..-1] 2>/dev/null
 end
-complete -c tkr -f -a '(__tf_complete)'
+complete -c tf -f -a '(__tf_complete)'
 `,
 }
 
