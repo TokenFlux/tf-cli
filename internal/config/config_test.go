@@ -233,3 +233,25 @@ func TestProtocolsArePerGroupPrefix(t *testing.T) {
 		t.Error("an unprobed prefix must not be filtered out")
 	}
 }
+
+// claude_code_only 分组：协议问不出来，但不等于什么都不支持。
+func TestClaudeCodeOnlyScope(t *testing.T) {
+	m := &KeyMeta{ClaudeCodeOnly: map[string]bool{GroupScope: true}}
+
+	if !m.Probed() {
+		t.Error("a recorded lock is a probe result, not an absence of one")
+	}
+	if !m.LockedToClaudeCode(GroupScope) {
+		t.Error("lock not reported")
+	}
+	// Claude Code 走 messages，所以那条协议算通；其余不通。
+	if !m.SupportsIn(GroupScope, "anthropic_messages") {
+		t.Error("Claude Code speaks anthropic_messages")
+	}
+	if m.SupportsIn(GroupScope, "openai_responses") {
+		t.Error("a claude-code-only group must not admit codex")
+	}
+	if got := m.ProtocolSummary(); len(got) != 1 || got[0] != "claude-code-only" {
+		t.Errorf("summary = %v, want it to name the lock", got)
+	}
+}

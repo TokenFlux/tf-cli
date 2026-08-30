@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
@@ -16,6 +15,10 @@ func newKeysCommand() *Command {
 		Summary: func(u *ui.UI) string {
 			return u.T("列出本机的 Key 及其能跑的 harness", "List local keys and what each can run")
 		},
+		Flags: []Flag{
+			{Name: "refresh", Kind: KindBool,
+				Desc: "重新探测各 Key 的准入情况|Re-probe what each key allows"},
+		},
 		Run: runKeys,
 	}
 }
@@ -28,6 +31,9 @@ func runKeys(c *Context) error {
 	cfg, creds := st.cfg, st.creds
 
 	names := creds.Names()
+	if len(names) > 0 && c.Flags.Bool("refresh") {
+		reprobe(c, cfg, creds, names)
+	}
 	if len(names) == 0 {
 		return ui.Errf(ui.CodeNotLoggedIn, c.UI.T("本机没有保存任何 Key", "no keys are stored on this machine")).
 			WithHint("tkr login")
@@ -55,15 +61,12 @@ func runKeys(c *Context) error {
 
 		// 复合 Key 一把横跨多个分组，各分组能跑的 harness 不同。
 		// 笼统地说这把 Key「能跑 claude codex」是谎报。
-		for _, prefix := range scopesOf(meta) {
-			sc := scope{Prefix: prefix}
-			if meta != nil {
+		for _, prefix := range meta.Scopes() {
+			sc := scope{Prefix: prefix, Harnesses: runnableIn(meta, prefix)}
+			if meta.LockedToClaudeCode(prefix) {
+				sc.Protocols = []string{"claude-code-only"}
+			} else if meta != nil {
 				sc.Protocols = meta.Protocols[prefix]
-			}
-			for _, h := range harness.All {
-				if meta.SupportsIn(prefix, string(h.Protocol)) {
-					sc.Harnesses = append(sc.Harnesses, h.Name)
-				}
 			}
 			r.Scopes = append(r.Scopes, sc)
 		}
@@ -95,17 +98,4 @@ func runKeys(c *Context) error {
 		}
 	})
 	return nil
-}
-
-// scopesOf 列出该 Key 的作用域：复合 Key 是各分组前缀，普通 Key 是单个空串。
-func scopesOf(meta *config.KeyMeta) []string {
-	if meta == nil || len(meta.Protocols) == 0 {
-		return []string{config.GroupScope}
-	}
-	out := make([]string, 0, len(meta.Protocols))
-	for prefix := range meta.Protocols {
-		out = append(out, prefix)
-	}
-	sort.Strings(out)
-	return out
 }

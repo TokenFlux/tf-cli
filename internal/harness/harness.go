@@ -63,11 +63,16 @@ type Harness struct {
 	Bin     string
 	// Protocol 是启动该 harness 所必需的客户端协议。
 	// 分组不允许这个协议时，那把 Key 根本不该出现在候选里。
-	Protocol   Protocol
-	Slots      []Slot
-	Installs   []InstallOption
-	EffortKnob EffortKnob
-	DocsURL    string
+	Protocol Protocol
+	// IsClaudeCode 表示这个 harness 就是 Anthropic 官方的 Claude Code。
+	//
+	// 只有它能通过 claude_code_only 分组的客户端指纹检查。
+	// tkr 绝不伪装成它 —— 见 docs/design/product-decisions.md 第 0 节。
+	IsClaudeCode bool
+	Slots        []Slot
+	Installs     []InstallOption
+	EffortKnob   EffortKnob
+	DocsURL      string
 }
 
 func zhen(zh, en string) func(bool) string {
@@ -87,7 +92,8 @@ var All = []*Harness{
 		Bin:     "claude",
 		// 描述写用途而不写 Anthropic 的档位名：用户面对的是网关上的
 		// 模型列表，“sonnet 档”这类黑话无助于判断该填什么。
-		Protocol: ProtoAnthropicMessages,
+		Protocol:     ProtoAnthropicMessages,
+		IsClaudeCode: true,
 		Slots: []Slot{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			{Name: "fast", Purpose: zhen("后台任务：标题、文件摘要", "background tasks: titles, file summaries")},

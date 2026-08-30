@@ -1,14 +1,10 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"sort"
 	"strings"
-	"time"
 
 	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/gateway"
 	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/launch"
 	"github.com/tokenflux/tkr/internal/model"
@@ -42,7 +38,14 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	}
 	cfg, creds := st.cfg, st.creds
 
-	keyName, err := resolveKey(c, cfg, creds, h)
+	// harness 缺失时按 E 项规则征求用户意见。
+	if hs := h.Detect(); !hs.Installed {
+		if err := EnsureInstalled(c, h); err != nil {
+			return err
+		}
+	}
+
+	keyName, slots, err := resolveTarget(c, cfg, creds, h)
 	if err != nil {
 		return err
 	}
@@ -52,19 +55,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		host = normalizeHost(hv)
 	}
 
-	// harness 缺失时按 E 项规则征求用户意见。
-	if st := h.Detect(); !st.Installed {
-		if err := EnsureInstalled(c, h); err != nil {
-			return err
-		}
-	}
-
-	slots, err := resolveSlots(c, cfg, h, keyName, host, cred.Key)
-	if err != nil {
-		return err
-	}
-
-	effort, err := applyEffort(c, cfg, h, slots, keyName, host, cred.Key)
+	effort, err := applyEffort(c, cfg, h, slots, keyName)
 	if err != nil {
 		return err
 	}
@@ -113,75 +104,179 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	return nil
 }
 
-// resolveSlots 解析该 harness 的全部模型槽。
+// resolveTarget 一次定下用哪把 Key、跑哪些模型。
 //
-// 必须填满所有已声明的槽：留空会让 harness 回落到它的内置默认模型，
-// 而那个模型通常不在用户的分组里，且失败可能是静默的。
-func resolveSlots(c *Context, cfg *config.Config,
-	h *harness.Harness, keyName, host, key string) (map[string]string, error) {
+// 顺序很重要：**先有模型，后有 Key**。用户想的是「我要用哪个模型」，
+// Key 只是它的来源。先挑 Key 再列模型会凭空藏起另一把 Key 的选项 ——
+// ChatGPT 分组同样开着 anthropic_messages，gpt 模型确实能走 Claude Code。
+func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
+	h *harness.Harness) (string, config.ModelSlots, error) {
 
+	hc := cfg.Harness(h.Name)
 	slots := config.ModelSlots{}
-	for k, v := range cfg.Harness(h.Name).Slots {
+	for k, v := range hc.Slots {
 		slots[k] = v
 	}
 
 	// -m 带值：本次覆盖主模型，不写盘。
 	override := c.Flags.String("model")
 	explicitPick := c.Flags.Present("model") && override == ""
-
 	if override != "" {
 		slots[config.SlotDefault] = override
 	}
 
-	missing := false
-	for _, s := range h.Slots {
-		if s.Required && slots[s.Name] == "" {
-			missing = true
+	keys, err := eligibleKeys(c, cfg, creds, h)
+	if err != nil {
+		return "", nil, err
+	}
+
+	keyName := hc.Key
+	if k := c.Flags.String("key"); k != "" {
+		keyName = k
+	}
+
+	// 快路径：绑定仍然有效且槽位齐全，直接走，不联网也不提问。
+	if !explicitPick && override == "" && contains(keys, keyName) && slotsComplete(h, slots) {
+		return keyName, slots, nil
+	}
+
+	cands := gatherCandidates(c, cfg, creds, keys, h)
+	if len(cands) == 0 {
+		return "", nil, noModelError(c, cfg, keys, h)
+	}
+
+	// -m 指定了具体模型：认出它属于哪把 Key。
+	if override != "" {
+		if k, ok := ownerOf(cands, override); ok {
+			keyName = k
 		}
 	}
-	if !missing && !explicitPick {
-		return slots, nil
-	}
 
-	all, err := listModels(c, cfg, keyName, host, key)
-	if err != nil {
-		return nil, err
-	}
-
-	// 同一把 Key 里不同模型可调的端点可能不同：复合 Key 横跨多个分组，
-	// 每个分组的协议准入各不相同。把跑不了的模型在选择器里就滤掉，
-	// 而不是等启动时才 403。
-	ids := filterByProtocol(cfg, keyName, h, all)
-	if len(ids) == 0 {
-		return nil, ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
-			c.UI.T("Key %q 里没有 %s 能用的模型（需要 %s）",
-				"key %q has no model %s can use (needs %s)"), keyName, h.Name, h.Protocol)).
-			WithHint(strings.Join(cfg.Keys[keyName].ProtocolSummary(), " / "))
-	}
-
-	interactive := c.UI.Interactive(c.Flags.Bool("yes"))
-
-	// 首次运行先让用户明确选定主模型，而不是预选一个。
-	//
-	// 目录里存在审查、嵌入、图像类的专用模型，拿它们当主模型会直接
-	// 报错（实测：codex-auto-review 在 opencode 下直接失败）。在拿到价格与
-	// 能力元数据之前，宁可多问一屏，也不替用户瞎猜。
 	if slots[config.SlotDefault] == "" {
-		if !interactive {
-			return nil, ui.Errf(ui.CodeUsage,
+		if !c.UI.Interactive(c.Flags.Bool("yes")) {
+			return "", nil, ui.Errf(ui.CodeUsage,
 				fmt.Sprintf(c.UI.T("%s 尚未选定主模型", "no main model chosen for %s"), h.Name)).
 				WithHint(fmt.Sprintf("tkr model %s --set default=<model>", h.Name))
 		}
-		choices := modelItems(ids)
-		pick, err := c.UI.Select(fmt.Sprintf(c.UI.T("为 %s 选择主模型", "Pick the main model for %s"), h.Name), choices)
-		if err != nil {
-			return nil, err
-		}
-		slots[config.SlotDefault] = ids[pick]
+		explicitPick = true
 	}
 
-	// 其余空槽按名字归位：分组里真有 haiku / opus 时，就不该把三个槽
-	// 塞同一个模型 —— 那会让 Claude Code 的 /model 切换变成空操作。
+	if explicitPick {
+		// 目录里存在审查、嵌入、图像类的专用模型，拿它们当主模型会直接
+		// 报错（实测：codex-auto-review 在 opencode 下失败）。所以不预选。
+		pick, err := c.UI.Select(
+			fmt.Sprintf(c.UI.T("为 %s 选择主模型", "Pick the main model for %s"), h.Name),
+			candidateItems(cands))
+		if err != nil {
+			return "", nil, err
+		}
+		keyName = cands[pick].Key
+		slots[config.SlotDefault] = cands[pick].Model
+	}
+
+	// 其余槽只能取自同一把 Key —— 一次启动只注入一把 Key。
+	own := modelsOf(cands, keyName)
+	if c.UI.Interactive(c.Flags.Bool("yes")) {
+		askSlots(c, h, slots, own)
+	}
+	fill(h, slots, own)
+
+	hc.Slots = slots
+	bindKey(c, cfg, h, keyName)
+	if err := cfg.Save(); err != nil {
+		c.UI.Warnf(c.UI.T("模型选择未能写入配置：%v", "could not persist the model choice: %v"), err)
+	}
+	warnIdenticalSlots(c, h, slots)
+	return keyName, slots, nil
+}
+
+// slotsComplete 报告必填槽是否都已填。
+//
+// 留空会让 harness 回落到它的内置默认模型，而那个模型通常不在用户的
+// 分组里，且失败可能是静默的（实测：opencode 的 small 槽）。
+func slotsComplete(h *harness.Harness, slots config.ModelSlots) bool {
+	for _, s := range h.Slots {
+		if s.Required && slots[s.Name] == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// askSlots 逐个问还没定的非主槽。
+//
+// 只在首次配置该 harness 时问一次，之后不再打扰。不问的代价是实打实的：
+// codex 的 review、claude 的 fast 决定了那部分工作用哪个模型、花多少钱，
+// 而自动归位在分组里没有对应档位时只能回落到主模型。
+//
+// 每个槽的首项是推荐值，直接回车即可，所以「多问几屏」的成本接近于零。
+func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []string) {
+	main := slots[config.SlotDefault]
+	for _, s := range h.Slots {
+		if s.Name == config.SlotDefault || slots[s.Name] != "" {
+			continue
+		}
+
+		suggested := suggestForSlot(s.Name, main, ids)
+		items := []ui.Item{{
+			Label:  model.Parse(suggested).Display(),
+			Detail: slotSuggestionReason(c, suggested, main),
+		}}
+		rest := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if id != suggested {
+				items = append(items, ui.Item{Label: model.Parse(id).Display(), Detail: model.Parse(id).Prefix})
+				rest = append(rest, id)
+			}
+		}
+
+		title := fmt.Sprintf(c.UI.T("%s.%s 用哪个模型？（%s）", "Which model for %s.%s? (%s)"),
+			h.Name, s.Name, s.Purpose(c.UI.Lang == ui.LangZH))
+		pick, err := c.UI.Select(title, items)
+		if err != nil {
+			// 跳过等于接受推荐值，不该因此中断整个启动。
+			slots[s.Name] = suggested
+			continue
+		}
+		if pick == 0 {
+			slots[s.Name] = suggested
+		} else {
+			slots[s.Name] = rest[pick-1]
+		}
+	}
+}
+
+// suggestForSlot 给出某个槽的推荐模型。
+func suggestForSlot(slot, main string, ids []string) string {
+	want := ""
+	switch slot {
+	case config.SlotFast, config.SlotSmall:
+		want = "fast"
+	case config.SlotHeavy:
+		want = "heavy"
+	}
+	if want != "" {
+		for _, id := range ids {
+			if model.GuessTier(id) == want {
+				return id
+			}
+		}
+	}
+	return main
+}
+
+func slotSuggestionReason(c *Context, suggested, main string) string {
+	if suggested == main {
+		return c.UI.T("跟随主模型", "same as the main model")
+	}
+	return c.UI.T("推荐", "recommended")
+}
+
+// fill 给空槽按档位归位。
+//
+// 分组里真有 haiku / opus 时就不该把几个槽塞同一个模型 ——
+// 那会让 harness 内部的模型切换变成空操作，后台任务也会烧主模型的钱。
+func fill(h *harness.Harness, slots config.ModelSlots, ids []string) {
 	for _, s := range h.Slots {
 		if slots[s.Name] != "" {
 			continue
@@ -201,16 +296,36 @@ func resolveSlots(c *Context, cfg *config.Config,
 			}
 		}
 	}
+}
 
-	if !interactive {
-		c.UI.Warnf(c.UI.T("非交互环境，沿用 %s", "non-interactive, using %s"), slots[config.SlotDefault])
+func modelsOf(cands []candidate, key string) []string {
+	var out []string
+	for _, c := range cands {
+		if c.Key == key {
+			out = append(out, c.Model)
+		}
 	}
-	cfg.Harness(h.Name).Slots = slots
-	if err := cfg.Save(); err != nil {
-		c.UI.Warnf(c.UI.T("模型已选定，但写入配置失败：%v", "model chosen, but saving config failed: %v"), err)
+	return out
+}
+
+func ownerOf(cands []candidate, id string) (string, bool) {
+	for _, c := range cands {
+		if c.Model == id {
+			return c.Key, true
+		}
 	}
-	warnIdenticalSlots(c, h, slots)
-	return slots, nil
+	return "", false
+}
+
+// noModelError 说明为什么一个模型都用不了。
+func noModelError(c *Context, cfg *config.Config, keys []string, h *harness.Harness) error {
+	var lines []string
+	for _, k := range keys {
+		lines = append(lines, k+": "+strings.Join(cfg.Keys[k].ProtocolSummary(), " / "))
+	}
+	return ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
+		c.UI.T("没有 %s 能用的模型（需要 %s）", "no model %s can use (needs %s)"), h.Name, h.Protocol)).
+		WithHint(strings.Join(lines, "; "))
 }
 
 // warnIdenticalSlots 在所有槽位指向同一模型时提醒。
@@ -237,7 +352,7 @@ func warnIdenticalSlots(c *Context, h *harness.Harness, slots config.ModelSlots)
 //
 // 优先用模型 ID 变体（如 gemini-3.1-pro-high）：那是分组真正支持的形式，
 // 比把参数交给 harness 再转发更可靠。没有变体时才回落到 harness 的旋钮。
-func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots config.ModelSlots, keyName, host, key string) (string, error) {
+func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots config.ModelSlots, keyName string) (string, error) {
 	effort := c.Flags.String("effort")
 	if effort == "" {
 		return "", nil
@@ -248,7 +363,7 @@ func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots confi
 
 	// 先看分组里有没有该强度的模型变体。有就直接换模型 ——
 	// 那是分组真正支持的形式，比指望 harness 转发参数可靠。
-	if ids, err := listModels(c, cfg, keyName, host, key); err == nil {
+	if ids := cfg.KeyMetaOf(keyName).Models; len(ids) > 0 {
 		variant := model.Ref{Base: base, Effort: effort}.String()
 		if contains(ids, variant) {
 			slots[config.SlotDefault] = variant
@@ -284,75 +399,6 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
-}
-
-// filterByProtocol 只保留该 harness 真能调的模型。
-//
-// 判据是模型 ID 的分组前缀：同一把复合 Key 里，GPT/* 可能允许
-// responses 而 Claude/* 只允许 messages。未探测到的前缀不过滤。
-func filterByProtocol(cfg *config.Config, keyName string, h *harness.Harness, ids []string) []string {
-	meta := cfg.Keys[keyName]
-	if !meta.Probed() {
-		return ids
-	}
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if meta.SupportsIn(model.Parse(id).Prefix, string(h.Protocol)) {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-// modelItems 把模型 ID 变成选择器条目。
-//
-// 复合 Key 下同一个模型会在多个分组里重复出现，且倒率可能相差好几倍，
-// 所以把分组前缀单独成列 —— 否则列表里就是一堆看不出区别的同名项。
-func modelItems(ids []string) []ui.Item {
-	items := make([]ui.Item, 0, len(ids))
-	for _, id := range ids {
-		r := model.Parse(id)
-		items = append(items, ui.Item{Label: r.Display(), Detail: r.Prefix})
-	}
-	return items
-}
-
-// listModels 取模型列表：网络优先，失败时退回 config 里存的那份。
-//
-// 模型列表只有一处真相 —— config.json 里的 keys.<name>.models。
-// 曾经另有一份独立缓存文件，两份数据必然打架（而且要按 Key 分开存，
-// 分错就会串味），合并后这类 bug 从根上没有了。
-func listModels(c *Context, cfg *config.Config, keyName, host, key string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	models, err := gateway.New(host, key).Models(ctx)
-	if err == nil && len(models) > 0 {
-		ids := make([]string, 0, len(models))
-		for _, m := range models {
-			ids = append(ids, m.ID)
-		}
-		sort.Strings(ids)
-		cfg.KeyMetaOf(keyName).Models = ids
-		_ = cfg.Save()
-		return ids, nil
-	}
-
-	// Key 被明确拒绝时不该退回旧数据 —— 那是配置问题，不是网络问题。
-	var apiErr *gateway.APIError
-	if asAPIError(err, &apiErr) && apiErr.InvalidKey() {
-		return nil, ui.Errf(ui.CodeNotLoggedIn,
-			c.UI.T("网关拒绝了这把 Key", "the gateway rejected this key")).
-			WithHint("tkr login").WithCause(err)
-	}
-
-	if stored := cfg.KeyMetaOf(keyName).Models; len(stored) > 0 {
-		c.UI.Warnf("%s", c.UI.T("模型列表取不到，沿用上次的结果", "could not refresh the model list; using the last known one"))
-		return stored, nil
-	}
-	return nil, ui.Errf(ui.CodeNetwork,
-		fmt.Sprintf(c.UI.T("无法取得模型列表：%v", "cannot list models: %v"), err)).
-		WithHint(host)
 }
 
 // exitCodeError 把子进程的退出码原样带回顶层。

@@ -43,15 +43,24 @@ const GroupScope = ""
 type KeyMeta struct {
 	Host      string              `json:"host"`
 	Protocols map[string][]string `json:"protocols,omitempty"`
-	Models    []string            `json:"models,omitempty"`
-	ProbedAt  time.Time           `json:"probed_at,omitempty"`
+	// ClaudeCodeOnly 标记只接受 Claude Code 客户端的分组。
+	//
+	// 这类分组拦的是客户端指纹而不是协议，tkr 自己去问一定被拒，
+	// 所以它的协议集合永远是空的 —— 必须单独记，否则会被读成「什么都不支持」。
+	ClaudeCodeOnly map[string]bool `json:"claude_code_only,omitempty"`
+	Models         []string        `json:"models,omitempty"`
+	ProbedAt       time.Time       `json:"probed_at,omitempty"`
 }
 
 // SupportsIn 报告某个分组前缀是否允许该协议。
 //
 // 未探测过时返回 true：没有证据就不拦，预检只能证伪。
 func (m *KeyMeta) SupportsIn(prefix, proto string) bool {
-	if m == nil || len(m.Protocols) == 0 {
+	if m.LockedToClaudeCode(prefix) {
+		// 协议问不出来，但 Claude Code 走的就是 messages。
+		return proto == "anthropic_messages"
+	}
+	if m == nil || !m.Probed() {
 		return true
 	}
 	allowed, ok := m.Protocols[prefix]
@@ -70,10 +79,10 @@ func (m *KeyMeta) SupportsIn(prefix, proto string) bool {
 //
 // 用于筛选 Key 候选；具体能用哪些模型要再用 SupportsIn 逐个判。
 func (m *KeyMeta) Supports(proto string) bool {
-	if m == nil || len(m.Protocols) == 0 {
+	if m == nil || !m.Probed() {
 		return true
 	}
-	for prefix := range m.Protocols {
+	for _, prefix := range m.Scopes() {
 		if m.SupportsIn(prefix, proto) {
 			return true
 		}
@@ -81,23 +90,57 @@ func (m *KeyMeta) Supports(proto string) bool {
 	return false
 }
 
+// Scopes 列出该 Key 的全部作用域：复合 Key 是各分组前缀，普通 Key 是单个空串。
+func (m *KeyMeta) Scopes() []string {
+	if m == nil {
+		return []string{GroupScope}
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, set := range []map[string]bool{boolKeys(m.Protocols), m.ClaudeCodeOnly} {
+		for p := range set {
+			if !seen[p] {
+				seen[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return []string{GroupScope}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func boolKeys(m map[string][]string) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for k := range m {
+		out[k] = true
+	}
+	return out
+}
+
 // Probed 报告是否有可用的探测结果。
-func (m *KeyMeta) Probed() bool { return m != nil && len(m.Protocols) > 0 }
+func (m *KeyMeta) Probed() bool {
+	return m != nil && (len(m.Protocols) > 0 || len(m.ClaudeCodeOnly) > 0)
+}
+
+// LockedToClaudeCode 报告某个分组是否只接受 Claude Code 客户端。
+func (m *KeyMeta) LockedToClaudeCode(prefix string) bool {
+	return m != nil && m.ClaudeCodeOnly[prefix]
+}
 
 // ProtocolSummary 把探测结果扒平成可展示的行。
 func (m *KeyMeta) ProtocolSummary() []string {
-	if m == nil || len(m.Protocols) == 0 {
+	if m == nil || !m.Probed() {
 		return nil
 	}
-	prefixes := make([]string, 0, len(m.Protocols))
-	for p := range m.Protocols {
-		prefixes = append(prefixes, p)
-	}
-	sort.Strings(prefixes)
-
-	out := make([]string, 0, len(prefixes))
-	for _, p := range prefixes {
+	out := make([]string, 0, len(m.Protocols))
+	for _, p := range m.Scopes() {
 		line := strings.Join(m.Protocols[p], " ")
+		if m.LockedToClaudeCode(p) {
+			line = "claude-code-only"
+		}
 		if p != GroupScope {
 			line = p + ": " + line
 		}
