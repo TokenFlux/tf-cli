@@ -280,7 +280,7 @@ func TestGlobalFlagsBeforeCommand(t *testing.T) {
 // --yes 是 --no-input 的旧名字，两种写法必须落到同一个值上。
 func TestNoInputAcceptsOldName(t *testing.T) {
 	cmd := &Command{Name: "logout"}
-	for _, arg := range []string{"--no-input", "--yes", "-y"} {
+	for _, arg := range []string{"--no-input", "--yes"} {
 		ctx, err := parse(cmd, []string{arg})
 		if err != nil {
 			t.Fatalf("parse(%s): %v", arg, err)
@@ -288,6 +288,13 @@ func TestNoInputAcceptsOldName(t *testing.T) {
 		if !ctx.Flags.Bool("no-input") {
 			t.Errorf("%s did not set no-input", arg)
 		}
+	}
+
+	// -y 不是它的简写：业界 -y 一律是「替我答 yes」，这里语义恰好相反。
+	// 留着等于给脚本作者埋一个语义翻转的坑 —— 同一条命令换个工具跑，
+	// 一个是全部同意，一个是拒绝一切提问。
+	if _, err := parse(cmd, []string{"-y"}); err == nil {
+		t.Error("-y must not be an alias for --no-input")
 	}
 }
 

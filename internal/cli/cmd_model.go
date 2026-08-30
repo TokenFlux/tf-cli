@@ -21,6 +21,7 @@ func newModelCommand() *Command {
 			{Name: "list", Kind: KindBool, Desc: "列出全部 harness 的槽位||List slots for every harness"},
 			{Name: "set", Kind: KindString, Desc: "设置一个槽，形如 slot=model||Set one slot, as slot=model"},
 			{Name: "reset", Kind: KindBool, Desc: "清空该 harness 的槽位||Clear this harness's slots"},
+			{Name: "edit", Kind: KindBool, Desc: "进入槽位编辑器||Open the slot editor"},
 		},
 		Run: runModel,
 	}
@@ -76,11 +77,17 @@ func runModel(c *Context) error {
 		}
 	}
 
-	// 没给任何 flag 且能交互：进编辑器。
+	// 编辑要显式要求。
 	//
-	// 光「看」不「改」是这个命令过去最别扭的地方 —— 想换个模型只能
-	// 靠启动一次，或者手打完整的模型 ID。
-	if !c.Flags.Present("set") && c.UI.Interactive(c.Flags.Bool("no-input")) {
+	// 之前是「能交互就进编辑器，不能就只打印」—— 同一条命令按环境改变
+	// 会不会写盘。脚本里读一次配置和人在终端读一次配置，语义必须相同，
+	// 否则脚本作者读文档时看到的和他跑出来的是两回事。
+	if c.Flags.Bool("edit") {
+		if !c.UI.Interactive(c.Flags.Bool("no-input")) {
+			return ui.Errf(ui.CodeUsage,
+				c.UI.T("编辑器需要终端", "the editor needs a terminal")).
+				WithHint(fmt.Sprintf("tf model %s --set default=<model>", h.Name))
+		}
 		return editSlots(c, st, h)
 	}
 	return showHarnessSlots(c, cfg, h)
@@ -203,7 +210,7 @@ func listModelSlots(c *Context, cfg *config.Config) error {
 		}
 		// 这一屏只能看不能改，得说清楚改在哪儿。
 		c.UI.Logf("%s", c.UI.Dim(c.UI.T(
-			"改模型：tf model <harness>", "to change models: tf model <harness>")))
+			"改模型：tf model <harness> --edit", "to change models: tf model <harness> --edit")))
 	})
 	return nil
 }

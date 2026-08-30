@@ -343,9 +343,14 @@ func readKey(c *Context) (string, error) {
 	}
 
 	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
-		return "", ui.Errf(ui.CodeUsage,
-			c.UI.T("非交互时用管道传 Key", "pipe the key in when non-interactive")).
-			WithHint("echo $KEY | tf login")
+		// 分平台说：Windows 上不是「现在不能交互」，是这条路还不存在。
+		// 说成前者会让人以为换个终端就好了。
+		msg := c.UI.T("非交互时用管道传 Key", "pipe the key in when non-interactive")
+		if !ui.InteractiveSupported {
+			msg = c.UI.T("Windows 上还没有交互界面，请用管道传 Key",
+				"there is no interactive UI on Windows yet; pipe the key in")
+		}
+		return "", ui.Errf(ui.CodeUsage, msg).WithHint("echo $KEY | tf login")
 	}
 
 	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（不回显）：", "Paste your API key (hidden):"))

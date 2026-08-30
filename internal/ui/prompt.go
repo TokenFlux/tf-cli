@@ -26,16 +26,6 @@ func (u *UI) Interactive(assumeYes bool) bool {
 	return !u.JSON && !assumeYes && hasControllingTTY()
 }
 
-// hasControllingTTY 报告能否打开控制终端。
-func hasControllingTTY() bool {
-	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		return false
-	}
-	_ = f.Close()
-	return true
-}
-
 // Choose 展示编号选项并读取选择，返回选中项的下标。
 //
 // 刻意用编号而非方向键：不需要 raw mode，也就没有把用户终端

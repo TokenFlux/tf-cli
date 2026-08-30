@@ -126,7 +126,10 @@ func globalFlags() []Flag {
 		{Name: "host", Kind: KindString, Desc: "覆盖网关地址||Override the gateway host"},
 		// 实现一直是「不提问」，不是「替你答 yes」：需要回答才能继续的
 		// 地方全部报错。名字随实现改，--yes / -y 作为旧名保留。
-		{Name: "no-input", Short: "y", Aliases: []string{"yes"}, Kind: KindBool,
+		// -y 不再是它的简写：业界 -y 一律是「替我答 yes」，而这里的语义
+		// 恰好相反 —— 需要回答就失败。留着这个简写等于给脚本作者埋一个
+		// 语义翻转的坑。--yes 作为旧全名保留，因为它已经写进过文档。
+		{Name: "no-input", Aliases: []string{"yes"}, Kind: KindBool,
 			Desc: "不提问，需要输入时直接失败||Never prompt; fail instead of asking"},
 	}
 }

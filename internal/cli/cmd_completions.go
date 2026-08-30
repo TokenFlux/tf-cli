@@ -269,7 +269,7 @@ func completeModel(rest []string, cur string) []string {
 	}
 	// `--set slot=` 时补槽名；已经带 = 时补模型。
 	if strings.HasPrefix(cur, "-") {
-		return []string{"--set", "--reset", "--list"}
+		return []string{"--edit", "--set", "--reset", "--list"}
 	}
 	if slot, _, found := strings.Cut(cur, "="); found {
 		out := []string{}

@@ -287,6 +287,17 @@ func (s *selector) draw(view []viewItem) {
 		fmt.Fprintf(&b, "  %s\r\n", s.ui.Dim(s.ui.T("无匹配项", "no matches")))
 	}
 
+	// 截断时必须说出来。
+	//
+	// 之前列表滚动是无声的：14 个模型在小窗口里只露出 8 个，用户不知道
+	// 下面还有 —— 提示行只讲「↑↓ 移动」，没讲「移动能看到更多」。
+	// 找不到想要的模型时，人会以为它不在，而不是以为要往下翻。
+	if end-start < len(view) {
+		fmt.Fprintf(&b, "  %s\r\n", s.ui.Dim(fmt.Sprintf(
+			s.ui.T("第 %d-%d 个，共 %d 个", "showing %d-%d of %d"),
+			start+1, end, len(view))))
+	}
+
 	// 提示行跟着状态变：正在过滤时 esc 的含义是清掉过滤，写成「取消」会骗人。
 	esc := s.opt.CancelHint
 	if esc == "" {

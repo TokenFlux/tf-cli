@@ -56,27 +56,33 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 	return stored[idx], nil
 }
 
-// confirmAll 把防呆放在重的那一侧。
+// confirm 在删之前问一句。
 //
-// 删单把还能照名字重新 tf login，--all 删完就只能回网页一把一把重拿。
-func confirmAll(c *Context, stored []string) error {
+// 单把也要问：原来的理由是「--all 删完只能回网页重新拿」，但删单把同样
+// 只能回网页重新拿 —— 本地不留明文备份。而且只有一把 Key 时 pickProfile
+// 会直接选中它，tf logout 一秒删完，中间没有任何一屏。
+//
+// 真正的不对称不在删几把，而在能不能撤销，那一点上两者相同。
+func confirm(c *Context, names []string) error {
 	if c.Flags.Bool("force") {
 		return nil
 	}
-	summary := fmt.Sprintf(c.UI.T("删除全部 %d 把 Key：%s", "remove all %d keys: %s"),
-		len(stored), strings.Join(stored, " "))
-
+	summary := fmt.Sprintf(c.UI.T("删除 %d 把 Key：%s", "remove %d keys: %s"),
+		len(names), strings.Join(names, " "))
+	if len(names) == 1 {
+		summary = fmt.Sprintf(c.UI.T("删除 Key %q", "remove key %q"), names[0])
+	}
 	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return ui.Errf(ui.CodeUsage,
-			c.UI.T("不能提问，不会静默删光", "cannot ask for confirmation, refusing to wipe silently")).
-			WithHint("tf logout --all --force")
+			c.UI.T("不能提问，不会静默删除", "cannot ask for confirmation, refusing to remove silently")).
+			WithHint(strings.TrimSpace("tf logout " + strings.Join(names, " ") + " --force"))
 	}
 
 	// 光标停在第一项，回车等于不删。
 	idx, err := c.UI.Select(summary, []ui.Item{
 		{Label: c.UI.T("取消", "cancel")},
-		{Label: c.UI.T("删除全部", "remove all"),
-			Detail: c.UI.T("删了只能回网页重新拿", "you will have to fetch them from the web again")},
+		{Label: c.UI.T("删除", "remove"),
+			Detail: c.UI.T("删了只能回网页重新拿", "you will have to fetch it from the web again")},
 	})
 	if err != nil {
 		return err
@@ -104,7 +110,7 @@ func runLogout(c *Context) error {
 	var removed []string
 	switch {
 	case c.Flags.Bool("all"):
-		if err := confirmAll(c, stored); err != nil {
+		if err := confirm(c, stored); err != nil {
 			return err
 		}
 		removed = stored
@@ -121,6 +127,9 @@ func runLogout(c *Context) error {
 				WithHint(c.UI.T("已保存的：", "stored: ") + strings.Join(stored, " "))
 		}
 		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("%s  %s", name, config.Mask(cred.Key))))
+		if err := confirm(c, []string{name}); err != nil {
+			return err
+		}
 		creds.Remove(name)
 		removed = []string{name}
 	}

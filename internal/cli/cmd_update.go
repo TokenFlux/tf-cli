@@ -88,7 +88,11 @@ func runUpdate(c *Context) error {
 
 	if err := update.Apply(ctx, client, rel, exe); err != nil {
 		// 目录不可写是最常见的失败，单独给出可执行的下一步。
-		hint := "sudo " + exe + " update"
+		//
+		// 不建议 sudo：装 harness 时代码硬拒提权命令，自更新却把 sudo
+		// 推给用户，同一个产品不能有两套安全观。而且真正的问题是这份
+		// 二进制装在了需要 root 才能写的地方 —— 重装到用户目录才是解法。
+		hint := "curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh"
 		if os.IsPermission(err) {
 			return ui.Errf(ui.CodeInstallFailed,
 				c.UI.T("没有写入权限", "no permission to replace the binary")).

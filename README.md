@@ -10,7 +10,8 @@ tf claude
 ```
 
 v0。三个 harness 均已端到端实测：Claude Code 2.1.251、Codex 0.151.0、opencode 1.18.20。
-Windows 能编译，交互路径未验证。
+Windows 只能非交互跑：选择器、隐藏输入、终端复位都建立在 /dev/tty 与 stty 上。
+用管道传 Key、用 --set 定模型可以工作，交互界面还没做。
 
 ## 安装
 

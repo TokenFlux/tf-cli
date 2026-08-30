@@ -176,6 +176,13 @@ func refreshModels(c *Context, cfg *config.Config, creds *config.Credentials, ke
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
+	// 说一声再等。
+	//
+	// 这里最长会静默 8 秒，而用户刚敲完 tf claude，正等着 harness 起来。
+	// 终端一动不动时，人会以为是卡住了而不是在联网 —— reprobe 尚且打了
+	// 一行「重新检查各 Key…」，拉模型列表却什么都不说。
+	c.UI.Logf("%s", c.UI.Dim(c.UI.T("获取模型列表…", "fetching model list…")))
+
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex

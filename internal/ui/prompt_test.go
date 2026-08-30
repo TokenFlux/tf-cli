@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -61,4 +62,20 @@ func fields(s string) []string {
 		out = append(out, cur)
 	}
 	return out
+}
+
+// 「这台机器现在没有终端」和「这个平台还没做交互」是两回事。
+//
+// 之前 Windows 只是让 hasControllingTTY 恒为 false，用户撞到的是
+// 「非交互，请用管道传 Key」—— 那句话在暗示是他的环境有问题。
+func TestInteractiveSupportedIsPlatformFact(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		if InteractiveSupported {
+			t.Error("windows has no interactive stack yet")
+		}
+		return
+	}
+	if !InteractiveSupported {
+		t.Error("unix builds must report interactive support")
+	}
 }
