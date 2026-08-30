@@ -31,6 +31,13 @@ type UI struct {
 	JSON  bool
 	Color bool
 	TTY   bool
+
+	// JSON 模式下的旁路输出收在这里，随信封一起发出。
+	// “凭据权限已收紧”“模型列表沿用旧的”这类信息直接丢掉，
+	// 会让给机器看的模式反而知道得比人少。
+	warnings []string
+	notes    []string
+	emitted  bool
 }
 
 // New 依据环境构造 UI。jsonMode 来自显式的 --json。
@@ -91,6 +98,7 @@ func (u *UI) Printf(format string, a ...any) {
 // Logf 输出提示性信息。始终走 stderr，保证 stdout 可被安全地重定向。
 func (u *UI) Logf(format string, a ...any) {
 	if u.JSON {
+		u.notes = append(u.notes, fmt.Sprintf(format, a...))
 		return
 	}
 	fmt.Fprintf(u.Err, format+"\n", a...)
@@ -99,6 +107,7 @@ func (u *UI) Logf(format string, a ...any) {
 // Warnf 输出警告，走 stderr。
 func (u *UI) Warnf(format string, a ...any) {
 	if u.JSON {
+		u.warnings = append(u.warnings, fmt.Sprintf(format, a...))
 		return
 	}
 	// 前缀也要跟着 locale 走，否则中文正文顶着英文标签。
@@ -132,10 +141,12 @@ func (u *UI) Bold(s string) string { return u.paint(s, bold) }
 
 // envelope 是 --json 的统一信封。
 type envelope struct {
-	OK      bool       `json:"ok"`
-	Command string     `json:"command"`
-	Data    any        `json:"data,omitempty"`
-	Error   *jsonError `json:"error,omitempty"`
+	OK       bool       `json:"ok"`
+	Command  string     `json:"command"`
+	Data     any        `json:"data,omitempty"`
+	Warnings []string   `json:"warnings,omitempty"`
+	Notes    []string   `json:"notes,omitempty"`
+	Error    *jsonError `json:"error,omitempty"`
 }
 
 type jsonError struct {
@@ -153,22 +164,39 @@ func (u *UI) Emit(command string, data any, human func()) {
 		}
 		return
 	}
+	u.emitted = true
 	enc := json.NewEncoder(u.Out)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(envelope{OK: true, Command: command, Data: data})
+	_ = enc.Encode(envelope{
+		OK: true, Command: command, Data: data,
+		Warnings: u.warnings, Notes: u.notes,
+	})
+	u.warnings, u.notes = nil, nil
+}
+
+// Flush 在命令没有发过任何信封时，把攒下的警告单独发出去。
+func (u *UI) Flush(command string) {
+	if !u.JSON || u.emitted || (len(u.warnings) == 0 && len(u.notes) == 0) {
+		return
+	}
+	u.Emit(command, nil, nil)
 }
 
 // Fail 输出错误。JSON 模式下也保持同一信封，便于其它 agent 消费。
 func (u *UI) Fail(command string, err error) {
 	e := AsError(err)
 	if u.JSON {
+		u.emitted = true
 		enc := json.NewEncoder(u.Out)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(envelope{
-			OK:      false,
-			Command: command,
-			Error:   &jsonError{Code: string(e.Code), Message: e.Message, Hint: e.Hint, Cause: causeText(e)},
+			OK:       false,
+			Command:  command,
+			Warnings: u.warnings,
+			Notes:    u.notes,
+			Error:    &jsonError{Code: string(e.Code), Message: e.Message, Hint: e.Hint, Cause: causeText(e)},
 		})
+		u.warnings, u.notes = nil, nil
 		return
 	}
 	// 分隔符写进译文：中文全角冒号自带间距，再补空格会散开。

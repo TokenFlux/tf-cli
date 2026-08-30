@@ -97,8 +97,12 @@ const (
 	keyUp
 	keyDown
 	keyEnter
+	// keyEscape 是裸 ESC：意思是「退一步」，先清过滤再论退出。
+	keyEscape
+	// keyCancel 是 Ctrl-C / Ctrl-D / 输入结束：意思是「现在就结束」。
 	keyCancel
 	keyBackspace
+	keyClear
 	keyRune
 )
 
@@ -150,10 +154,16 @@ func (t *rawTTY) readKey() (k key, r rune) {
 		return keyEnter, 0
 	case 0x7f, 0x08:
 		return keyBackspace, 0
+	case 0x0e: // Ctrl-N
+		return keyDown, 0
+	case 0x10: // Ctrl-P
+		return keyUp, 0
+	case 0x15: // Ctrl-U
+		return keyClear, 0
 	case 0x1b:
 		intro, ok := t.readByteTimeout()
 		if !ok {
-			return keyCancel, 0 // 后续字节未到，则是裸 ESC
+			return keyEscape, 0 // 后续字节未到，则是裸 ESC
 		}
 		if intro != '[' && intro != 'O' {
 			return keyNone, 0
@@ -176,13 +186,11 @@ func (t *rawTTY) readKey() (k key, r rune) {
 			}
 		}
 		return keyNone, 0
-	case 'k':
-		return keyUp, 0
-	case 'j':
-		return keyDown, 0
-	case 'q':
-		return keyCancel, 0
 	}
+
+	// j / k / q 不能当快捷键：同一个选择器支持直接输入过滤，
+	// 而目录里就有 claude-haiku（带 k）、qwen、kimi。
+	// 不带字母的替代键在上面：Ctrl-P / Ctrl-N。
 
 	if c >= 0x20 {
 		return keyRune, rune(c)

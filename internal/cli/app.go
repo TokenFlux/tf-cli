@@ -44,16 +44,12 @@ func (a *App) Run(argv []string) int {
 	}
 	u := ui.New(jsonMode)
 
-	// 找到第一个非 flag 的 token 作为子命令。
-	cmdIdx := -1
-	for i, s := range argv {
-		if s == "--" {
-			break
-		}
-		if !strings.HasPrefix(s, "-") {
-			cmdIdx = i
-			break
-		}
+	// 子命令之前只允许全局 flag，且它们的值要一并吃掉。
+	// 否则 `tf --key work claude` 里的 work 会被当成子命令。
+	leading, cmdIdx, err := splitGlobals(argv)
+	if err != nil {
+		u.Fail("", err)
+		return 2
 	}
 
 	if cmdIdx == -1 {
@@ -77,7 +73,9 @@ func (a *App) Run(argv []string) int {
 		return 2
 	}
 
-	ctx, err := parse(cmd, argv[cmdIdx+1:])
+	// 前置的全局 flag 当成写在子命令后面一样解析，两种写法因此等价。
+	tail := append(append([]string{}, leading...), argv[cmdIdx+1:]...)
+	ctx, err := parse(cmd, tail)
 	if err != nil {
 		u.Fail(cmd.Name, err)
 		return 2
@@ -99,10 +97,61 @@ func (a *App) Run(argv []string) int {
 		if errors.As(err, &ec) {
 			return ec.code
 		}
+		// 用户按 esc 不是出错，不能红字报一行「错误：已取消」。
+		// 退出码沿用 130（与 Ctrl-C 一致），脚本依然分得清。
+		// JSON 模式仍然给信封：机器需要知道为什么没有结果。
+		if ui.AsError(err).Code == ui.CodeCancelled {
+			if ctx.UI.JSON {
+				ctx.UI.Fail(cmd.Name, err)
+			}
+			return 130
+		}
 		ctx.UI.Fail(cmd.Name, err)
 		return 1
 	}
+	ctx.UI.Flush(cmd.Name)
 	return 0
+}
+
+// splitGlobals 吃掉子命令之前的全局 flag，返回它们与子命令的下标。
+// cmdIdx 为 -1 表示没给子命令。
+func splitGlobals(argv []string) (leading []string, cmdIdx int, err error) {
+	byName := map[string]*Flag{}
+	globals := globalFlags()
+	for i := range globals {
+		f := &globals[i]
+		for _, n := range f.names() {
+			byName[n] = f
+		}
+	}
+
+	for i := 0; i < len(argv); i++ {
+		s := argv[i]
+		if s == "--" {
+			return leading, -1, nil
+		}
+		if !strings.HasPrefix(s, "-") || s == "-" {
+			return leading, i, nil
+		}
+
+		name, _, hasInline := splitFlag(s)
+		f, known := byName[name]
+		if !known {
+			// --version / -v 等由调用方处理；其余未知 flag 留给帮助与报错。
+			leading = append(leading, s)
+			continue
+		}
+		leading = append(leading, s)
+		if f.Kind == KindString && !hasInline {
+			if i+1 >= len(argv) {
+				return nil, -1, ui.Errf(ui.CodeMissingValue,
+					fmt.Sprintf("flag needs a value: %s", s))
+			}
+			i++
+			leading = append(leading, argv[i])
+		}
+	}
+	return leading, -1, nil
 }
 
 func hasFlag(argv []string, name, short string) bool {

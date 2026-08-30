@@ -24,6 +24,19 @@ type Item struct {
 //
 // 无法进入 raw 模式时自动降级为编号选择器 —— 交互降级永远比报错好。
 func (u *UI) Select(title string, items []Item) (int, error) {
+	return u.SelectWith(title, items, SelectOpt{})
+}
+
+// SelectOpt 调整选择器的行为。
+type SelectOpt struct {
+	// CancelHint 是提示行里 esc 那一格的文案。取消在不同界面上的后果不同
+	// （退出启动、退回上一层、结束编辑），提示行必须说的是这一屏的后果。
+	// 留空则为「取消」。
+	CancelHint string
+}
+
+// SelectWith 同 Select，可指定 esc 的说明文案。
+func (u *UI) SelectWith(title string, items []Item, opt SelectOpt) (int, error) {
 	if len(items) == 0 {
 		return 0, Errf(CodeInternal, "no items to select")
 	}
@@ -71,7 +84,7 @@ func (u *UI) Select(title string, items []Item) (int, error) {
 		tty.Restore()
 	}()
 
-	s := &selector{ui: u, tty: tty, title: title, all: items, cursor: firstEnabled(items)}
+	s := &selector{ui: u, tty: tty, title: title, all: items, cursor: firstEnabled(items), opt: opt}
 	return s.run()
 }
 
@@ -84,6 +97,7 @@ type selector struct {
 	cursor int
 	offset int
 	drawn  int
+	opt    SelectOpt
 }
 
 func (s *selector) run() (int, error) {
@@ -112,9 +126,18 @@ func (s *selector) run() (int, error) {
 			}
 			s.clear()
 			return view[s.cursor].index, nil
+		case keyEscape:
+			if s.escape() {
+				continue
+			}
+			s.clear()
+			return 0, Errf(CodeCancelled, s.ui.T("已取消", "cancelled"))
 		case keyCancel:
 			s.clear()
 			return 0, Errf(CodeCancelled, s.ui.T("已取消", "cancelled"))
+		case keyClear:
+			s.query = ""
+			s.cursor = -1
 		case keyBackspace:
 			if s.query != "" {
 				s.query = s.query[:len(s.query)-1]
@@ -125,6 +148,18 @@ func (s *selector) run() (int, error) {
 			s.cursor = -1
 		}
 	}
+}
+
+// escape 处理裸 ESC：先退掉过滤，返回 true 表示已消化。
+//
+// 没这一步的话，打错一个字的唯一出路是退出整个选择器。
+func (s *selector) escape() bool {
+	if s.query == "" {
+		return false
+	}
+	s.query = ""
+	s.cursor = -1
+	return true
 }
 
 type viewItem struct {
@@ -234,9 +269,17 @@ func (s *selector) draw(view []viewItem) {
 		fmt.Fprintf(&b, "  %s\r\n", s.ui.Dim(s.ui.T("无匹配项", "no matches")))
 	}
 
-	fmt.Fprintf(&b, "%s\r\n", s.ui.Dim(s.ui.T(
-		"↑↓ 移动   enter 确认   esc 取消   直接输入可过滤",
-		"↑↓ move   enter select   esc cancel   type to filter")))
+	// 提示行跟着状态变：正在过滤时 esc 的含义是清掉过滤，写成「取消」会骗人。
+	esc := s.opt.CancelHint
+	if esc == "" {
+		esc = s.ui.T("取消", "cancel")
+	}
+	if s.query != "" {
+		esc = s.ui.T("清掉过滤", "clear filter")
+	}
+	fmt.Fprintf(&b, "%s\r\n", s.ui.Dim(fmt.Sprintf(s.ui.T(
+		"↑↓ 移动   enter 确认   esc %s   直接输入可过滤",
+		"↑↓ move   enter select   esc %s   type to filter"), esc)))
 
 	s.drawn = strings.Count(b.String(), "\n")
 	fmt.Fprint(s.tty.f, b.String())

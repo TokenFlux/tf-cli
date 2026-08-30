@@ -11,12 +11,13 @@ import (
 func newLogoutCommand() *Command {
 	return &Command{
 		Name:  "logout",
-		Usage: "tf logout [<名字>] [--all]",
+		Usage: "tf logout [<名字>] [--all] [--force]",
 		Summary: func(u *ui.UI) string {
 			return u.T("删除本机的 Key", "Remove a key stored here")
 		},
 		Flags: []Flag{
 			{Name: "all", Kind: KindBool, Desc: "删除本机保存的所有 Key||Remove every key stored locally"},
+			{Name: "force", Kind: KindBool, Desc: "不提问直接删||Skip the confirmation"},
 		},
 		Run: runLogout,
 	}
@@ -37,7 +38,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 		return stored[0], nil
 	}
 
-	if !c.UI.Interactive(c.Flags.Bool("yes")) {
+	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return "", ui.Errf(ui.CodeUsage,
 			c.UI.T("存了多把 Key，指定删哪一把", "several keys are stored; name the one to remove")).
 			WithHint("tf logout " + strings.Join(stored, " | "))
@@ -53,6 +54,37 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 		return "", err
 	}
 	return stored[idx], nil
+}
+
+// confirmAll 把防呆放在重的那一侧。
+//
+// 删单把还能照名字重新 tf login，--all 删完就只能回网页一把一把重拿。
+func confirmAll(c *Context, stored []string) error {
+	if c.Flags.Bool("force") {
+		return nil
+	}
+	summary := fmt.Sprintf(c.UI.T("删除全部 %d 把 Key：%s", "remove all %d keys: %s"),
+		len(stored), strings.Join(stored, " "))
+
+	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
+		return ui.Errf(ui.CodeUsage,
+			c.UI.T("不能提问，不会静默删光", "cannot ask for confirmation, refusing to wipe silently")).
+			WithHint("tf logout --all --force")
+	}
+
+	// 光标停在第一项，回车等于不删。
+	idx, err := c.UI.Select(summary, []ui.Item{
+		{Label: c.UI.T("取消", "cancel")},
+		{Label: c.UI.T("删除全部", "remove all"),
+			Detail: c.UI.T("删了只能回网页重新拿", "you will have to fetch them from the web again")},
+	})
+	if err != nil {
+		return err
+	}
+	if idx == 0 {
+		return ui.Errf(ui.CodeCancelled, c.UI.T("已取消", "cancelled"))
+	}
+	return nil
 }
 
 func runLogout(c *Context) error {
@@ -72,6 +104,9 @@ func runLogout(c *Context) error {
 	var removed []string
 	switch {
 	case c.Flags.Bool("all"):
+		if err := confirmAll(c, stored); err != nil {
+			return err
+		}
 		removed = stored
 		creds.Clear()
 	default:

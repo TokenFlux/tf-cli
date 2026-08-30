@@ -42,7 +42,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	//
 	// harness 没装都会问「现在安装？」，而安装软件比粘一把 Key 重得多。
 	// 既然那件事值得问，这件事更值得。
-	if len(creds.Names()) == 0 && c.UI.Interactive(c.Flags.Bool("yes")) {
+	if len(creds.Names()) == 0 && c.UI.Interactive(c.Flags.Bool("no-input")) {
 		if err := runLogin(c); err != nil {
 			return err
 		}
@@ -199,7 +199,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	}
 
 	if slots[config.SlotDefault] == "" {
-		if !c.UI.Interactive(c.Flags.Bool("yes")) {
+		if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 			return "", nil, ui.Errf(ui.CodeUsage,
 				fmt.Sprintf(c.UI.T("%s 尚未选定主模型", "no main model chosen for %s"), h.Name)).
 				WithHint(fmt.Sprintf("tf model %s --set default=<model>", h.Name))
@@ -242,8 +242,10 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 
 	// 其余槽只能取自同一把 Key —— 一次启动只注入一把 Key。
 	own := modelsOf(cands, keyName)
-	if !oneShot && c.UI.Interactive(c.Flags.Bool("yes")) {
-		askSlots(c, h, slots, own)
+	if !oneShot && c.UI.Interactive(c.Flags.Bool("no-input")) {
+		if err := askSlots(c, h, slots, own); err != nil {
+			return "", nil, err
+		}
 	}
 	fill(h, slots, own)
 	warnIdenticalSlots(c, h, slots)
@@ -281,7 +283,8 @@ func slotsComplete(h *harness.Harness, slots config.ModelSlots) bool {
 // 而自动归位在分组里没有对应档位时只能回落到主模型。
 //
 // 每个槽的首项是推荐值，直接回车即可，所以「多问几屏」的成本接近于零。
-func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []string) {
+// 也正因为接受推荐值只需回车，esc 就不必兼职「跳过」，能与别处一样只表示取消。
+func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []string) error {
 	main := slots[config.SlotDefault]
 	for _, s := range h.Slots {
 		if s.Name == config.SlotDefault || slots[s.Name] != "" {
@@ -305,9 +308,7 @@ func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []str
 			h.Name, s.Name, s.Purpose(c.UI.Lang == ui.LangZH))
 		pick, err := c.UI.Select(title, items)
 		if err != nil {
-			// 跳过等于接受推荐值，不该因此中断整个启动。
-			slots[s.Name] = suggested
-			continue
+			return err
 		}
 		if pick == 0 {
 			slots[s.Name] = suggested
@@ -315,6 +316,7 @@ func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []str
 			slots[s.Name] = rest[pick-1]
 		}
 	}
+	return nil
 }
 
 // suggestForSlot 给出某个槽的推荐模型。

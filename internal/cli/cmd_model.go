@@ -80,7 +80,7 @@ func runModel(c *Context) error {
 	//
 	// 光「看」不「改」是这个命令过去最别扭的地方 —— 想换个模型只能
 	// 靠启动一次，或者手打完整的模型 ID。
-	if !c.Flags.Present("set") && c.UI.Interactive(c.Flags.Bool("yes")) {
+	if !c.Flags.Present("set") && c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return editSlots(c, st, h)
 	}
 	return showHarnessSlots(c, cfg, h)
@@ -123,17 +123,21 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 		}
 		items = append(items, ui.Item{Label: c.UI.T("完成", "done")})
 
-		pick, err := c.UI.Select(
-			fmt.Sprintf(c.UI.T("%s 的模型槽", "Model slots for %s"), h.Name), items)
+		// 每选一次就已经落盘（bindKey 会写配置），没有「放弃修改」这条路，
+		// 所以 esc 就直说它真正的后果：退出，已改的保留。
+		pick, err := c.UI.SelectWith(
+			fmt.Sprintf(c.UI.T("%s 的模型槽", "Model slots for %s"), h.Name), items,
+			ui.SelectOpt{CancelHint: c.UI.T("退出（已改的保留）", "exit (edits are kept)")})
 		if err != nil || pick == len(items)-1 {
 			break
 		}
 
 		sl := h.Slots[pick]
-		choice, err := c.UI.Select(
+		choice, err := c.UI.SelectWith(
 			fmt.Sprintf(c.UI.T("%s.%s 用哪个模型？（%s）", "Which model for %s.%s? (%s)"),
 				h.Name, sl.Name, sl.Purpose(c.UI.Lang == ui.LangZH)),
-			candidateItems(cands))
+			candidateItems(cands),
+			ui.SelectOpt{CancelHint: c.UI.T("返回槽位列表", "back to the slot list")})
 		if err != nil {
 			continue // 取消只退回列表，不退出编辑器
 		}

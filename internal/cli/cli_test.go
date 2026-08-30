@@ -1,10 +1,12 @@
 package cli
 
 import (
-	"github.com/tokenflux/tkr/internal/config"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/tokenflux/tkr/internal/config"
+	"github.com/tokenflux/tkr/internal/ui"
 )
 
 // 透传规则是 tkr 最容易写错的地方（见 docs/PLAN.md B 项），
@@ -243,5 +245,68 @@ func TestCompletionsNotOfferedNonInteractive(t *testing.T) {
 	offerCompletions(testCtx(), cfg)
 	if cfg.CompletionsAsked {
 		t.Error("must not mark as asked when it never asked")
+	}
+}
+
+// 全局 flag 写在子命令之前也要成立，且它的值不能被当成子命令。
+// `tf --key work claude` 曾经报「未知命令：work」。
+func TestGlobalFlagsBeforeCommand(t *testing.T) {
+	cases := []struct {
+		argv    []string
+		leading []string
+		cmdIdx  int
+	}{
+		{[]string{"--key", "work", "claude"}, []string{"--key", "work"}, 2},
+		{[]string{"--key=work", "claude"}, []string{"--key=work"}, 1},
+		{[]string{"--json", "keys"}, []string{"--json"}, 1},
+		{[]string{"claude"}, nil, 0},
+		{[]string{"--host", "https://x", "-y", "login"}, []string{"--host", "https://x", "-y"}, 3},
+		{[]string{"--help"}, []string{"--help"}, -1},
+	}
+	for _, c := range cases {
+		leading, idx, err := splitGlobals(c.argv)
+		if err != nil {
+			t.Fatalf("splitGlobals(%v): %v", c.argv, err)
+		}
+		if idx != c.cmdIdx {
+			t.Errorf("splitGlobals(%v) cmdIdx = %d, want %d", c.argv, idx, c.cmdIdx)
+		}
+		if !reflect.DeepEqual(leading, c.leading) {
+			t.Errorf("splitGlobals(%v) leading = %#v, want %#v", c.argv, leading, c.leading)
+		}
+	}
+}
+
+// --yes 是 --no-input 的旧名字，两种写法必须落到同一个值上。
+func TestNoInputAcceptsOldName(t *testing.T) {
+	cmd := &Command{Name: "logout"}
+	for _, arg := range []string{"--no-input", "--yes", "-y"} {
+		ctx, err := parse(cmd, []string{arg})
+		if err != nil {
+			t.Fatalf("parse(%s): %v", arg, err)
+		}
+		if !ctx.Flags.Bool("no-input") {
+			t.Errorf("%s did not set no-input", arg)
+		}
+	}
+}
+
+// --all 一把删光，且删完只能回网页重新拿，所以不能静默执行。
+// 问不了的时候要求 --force，而不是默认放行。
+func TestLogoutAllRefusesToWipeSilently(t *testing.T) {
+	// JSON 模式即非交互，等价于管道 / CI 里的处境。
+	c := &Context{UI: ui.New(true), Flags: newValues(), Command: "logout"}
+
+	err := confirmAll(c, []string{"work", "personal"})
+	if err == nil {
+		t.Fatal("expected a refusal when confirmation is impossible")
+	}
+	if got := ui.AsError(err).Hint; got != "tf logout --all --force" {
+		t.Errorf("hint = %q, want the --force command", got)
+	}
+
+	c.Flags.Set("force", "true")
+	if err := confirmAll(c, []string{"work", "personal"}); err != nil {
+		t.Errorf("--force should go through, got %v", err)
 	}
 }

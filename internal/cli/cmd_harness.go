@@ -116,7 +116,7 @@ func EnsureInstalled(c *Context, h *harness.Harness) error {
 		return notInstalledErr(c, h, h.Installs)
 	}
 
-	if !c.UI.Interactive(c.Flags.Bool("yes")) {
+	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return notInstalledErr(c, h, options)
 	}
 

@@ -8,3 +8,6 @@ credentials.json
 *.key
 .env
 .env.*
+
+# 并行 agent 会话的运行时状态
+.opencode/

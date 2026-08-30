@@ -150,7 +150,7 @@ func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 
 	suggestion := suggestKeyName(ids, creds.Names())
 
-	if !c.UI.Interactive(c.Flags.Bool("yes")) {
+	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return "", ui.Errf(ui.CodeUsage, fmt.Sprintf(
 			c.UI.T("%q 下已存着另一把 Key（%s）", "%q already holds a different key (%s)"),
 			target, config.Mask(existing.Key))).
@@ -320,7 +320,7 @@ func leadingWord(id string) string {
 // 只在真交互且没有别的输入渠道时才问：管道喂 Key、--with-key、非交互
 // 都已经表明了方式，再问一遍纯属打断。
 func chooseLoginMethod(c *Context) error {
-	if c.Flags.Present("with-key") || !c.UI.Interactive(c.Flags.Bool("yes")) {
+	if c.Flags.Present("with-key") || !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return nil
 	}
 	if !isTerminal(os.Stdin) {
@@ -366,7 +366,7 @@ func readKey(c *Context) (string, error) {
 		return strings.TrimSpace(line), nil
 	}
 
-	if !c.UI.Interactive(c.Flags.Bool("yes")) {
+	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return "", ui.Errf(ui.CodeUsage,
 			c.UI.T("非交互时用管道传 Key", "pipe the key in when non-interactive")).
 			WithHint("echo $KEY | tf login")

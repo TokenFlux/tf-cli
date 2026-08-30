@@ -33,6 +33,17 @@ type Flag struct {
 	Kind  Kind
 	Desc  string
 	Def   string
+	// Aliases 是兼容用的旧名字，不在帮助里列出。
+	Aliases []string
+}
+
+// names 列出这个 flag 在命令行上的所有写法。
+func (f Flag) names() []string {
+	out := []string{f.Name}
+	if f.Short != "" {
+		out = append(out, f.Short)
+	}
+	return append(out, f.Aliases...)
 }
 
 // Values 保存解析结果。
@@ -92,7 +103,10 @@ func globalFlags() []Flag {
 		{Name: "json", Kind: KindBool, Desc: "以 JSON 输出||Emit JSON output"},
 		{Name: "key", Short: "k", Kind: KindString, Desc: "本次使用哪把 Key||Which stored key to use for this run"},
 		{Name: "host", Kind: KindString, Desc: "覆盖网关地址||Override the gateway host"},
-		{Name: "yes", Short: "y", Kind: KindBool, Desc: "非交互，全部接受默认||Non-interactive, accept defaults"},
+		// 实现一直是「不提问」，不是「替你答 yes」：需要回答才能继续的
+		// 地方全部报错。名字随实现改，--yes / -y 作为旧名保留。
+		{Name: "no-input", Short: "y", Aliases: []string{"yes"}, Kind: KindBool,
+			Desc: "不提问，需要输入时直接失败||Never prompt; fail instead of asking"},
 	}
 }
 
@@ -102,9 +116,8 @@ func parse(cmd *Command, args []string) (*Context, error) {
 	byName := map[string]*Flag{}
 	for i := range flags {
 		f := &flags[i]
-		byName[f.Name] = f
-		if f.Short != "" {
-			byName[f.Short] = f
+		for _, n := range f.names() {
+			byName[n] = f
 		}
 	}
 

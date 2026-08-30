@@ -27,7 +27,7 @@ import (
 // 走的就是同一条规矩。放在 login 末尾：那本来就是配置时刻，
 // 用户正在回答问题，而且一辈子只经历一次。
 func offerCompletions(c *Context, cfg *config.Config) {
-	if cfg.CompletionsAsked || !c.UI.Interactive(c.Flags.Bool("yes")) {
+	if cfg.CompletionsAsked || !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return
 	}
 	shell := currentShell()
@@ -178,7 +178,7 @@ func complete(words []string) []string {
 	case "update":
 		return filter([]string{"--check"}, cur)
 	case "logout":
-		return filter(append(storedKeys(), "--all"), cur)
+		return filter(append(storedKeys(), "--all", "--force"), cur)
 	case "keys":
 		return filter(dedupe(append([]string{"--refresh"}, globalFlagNames()...)), cur)
 	}
@@ -201,7 +201,7 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 		switch strings.TrimLeft(strings.SplitN(w, "=", 2)[0], "-") {
 		case "m", "model", "e", "effort", "k", "key", "host":
 			i++ // 跳过其取值
-		case "json", "yes", "y", "help", "h":
+		case "json", "no-input", "yes", "y", "help", "h":
 		default:
 			return nil // 陌生 flag 即透传起点
 		}
