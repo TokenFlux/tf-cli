@@ -120,8 +120,23 @@ model=gpt-5.4-nano  small=true  agent=title
 实测通过：Kiro 分组 + `claude-opus-4-6` 走 anthropic provider，
 以及 ChatGPT 分组 + `gpt-5.6-sol` 走 openai provider。
 
-偶发：`text part SSE-Keep-Alive not found`（网关保活帧撞上 AI-SDK
-的解析）。重试即可，不在 tkr 的控制范围内。
+### `text part SSE-Keep-Alive not found`（网关 bug，约 1/4 概率）
+
+网关在 `/v1/responses` 流里用**伪造的文本增量事件**做保活：
+
+    {"type":"response.output_text.delta","item_id":"SSE-Keep-Alive",
+     "delta":"\u200b","SSE-Keep-Alive":true}
+
+AI SDK 按 `item_id` 跟踪文本片段，而这个 id 从未通过
+`response.output_item.added` 宣告过，于是直接抛错、整轮失败。
+
+保活应当发 SSE 注释行（`: keepalive`），那是协议里专门为此保留的形式，
+任何解析器都会忽略。**这要在网关侧修**：tkr 不在请求路径上，
+为此建一个本地代理去过滤流会违背「绝不 MITM」的定位，
+代价远大于收益。
+
+顺带发现：ChatGPT 分组的 `instructions` 字段里是完整的 Codex 系统提示词
+—— 该分组是账号型的，网关会代填上游客户端的提示词。
 
 ## Claude Kiro 与 Claude Max 的差别
 

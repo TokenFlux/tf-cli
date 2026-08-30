@@ -62,7 +62,8 @@ func runLaunch(c *Context, h *harness.Harness) error {
 
 	// 协议按本次选定的模型所在分组决定 —— 同一个 harness 在不同分组上
 	// 可能走不同协议，注入配方要跟着变。
-	proto, _ := pickProtocol(cfg.Keys[keyName], model.Parse(slots[config.SlotDefault]).Prefix, h)
+	main := slots[config.SlotDefault]
+	proto, _ := pickProtocolFor(cfg.Keys[keyName], model.Parse(main).Prefix, main, h)
 
 	plan, err := h.BuildPlan(harness.Input{
 		Host: host, Key: cred.Key, Slots: slots, Effort: effort,

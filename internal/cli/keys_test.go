@@ -344,3 +344,37 @@ func TestAllDeniedIsTreatedAsUnknown(t *testing.T) {
 		t.Error("without evidence tkr must not filter the key out")
 	}
 }
+
+// 模型的原生协议优先：网关两种都能翻译，但翻译只会丢信息，
+// 而且 opencode 会照实显示 provider —— 用 openai 跑 claude 模型
+// 界面上写着「OpenAI」，看起来像配错了。
+func TestNativeProtocolWins(t *testing.T) {
+	meta := &config.KeyMeta{Protocols: map[string][]string{
+		config.GroupScope: {"anthropic_messages", "openai_responses"},
+	}}
+	oc, _ := harness.Lookup("opencode")
+
+	got, ok := pickProtocolFor(meta, config.GroupScope, "claude-opus-4-6", oc)
+	if !ok || got != harness.ProtoAnthropicMessages {
+		t.Errorf("claude model → %v, want anthropic_messages", got)
+	}
+	// 非 Claude 模型仍按 harness 的偏好顺序。
+	got, ok = pickProtocolFor(meta, config.GroupScope, "gpt-5.6-sol", oc)
+	if !ok || got != harness.ProtoOpenAIResponses {
+		t.Errorf("gpt model → %v, want openai_responses", got)
+	}
+	// codex 不会 anthropic，Claude 模型也只能走 responses（网关翻译）。
+	cx, _ := harness.Lookup("codex")
+	got, ok = pickProtocolFor(meta, config.GroupScope, "claude-opus-4-6", cx)
+	if !ok || got != harness.ProtoOpenAIResponses {
+		t.Errorf("codex → %v, want openai_responses", got)
+	}
+	// 分组不准入原生协议时回落，不能因为偏好而挑一个跑不通的。
+	only := &config.KeyMeta{Protocols: map[string][]string{
+		config.GroupScope: {"openai_responses"},
+	}}
+	got, ok = pickProtocolFor(only, config.GroupScope, "claude-opus-4-6", oc)
+	if !ok || got != harness.ProtoOpenAIResponses {
+		t.Errorf("fallback → %v, want openai_responses", got)
+	}
+}

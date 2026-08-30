@@ -236,3 +236,17 @@ harness 前缀    tokenflux/ds/deepseek-v3（opencode）/ 原样（claude、code
 （原来的「codex wire_api 兼容边界」已经不用测了——读 `allowed_client_protocols` 即可确定。）
 
 三条都可以做成 `tkr harness test` 的契约用例，以后回归也用它。
+
+## 给后端的诉求（按价值排序）
+
+1. **`/v1/responses` 的保活改用 SSE 注释行。** 现在伪造
+   `response.output_text.delta`（`item_id: "SSE-Keep-Alive"`），
+   AI SDK 会因为该 id 从未宣告而抛错，opencode 约 1/4 的请求整轮失败。
+   改成 `: keepalive` 即可，那是协议为此保留的形式。
+
+2. **`/v1/models` 给出分组。** 现在连 `owned_by` 都没有，
+   客户端只能靠模型集合反推分组，且 Grok 三档模型完全相同、推不出来。
+
+3. **`/api/v1/marketplace/models` 加 `allowed_client_protocols`。**
+   现在 tkr 只能靠发探针、读拒绝文案来反推，文案一改就失灵。
+   `claude_code_only` 同理 —— 那本该是一个字段。

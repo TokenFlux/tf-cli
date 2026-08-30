@@ -74,11 +74,27 @@ func canRun(meta *config.KeyMeta, prefix string, h *harness.Harness) bool {
 // 多数 harness 不止会一种：opencode 两个 provider 都内置，
 // 因此它在只开 anthropic_messages 的分组上照样能跑。
 func pickProtocol(meta *config.KeyMeta, prefix string, h *harness.Harness) (harness.Protocol, bool) {
+	return pickProtocolFor(meta, prefix, "", h)
+}
+
+// pickProtocolFor 在知道具体模型时按模型的原生协议优先。
+//
+// 网关两种协议都能翻译（实测 /v1/responses 打 claude-opus-4-6 确实能用），
+// 但翻译只会丢信息不会补信息 —— 思考块、缓存标记、工具调用的细节都要
+// 过一道映射。而且 opencode 会照实显示 provider：用 openai 跑 claude 模型
+// 界面上写着「OpenAI」，看起来像配错了。
+//
+// 猜错也无害：网关照样翻译。所以这只是偏好排序，不是准入判断。
+func pickProtocolFor(meta *config.KeyMeta, prefix, modelID string, h *harness.Harness) (harness.Protocol, bool) {
 	if meta.LockedToClaudeCode(prefix) {
 		if h.IsClaudeCode {
 			return harness.ProtoAnthropicMessages, true
 		}
 		return "", false
+	}
+	if native := nativeProtocol(modelID); native != "" &&
+		h.Speaks(string(native)) && meta.SupportsIn(prefix, string(native)) {
+		return native, true
 	}
 	for _, p := range h.Protocols {
 		if meta.SupportsIn(prefix, string(p)) {
@@ -86,6 +102,20 @@ func pickProtocol(meta *config.KeyMeta, prefix string, h *harness.Harness) (harn
 		}
 	}
 	return "", false
+}
+
+// nativeProtocol 报告该模型「原生」说哪种协议。认不出来就返回空。
+//
+// 只按模型名判断，不去猜分组的 platform：认错的代价仅仅是多一道翻译，
+// 而为此在客户端建一套推断才是真的得不偿失。
+func nativeProtocol(modelID string) harness.Protocol {
+	if modelID == "" {
+		return ""
+	}
+	if strings.HasPrefix(model.Parse(modelID).Base, "claude-") {
+		return harness.ProtoAnthropicMessages
+	}
+	return ""
 }
 
 // protocolList 列出该 harness 会的协议，用于解释为什么没有 Key 合格。
