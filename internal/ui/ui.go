@@ -37,8 +37,8 @@ type UI struct {
 func New(jsonMode bool) *UI {
 	tty := isTerminal(os.Stdout)
 	return &UI{
-		Out:   os.Stdout,
-		Err:   os.Stderr,
+		Out:   terminalWriter(os.Stdout),
+		Err:   terminalWriter(os.Stderr),
 		Lang:  detectLang(),
 		JSON:  jsonMode,
 		Color: tty && os.Getenv("NO_COLOR") == "" && !jsonMode,

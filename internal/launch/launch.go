@@ -41,6 +41,7 @@ func Run(s Spec) (Result, error) {
 
 	// 必须在子进程动终端之前记下状态。
 	term := captureTerm()
+	term.homeColumn()
 
 	if err := cmd.Start(); err != nil {
 		term.restore(false)

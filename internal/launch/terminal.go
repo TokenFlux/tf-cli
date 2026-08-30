@@ -63,6 +63,19 @@ func (t *termState) restore(killed bool) {
 	}
 }
 
+// homeColumn 把光标拉回行首。
+//
+// 子进程会用绝对列定位画自己的界面（Claude Code 用 \x1b[12G 之类），
+// 却假定起始列是 0。终端若停在别处，整块界面就歪一列或更多。
+//
+// 只发一个 \r，不清屏也不换行 —— 已经在行首时它什么都不做。
+func (t *termState) homeColumn() {
+	if !t.valid {
+		return
+	}
+	_, _ = t.tty.WriteString("\r")
+}
+
 func sttyRun(f *os.File, args ...string) error {
 	cmd := exec.Command("stty", args...)
 	cmd.Stdin = f

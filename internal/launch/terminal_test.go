@@ -69,3 +69,31 @@ func ttyFlags() (string, error) {
 	defer f.Close()
 	return sttyCapture(f, "-a")
 }
+
+// 交给子进程之前必须把光标拉回行首。
+//
+// 子进程用绝对列定位画界面（Claude Code 用 \x1b[12G 之类），却假定
+// 起始列是 0；终端若停在别处，logo 与文字就会错开。
+func TestHomeColumnEmitsCarriageReturn(t *testing.T) {
+	if _, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err != nil {
+		t.Skip("no controlling terminal")
+	}
+	term := captureTerm()
+	if !term.valid {
+		t.Skip("cannot open the terminal")
+	}
+	defer term.restore(false)
+
+	// 只要不 panic、不改动终端设置即可 —— \r 本身没有副作用。
+	before, _ := ttyFlags()
+	term.homeColumn()
+	after, _ := ttyFlags()
+	if before != after {
+		t.Error("homeColumn must not change terminal settings")
+	}
+}
+
+// 没有终端时不能崩。
+func TestHomeColumnWithoutTTYIsSafe(t *testing.T) {
+	(&termState{}).homeColumn()
+}
