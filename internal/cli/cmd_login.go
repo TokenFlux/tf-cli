@@ -245,18 +245,42 @@ func suggestKeyName(ids []string, taken []string) string {
 	case len(prefixes) == 1:
 		best = prefixes[0]
 	default:
-		// 非复合 Key：从模型基名取首词元（gpt-5.6-sol → gpt），取最常见的。
+		// 非复合 Key：从模型基名取首词元（gpt-5.6-sol → gpt）。
+		//
+		// 这里和前缀不是一回事，规则也不该一样：前缀是真实的分组，
+		// 每一个都算数；而词元只是标签，用来描述这把 Key 大体是什么。
+		//
+		// 关键是多数决要有下限。没有下限时少数派也能赢：
+		// {gpt-5.6-sol, codex-auto-review} 会被叫成 codex —— 一个两模型的
+		// 分组按其中的辅助审查模型命名。过半才算「能代表」，
+		// 否则就老实并列，跟复合 Key 一个待遇。
 		counts := map[string]int{}
 		for _, id := range ids {
 			if tok := leadingWord(model.Parse(id).Base); tok != "" {
 				counts[tok]++
 			}
 		}
-		bestN := 0
-		for tok, n := range counts {
-			if n > bestN || (n == bestN && tok < best) {
-				best, bestN = tok, n
+		toks := make([]string, 0, len(counts))
+		for tok := range counts {
+			toks = append(toks, tok)
+		}
+		sort.Slice(toks, func(i, j int) bool {
+			if counts[toks[i]] != counts[toks[j]] {
+				return counts[toks[i]] > counts[toks[j]]
 			}
+			return toks[i] < toks[j]
+		})
+		switch {
+		case len(toks) == 0:
+		case counts[toks[0]]*2 > len(ids):
+			best = toks[0]
+		case len(toks) == 2:
+			best = toks[0] + "+" + toks[1]
+			if toks[1] < toks[0] {
+				best = toks[1] + "+" + toks[0]
+			}
+		default:
+			best = "multi"
 		}
 	}
 	if best == "" {

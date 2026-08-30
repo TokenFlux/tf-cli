@@ -446,3 +446,29 @@ func TestHiddenNoteIsPerGroupForCompositeKeys(t *testing.T) {
 		t.Errorf("the usable group must not be mentioned: %q", out)
 	}
 }
+
+// 多数决必须有下限，否则少数派也能赢。
+//
+// codex-auto-review 是分组里的辅助模型，不能代表分组；没有下限时
+// {gpt-5.6-sol, codex-auto-review} 会被叫成 codex。
+func TestSuggestKeyNameNeedsAMajority(t *testing.T) {
+	cases := []struct {
+		ids  []string
+		want string
+	}{
+		// 过半才算能代表这把 Key。
+		{[]string{"gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "codex-auto-review"}, "gpt"},
+		// 势均力敌就老实并列，跟复合 Key 一个待遇。
+		{[]string{"gpt-5.6-sol", "codex-auto-review"}, "codex+gpt"},
+		// 只有它，那它就是全部 —— 这时叫 codex 是对的。
+		{[]string{"codex-auto-review"}, "codex"},
+		// 三家分立，谁都代表不了。
+		{[]string{"gpt-5.4", "claude-opus-5", "gemini-3.1-pro"}, "multi"},
+		{[]string{"claude-opus-5", "claude-sonnet-5"}, "claude"},
+	}
+	for _, tc := range cases {
+		if got := suggestKeyName(tc.ids, nil); got != tc.want {
+			t.Errorf("suggestKeyName(%v) = %q, want %q", tc.ids, got, tc.want)
+		}
+	}
+}
