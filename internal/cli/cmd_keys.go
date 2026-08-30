@@ -12,7 +12,7 @@ func newKeysCommand() *Command {
 		Name:  "keys",
 		Usage: "tkr keys",
 		Summary: func(u *ui.UI) string {
-			return u.T("列出本机的 Key 及其可用的 harness", "List local keys and what each can run")
+			return u.T("列出本机的 Key", "List the keys stored here")
 		},
 		Flags: []Flag{
 			{Name: "refresh", Kind: KindBool,
@@ -82,8 +82,7 @@ func runKeys(c *Context) error {
 				c.UI.Printf("  %s %s\n", ui.Pad(label, 10), strings.Join(sc.Harnesses, " "))
 			}
 			if !r.Probed {
-				c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("尚未检查，启动时会自动补上",
-					"not checked yet; will be filled in at launch")))
+				c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T("启动时自动检查", "checked at launch")))
 			}
 		}
 	})

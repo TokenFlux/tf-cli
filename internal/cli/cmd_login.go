@@ -368,7 +368,7 @@ func readKey(c *Context) (string, error) {
 			WithHint("echo $KEY | tkr login")
 	}
 
-	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（输入不回显）：", "Paste your API key (input hidden):"))
+	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（不回显）：", "Paste your API key (hidden):"))
 	if err != nil {
 		// ui 层的哨兵错误只有英文，是底层措辞；本地化只在命令层做，
 		// 直接抛上去会让中文界面顶着一句英文。

@@ -35,7 +35,7 @@ func newConfigCommand() *Command {
 		Name:  "config",
 		Usage: "tkr config",
 		Summary: func(u *ui.UI) string {
-			return u.T("显示配置与凭据文件的位置", "Show where config and credentials live")
+			return u.T("显示配置文件位置", "Show where the files live")
 		},
 		Run: func(c *Context) error {
 			paths, err := config.DefaultPaths()

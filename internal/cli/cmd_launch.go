@@ -244,17 +244,15 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	fill(h, slots, own)
 	warnIdenticalSlots(c, h, slots)
 
+	// -m/-e/-k 不写盘，这本来就是 flag 该有的样子，不必每次声明一遍。
 	if oneShot {
-		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf(
-			c.UI.T("仅本次生效，固化用 tkr model %s", "just this run — to keep it: tkr model %s"),
-			h.Name)))
 		return keyName, slots, nil
 	}
 
 	hc.Slots = slots
 	bindKey(c, cfg, h, keyName)
 	if err := cfg.Save(); err != nil {
-		c.UI.Warnf(c.UI.T("模型选择没能写进配置：%v", "could not save the model choice: %v"), err)
+		c.UI.Warnf(c.UI.T("模型选择未保存：%v", "model choice not saved: %v"), err)
 	}
 	return keyName, slots, nil
 }
@@ -393,7 +391,7 @@ func noModelError(c *Context, cfg *config.Config, keys []string, h *harness.Harn
 		lines = append(lines, k+": "+strings.Join(cfg.Keys[k].ProtocolSummary(), " / "))
 	}
 	return ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
-		c.UI.T("没有 %s 能用的模型（需要 %s）", "no model %s can use (needs %s)"), h.Name, protocolList(h))).
+		c.UI.T("%s 没有可用模型（需要 %s）", "no model %s can use (needs %s)"), h.Name, protocolList(h))).
 		WithHint(strings.Join(lines, "; "))
 }
 

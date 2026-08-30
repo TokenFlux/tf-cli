@@ -15,7 +15,7 @@ func newModelCommand() *Command {
 		Name:  "model",
 		Usage: "tkr model [<harness>] [--set slot=model ...] [--reset] [--list]",
 		Summary: func(u *ui.UI) string {
-			return u.T("查看与修改各 harness 的模型槽", "Inspect and change per-harness model slots")
+			return u.T("查看与修改模型槽", "Inspect and change model slots")
 		},
 		Flags: []Flag{
 			{Name: "list", Kind: KindBool, Desc: "列出全部 harness 的槽位||List slots for every harness"},
@@ -229,7 +229,7 @@ func printSlots(c *Context, slots config.ModelSlots, h *harness.Harness) {
 		if v == "" {
 			v = c.UI.T("未配置", "unset")
 			if s.Required {
-				v = c.UI.T("未配置（启动时会询问）", "unset (will ask at launch)")
+				v = c.UI.T("启动时询问", "asked at launch")
 			}
 		} else {
 			v = model.Parse(v).Display()

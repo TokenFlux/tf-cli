@@ -13,7 +13,7 @@ func newLogoutCommand() *Command {
 		Name:  "logout",
 		Usage: "tkr logout [<名字>] [--all]",
 		Summary: func(u *ui.UI) string {
-			return u.T("删除本机保存的 API Key", "Remove the API key stored on this machine")
+			return u.T("删除本机的 Key", "Remove a key stored here")
 		},
 		Flags: []Flag{
 			{Name: "all", Kind: KindBool, Desc: "删除本机保存的所有 Key||Remove every key stored locally"},
@@ -39,7 +39,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 
 	if !c.UI.Interactive(c.Flags.Bool("yes")) {
 		return "", ui.Errf(ui.CodeUsage,
-			c.UI.T("本机存了多把 Key，指定删哪一把", "several keys are stored; say which one to remove")).
+			c.UI.T("存了多把 Key，指定删哪一把", "several keys are stored; name the one to remove")).
 			WithHint("tkr logout " + strings.Join(stored, " | "))
 	}
 
@@ -118,8 +118,8 @@ func runLogout(c *Context) error {
 			strings.Join(removed, ", ")))
 		// 必须说清楚：删本地文件不等于吊销 Key。
 		c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T(
-			"这只删除了本机保存的副本，Key 在服务端依然有效。要真正吊销请到：",
-			"this only deletes the local copy; the key remains valid server-side. To revoke it:")))
+			"服务端的 Key 仍然有效，吊销请到：",
+			"the key still works server-side; revoke it at:")))
 		c.UI.Printf("  %s\n", c.UI.Dim(host+"/keys"))
 	})
 	return nil

@@ -14,7 +14,7 @@ func newHarnessCommand() *Command {
 		Name:  "harness",
 		Usage: "tkr harness [list|install <name>]",
 		Summary: func(u *ui.UI) string {
-			return u.T("查看与安装可启动的 harness", "Inspect and install supported harnesses")
+			return u.T("查看与安装 harness", "Inspect and install harnesses")
 		},
 		Run: func(c *Context) error {
 			action := "list"
