@@ -147,7 +147,9 @@ func TestSuggestKeyName(t *testing.T) {
 		{[]string{"gpt-5.4"}, []string{"gpt", "gpt-2"}, "gpt-3"},
 		{nil, nil, "key"},
 		// 复合 Key：分组前缀本身就是最好的名字。
-		{[]string{"GPT/gpt-5.4", "GPT/gpt-5.5", "Claude/claude-opus-5"}, nil, "gpt"},
+		// 横跨两个分组时两个都要出现 —— 这里原本断言的是「模型多的那个赢」，
+		// 那会把一把 gpt+ccmax 的 Key 叫成 ccmax，用户会当成纯 Claude Max。
+		{[]string{"GPT/gpt-5.4", "GPT/gpt-5.5", "Claude/claude-opus-5"}, nil, "claude+gpt"},
 	}
 	for _, c := range cases {
 		if got := suggestKeyName(c.ids, c.taken); got != c.want {

@@ -302,7 +302,7 @@ func TestHiddenKeysAreExplained(t *testing.T) {
 	c := &Context{UI: ui.New(false), Flags: newValues()}
 	c.UI.Err = &buf
 
-	noteHiddenKeys(c, cfg, []string{"gpt", "max"}, []string{"gpt"}, oc)
+	noteHiddenKeys(c, cfg, []string{"gpt", "max"}, nil, oc)
 
 	out := buf.String()
 	if !strings.Contains(out, "max") {
@@ -376,5 +376,73 @@ func TestNativeProtocolWins(t *testing.T) {
 	got, ok = pickProtocolFor(only, config.GroupScope, "claude-opus-4-6", oc)
 	if !ok || got != harness.ProtoOpenAIResponses {
 		t.Errorf("fallback → %v, want openai_responses", got)
+	}
+}
+
+// 复合 Key 横跨多个分组，绝不能只按其中一个命名。
+//
+// 按「模型最多的分组」命名会把一把 gpt+ccmax 的复合 Key 叫成 ccmax，
+// 用户会当成那把纯 Claude Max —— 而两者的倍率、能跑的 harness 全然不同。
+func TestSuggestKeyNameForCompositeKeys(t *testing.T) {
+	cases := []struct {
+		name string
+		ids  []string
+		want string
+	}{
+		{"两个分组按字典序拼接", []string{
+			"ccmax/claude-opus-5", "ccmax/claude-sonnet-5", "ccmax/claude-fable-5",
+			"gpt/gpt-5.4", "gpt/gpt-5.6-sol",
+		}, "ccmax+gpt"},
+		{"单分组直接用前缀", []string{"kiro/claude-opus-5"}, "kiro"},
+		{"三个以上不堆名字", []string{
+			"a/m1", "b/m2", "c/m3", "d/m4",
+		}, "multi"},
+		{"非复合 Key 取模型首词元", []string{
+			"gpt-5.4", "gpt-5.6-sol", "codex-auto-review",
+		}, "gpt"},
+		{"认不出来时兜底", []string{}, "key"},
+	}
+	for _, tc := range cases {
+		if got := suggestKeyName(tc.ids, nil); got != tc.want {
+			t.Errorf("%s: suggestKeyName(%v) = %q, want %q", tc.name, tc.ids, got, tc.want)
+		}
+	}
+
+	// 重名时加序号，不能覆盖已有的 Key。
+	if got := suggestKeyName([]string{"kiro/claude-opus-5"}, []string{"kiro"}); got != "kiro-2" {
+		t.Errorf("taken name → %q, want kiro-2", got)
+	}
+}
+
+// 复合 Key 的准入是按分组的：一把 gpt+ccmax 的 Key 对 opencode 完全合格，
+// 但其中的 ccmax 模型仍然一个都用不了。说明必须指到分组，
+// 否则用户不知道该去改哪一半。
+func TestHiddenNoteIsPerGroupForCompositeKeys(t *testing.T) {
+	dir := t.TempDir()
+	cfg, _ := config.Load(config.Paths{ConfigDir: dir, CacheDir: dir})
+	meta := cfg.KeyMetaOf("combo")
+	meta.Models = []string{
+		"gpt/gpt-5.4", "gpt/gpt-5.6-sol",
+		"ccmax/claude-opus-5", "ccmax/claude-sonnet-5", "ccmax/claude-fable-5",
+	}
+	meta.Protocols = map[string][]string{"gpt": {"openai_responses"}}
+	meta.ClaudeCodeOnly = map[string]bool{"ccmax": true}
+
+	oc, _ := harness.Lookup("opencode")
+	var buf bytes.Buffer
+	c := &Context{UI: ui.New(false), Flags: newValues()}
+	c.UI.Err = &buf
+
+	noteHiddenKeys(c, cfg, []string{"combo"}, nil, oc)
+
+	out := buf.String()
+	if !strings.Contains(out, "ccmax") {
+		t.Errorf("must name the group, not just the key: %q", out)
+	}
+	if !strings.Contains(out, "3") {
+		t.Errorf("must count only that group's models: %q", out)
+	}
+	if strings.Contains(out, "gpt") {
+		t.Errorf("the usable group must not be mentioned: %q", out)
 	}
 }

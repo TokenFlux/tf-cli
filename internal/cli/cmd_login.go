@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/config"
@@ -222,23 +223,40 @@ func validProfileName(s string) bool {
 // 模型名的首词元往往就是分组的性格（claude-opus-5 → claude），
 // 比让用户现想一个名字要强。
 func suggestKeyName(ids []string, taken []string) string {
-	counts := map[string]int{}
+	// 复合 Key 的分组前缀就是最好的名字来源。先看有几个分组。
+	seen := map[string]bool{}
+	var prefixes []string
 	for _, id := range ids {
-		r := model.Parse(id)
-		// 复合 Key 的分组前缀本身就是最好的名字来源；
-		// 否则从模型基名取首词元（gpt-5.6-sol → gpt）。
-		tok := strings.ToLower(r.Prefix)
-		if tok == "" {
-			tok = leadingWord(r.Base)
-		}
-		if tok != "" {
-			counts[tok]++
+		if p := strings.ToLower(model.Parse(id).Prefix); p != "" && !seen[p] {
+			seen[p] = true
+			prefixes = append(prefixes, p)
 		}
 	}
-	best, bestN := "", 0
-	for tok, n := range counts {
-		if n > bestN || (n == bestN && tok < best) {
-			best, bestN = tok, n
+	sort.Strings(prefixes)
+
+	best := ""
+	switch {
+	// 横跨多个分组时绝不能只取其中一个 —— 按「模型最多的分组」命名会把
+	// 一把 gpt+ccmax 的复合 Key 叫成 ccmax，用户会当成那把纯 Claude Max。
+	case len(prefixes) > 2:
+		best = "multi"
+	case len(prefixes) == 2:
+		best = prefixes[0] + "+" + prefixes[1]
+	case len(prefixes) == 1:
+		best = prefixes[0]
+	default:
+		// 非复合 Key：从模型基名取首词元（gpt-5.6-sol → gpt），取最常见的。
+		counts := map[string]int{}
+		for _, id := range ids {
+			if tok := leadingWord(model.Parse(id).Base); tok != "" {
+				counts[tok]++
+			}
+		}
+		bestN := 0
+		for tok, n := range counts {
+			if n > bestN || (n == bestN && tok < best) {
+				best, bestN = tok, n
+			}
 		}
 	}
 	if best == "" {

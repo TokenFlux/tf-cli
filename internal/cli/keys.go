@@ -378,35 +378,60 @@ func runnableIn(meta *config.KeyMeta, prefix string) []string {
 	return out
 }
 
-// noteHiddenKeys 说明哪些 Key 的模型没有出现在候选里，以及为什么。
+// noteHiddenKeys 说明哪些模型没有出现在候选里，以及为什么。
 //
 // 静默过滤是最难排查的一种行为：用户看到的是「我的模型不见了」，
 // 而没有任何线索指向原因。能藏就必须能解释。
-func noteHiddenKeys(c *Context, cfg *config.Config, all, used []string, h *harness.Harness) {
+//
+// 粒度必须是「Key + 分组」而不是整把 Key：复合 Key 横跨多个分组，
+// 各自的准入不同 —— 一把 gpt+ccmax 的 Key 对 opencode 完全合格，
+// 但其中 8 个 ccmax 模型仍然一个都用不了。
+func noteHiddenKeys(c *Context, cfg *config.Config, all, _ []string, h *harness.Harness) {
+	type miss struct {
+		key, prefix, why string
+		n                int
+	}
+	var out []miss
+
 	for _, name := range all {
-		if contains(used, name) {
-			continue
-		}
 		meta := cfg.Keys[name]
-		n := len(meta.Models)
-		if n == 0 {
+		if meta == nil || !meta.Probed() {
 			continue
 		}
-
-		var why string
-		switch {
-		case meta.LockedToClaudeCode(config.GroupScope):
-			why = c.UI.T("该分组只接受 Claude Code 客户端",
-				"that group only accepts the Claude Code client")
-		default:
-			why = fmt.Sprintf(c.UI.T("该分组不允许 %s 需要的协议（%s）",
-				"that group does not allow what %s needs (%s)"), h.Name, protocolList(h))
+		counts := map[string]int{}
+		for _, id := range meta.Models {
+			counts[model.Parse(id).Prefix]++
 		}
+		prefixes := make([]string, 0, len(counts))
+		for p := range counts {
+			prefixes = append(prefixes, p)
+		}
+		sort.Strings(prefixes)
 
+		for _, prefix := range prefixes {
+			if canRun(meta, prefix, h) {
+				continue
+			}
+			why := fmt.Sprintf(c.UI.T("该分组不允许 %s 需要的协议（%s）",
+				"that group does not allow what %s needs (%s)"), h.Name, protocolList(h))
+			if meta.LockedToClaudeCode(prefix) {
+				why = c.UI.T("该分组只接受 Claude Code 客户端",
+					"that group only accepts the Claude Code client")
+			}
+			out = append(out, miss{key: name, prefix: prefix, why: why, n: counts[prefix]})
+		}
+	}
+
+	for _, m := range out {
+		// 复合 Key 要指到分组，否则用户不知道该去改哪一半。
+		where := fmt.Sprintf("%q", m.key)
+		if m.prefix != "" {
+			where = fmt.Sprintf("%q (%s)", m.key, m.prefix)
+		}
 		if c.UI.Lang == ui.LangZH {
-			c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("已隐藏 Key %q 的 %d 个模型：%s", name, n, why)))
+			c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("已隐藏 %s 的 %d 个模型：%s", where, m.n, m.why)))
 		} else {
-			c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("hiding %d models from key %q: %s", n, name, why)))
+			c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("hiding %d models from %s: %s", m.n, where, m.why)))
 		}
 	}
 }
