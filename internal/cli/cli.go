@@ -55,6 +55,15 @@ func (v *Values) Bool(name string) bool { return v.set[name] == "true" }
 // 用于区分 `-m`（出现但无值）与完全没写 `-m`。
 func (v *Values) Present(name string) bool { return v.present[name] }
 
+// Set 让交互流程能补上没在命令行给出的值。
+//
+// 例如 login 里问出来的自建网关地址：问到之后写回 host，
+// 后面的代码就不必区分「命令行给的」还是「问出来的」。
+func (v *Values) Set(name, value string) {
+	v.set[name] = value
+	v.present[name] = true
+}
+
 // Context 传给命令的执行上下文。
 type Context struct {
 	UI      *ui.UI

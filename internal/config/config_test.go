@@ -255,3 +255,26 @@ func TestClaudeCodeOnlyScope(t *testing.T) {
 		t.Errorf("summary = %v, want it to name the lock", got)
 	}
 }
+
+// DefaultHost 必须是变量而不是常量，否则 -X 注入不进去。
+//
+// 自建 TokenRouter 的地址属于部署方的决定：部署方构建一次，
+// 团队里的人照常 tkr login。把它做成登录时的提问，等于向每个人
+// 转嫁一个他们答不上来的部署问题。
+func TestDefaultHostIsBuildTimeInjectable(t *testing.T) {
+	orig := DefaultHost
+	defer func() { DefaultHost = orig }()
+
+	// 能赋值即证明它是 var；常量在这一行就编译不过。
+	DefaultHost = "https://router.acme.com"
+
+	cfg := &Config{Keys: map[string]*KeyMeta{}}
+	if got := cfg.HostOf("nobody"); got != "https://router.acme.com" {
+		t.Errorf("HostOf fell back to %q, want the injected host", got)
+	}
+	// 已保存的 host 仍然优先：换二进制不该改掉存量 Key 的归属。
+	cfg.Keys["kept"] = &KeyMeta{Host: "https://tokenflux.dev"}
+	if got := cfg.HostOf("kept"); got != "https://tokenflux.dev" {
+		t.Errorf("stored host = %q, want it to win over the build-time default", got)
+	}
+}

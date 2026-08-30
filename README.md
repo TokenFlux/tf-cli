@@ -34,6 +34,20 @@ curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 git clone https://github.com/tokenflux/tkr && cd tkr && make build
 ```
 
+### 自建 TokenRouter
+
+网关地址在编译期定死，团队里的人照常 `tkr login`，不必知道地址：
+
+```sh
+make build HOST=https://router.acme.com
+```
+
+用官方二进制指向自建网关，则在登录时给出地址，它随这把 Key 一起保存：
+
+```sh
+tkr login work --host https://router.acme.com
+```
+
 ## 第一次运行
 
 ```sh
@@ -104,6 +118,9 @@ tkr config
 
 - `config.json` 0644：Key 标签、host、harness 绑定与模型槽
 - `credentials.json` 0600：只存密钥本身，权限过宽会被自动收紧
+
+地址的优先级：`--host` > 这把 Key 保存的 host > 编译期注入的默认值。
+换一个二进制不会改掉存量 Key 的归属。
 
 `TKR_API_KEY` 优先于已保存的凭据且不写入磁盘，供容器与 CI 使用。
 `TKR_LANG=zh` 或 `en` 覆盖界面语言，默认跟随系统 locale。

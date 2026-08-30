@@ -368,7 +368,15 @@ func readKey(c *Context) (string, error) {
 			WithHint("echo $KEY | tkr login")
 	}
 
-	return c.UI.ReadSecret(c.UI.T("粘贴 API Key（输入不回显）：", "Paste your API key (input hidden):"))
+	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（输入不回显）：", "Paste your API key (input hidden):"))
+	if err != nil {
+		// ui 层的哨兵错误只有英文，是底层措辞；本地化只在命令层做，
+		// 直接抛上去会让中文界面顶着一句英文。
+		return "", ui.Errf(ui.CodeUsage,
+			c.UI.T("隐藏输入需要终端", "hidden input needs a terminal")).
+			WithHint("echo $KEY | tkr login")
+	}
+	return key, nil
 }
 
 // normalizeHost 归一化用户输入的 host。

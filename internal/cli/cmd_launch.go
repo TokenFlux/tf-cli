@@ -38,6 +38,20 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	}
 	cfg, creds := st.cfg, st.creds
 
+	// 一把 Key 都没有时当场问，而不是打发用户去跑 tkr login。
+	//
+	// harness 没装都会问「现在安装？」，而安装软件比粘一把 Key 重得多。
+	// 既然那件事值得问，这件事更值得。
+	if len(creds.Names()) == 0 && c.UI.Interactive(c.Flags.Bool("yes")) {
+		if err := runLogin(c); err != nil {
+			return err
+		}
+		if st, err = loadState(c); err != nil {
+			return err
+		}
+		cfg, creds = st.cfg, st.creds
+	}
+
 	// harness 缺失时按 E 项规则征求用户意见。
 	if hs := h.Detect(); !hs.Installed {
 		if err := EnsureInstalled(c, h); err != nil {

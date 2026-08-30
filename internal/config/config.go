@@ -18,8 +18,14 @@ import (
 	"time"
 )
 
-// DefaultHost 是托管版的默认网关。
-const DefaultHost = "https://tokenflux.dev"
+// DefaultHost 是默认网关，可在编译期覆盖：
+//
+//	go build -ldflags "-X github.com/tokenflux/tkr/internal/config.DefaultHost=https://router.acme.com"
+//
+// 自建 TokenRouter 的地址属于部署方的决定，不该问每一个登录的人 ——
+// 部署方构建一次，团队里的人照常 tkr login 就好。
+// 拿到官方二进制又要指向自建网关的，用 --host。
+var DefaultHost = "https://tokenflux.dev"
 
 // 已知的模型槽名。各 harness 用到哪些由适配表声明。
 const (

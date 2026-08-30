@@ -2,9 +2,16 @@ BINARY := tkr
 PKG    := github.com/tokenflux/tkr
 VERSION ?= dev
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+
+# 自建 TokenRouter 在这里定死默认网关，团队里的人照常 tkr login 即可：
+#   make build HOST=https://router.acme.com
+HOST ?=
 LDFLAGS := -s -w \
 	-X $(PKG)/internal/buildinfo.Version=$(VERSION) \
 	-X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
+ifneq ($(HOST),)
+LDFLAGS += -X $(PKG)/internal/config.DefaultHost=$(HOST)
+endif
 
 .PHONY: build test fmt vet check cross clean install
 
