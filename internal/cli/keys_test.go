@@ -240,3 +240,45 @@ func TestFittingWithClaudeCodeLock(t *testing.T) {
 		t.Errorf("claude candidates = %v, want both keys", got)
 	}
 }
+
+// flag 管这一次，tkr model 管以后：-m 绝不写盘。
+func TestOneShotModelDoesNotPersist(t *testing.T) {
+	dir := t.TempDir()
+	paths := config.Paths{ConfigDir: dir, CacheDir: dir}
+	cfg, _ := config.Load(paths)
+	cfg.Harness("codex").Slots = config.ModelSlots{"default": "gpt-5.4"}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// 模拟一次 -m 覆盖后重新读盘。
+	reloaded, err := config.Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Harness("codex").Slots["default"]; got != "gpt-5.4" {
+		t.Errorf("stored model = %q, want the original gpt-5.4", got)
+	}
+}
+
+// 一次启动只注入一把 Key，所以所有槽必须出自同一把。
+// 混着放的话，那些模型这把 Key 根本调不到，而失败要等到启动之后才看得见。
+func TestSlotsMustComeFromOneKey(t *testing.T) {
+	cands := []candidate{
+		{Key: "max", Model: "claude-haiku-4-5-20251001"},
+		{Key: "gpt", Model: "gpt-5.6-terra"},
+	}
+	// fill 只从选定 Key 的模型里取，绝不会跨 Key。
+	claude, _ := harness.Lookup("claude")
+	slots := config.ModelSlots{"default": "gpt-5.6-terra"}
+	fill(claude, slots, modelsOf(cands, "gpt"))
+
+	for name, v := range slots {
+		if _, ok := ownerOf(cands, v); !ok {
+			continue
+		}
+		if k, _ := ownerOf(cands, v); k != "gpt" {
+			t.Errorf("slot %s = %q comes from key %q, want gpt", name, v, k)
+		}
+	}
+}

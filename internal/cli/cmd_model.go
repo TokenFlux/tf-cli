@@ -7,6 +7,7 @@ import (
 
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
+	"github.com/tokenflux/tkr/internal/model"
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
@@ -76,7 +77,87 @@ func runModel(c *Context) error {
 		}
 	}
 
+	// 没给任何 flag 且能交互：进编辑器。
+	//
+	// 光「看」不「改」是这个命令过去最别扭的地方 —— 想换个模型只能
+	// 靠启动一次，或者手打完整的模型 ID。
+	if !c.Flags.Present("set") && c.UI.Interactive(c.Flags.Bool("yes")) {
+		return editSlots(c, st, h)
+	}
 	return showHarnessSlots(c, cfg, h)
+}
+
+// editSlots 是一屏槽位编辑器：选槽 → 选模型 → 回到列表。
+//
+// 放在 tkr model 而不是启动路径上：启动该让路，不该拦路；
+// 而专门跑来改配置的人，本来就是为了看见全貌。
+func editSlots(c *Context, st *state, h *harness.Harness) error {
+	keys, err := eligibleKeys(c, st.cfg, st.creds, h)
+	if err != nil {
+		return err
+	}
+	cands := gatherCandidates(c, st.cfg, st.creds, keys, h)
+	if len(cands) == 0 {
+		return showHarnessSlots(c, st.cfg, h)
+	}
+
+	slots := st.cfg.Harness(h.Name).Slots
+	if slots == nil {
+		slots = config.ModelSlots{}
+		st.cfg.Harness(h.Name).Slots = slots
+	}
+
+	for {
+		items := make([]ui.Item, 0, len(h.Slots)+1)
+		for _, sl := range h.Slots {
+			v := slots[sl.Name]
+			if v == "" {
+				v = c.UI.Dim(c.UI.T("未配置", "unset"))
+			} else {
+				v = model.Parse(v).Display()
+			}
+			items = append(items, ui.Item{
+				Label:  ui.Pad(sl.Name, 9) + v,
+				Detail: sl.Purpose(c.UI.Lang == ui.LangZH),
+			})
+		}
+		items = append(items, ui.Item{Label: c.UI.T("完成", "done")})
+
+		pick, err := c.UI.Select(
+			fmt.Sprintf(c.UI.T("%s 的模型槽", "Model slots for %s"), h.Name), items)
+		if err != nil || pick == len(items)-1 {
+			break
+		}
+
+		sl := h.Slots[pick]
+		choice, err := c.UI.Select(
+			fmt.Sprintf(c.UI.T("%s.%s 用哪个模型？（%s）", "Which model for %s.%s? (%s)"),
+				h.Name, sl.Name, sl.Purpose(c.UI.Lang == ui.LangZH)),
+			candidateItems(cands))
+		if err != nil {
+			continue // 取消只退回列表，不退出编辑器
+		}
+		// 一次启动只注入一把 Key，所以所有槽必须出自同一把。
+		// 换 Key 就得把别的槽清掉 —— 留着的话那些模型这把 Key 根本调不到，
+		// 而失败要等到启动之后才看得见。
+		if prev := st.cfg.Harness(h.Name).Key; prev != "" && prev != cands[choice].Key {
+			for name := range slots {
+				if name != sl.Name {
+					delete(slots, name)
+				}
+			}
+			c.UI.Warnf(c.UI.T("已切到 Key %q，其余槽已清空（一次启动只能用一把 Key）",
+				"switched to key %q; the other slots were cleared (one key per launch)"),
+				cands[choice].Key)
+		}
+		slots[sl.Name] = cands[choice].Model
+		bindKey(c, st.cfg, h, cands[choice].Key)
+	}
+
+	if err := st.saveConfig(c); err != nil {
+		return err
+	}
+	return showHarnessSlots(c, st.cfg, h)
 }
 
 func hasSlot(h *harness.Harness, slot string) bool {
@@ -116,9 +197,14 @@ func listModelSlots(c *Context, cfg *config.Config) error {
 }
 
 func showHarnessSlots(c *Context, cfg *config.Config, h *harness.Harness) error {
-	slots := cfg.Harness(h.Name).Slots
-	c.UI.Emit("model", map[string]any{"harness": h.Name, "slots": slots}, func() {
-		c.UI.Printf("%s\n", c.UI.Bold(h.Name))
+	hc := cfg.Harness(h.Name)
+	slots := hc.Slots
+	c.UI.Emit("model", map[string]any{"harness": h.Name, "key": hc.Key, "slots": slots}, func() {
+		line := c.UI.Bold(h.Name)
+		if hc.Key != "" {
+			line += "   " + c.UI.Dim(c.UI.T("key", "key")) + " " + hc.Key
+		}
+		c.UI.Printf("%s\n", line)
 		printSlots(c, slots, h)
 	})
 	return nil

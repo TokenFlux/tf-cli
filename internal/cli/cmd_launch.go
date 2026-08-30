@@ -118,9 +118,14 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		slots[k] = v
 	}
 
-	// -m 带值：本次覆盖主模型，不写盘。
+	// -m 只影响本次运行，绝不写盘。
+	//
+	// 规矩要能一句话说清：**flag 管这一次，tkr model 管以后。**
+	// 之前 -m 的注释写着不写盘、代码却存了盘 —— 用户改一次就再也回不去，
+	// 而他以为自己只是试一下。
 	override := c.Flags.String("model")
-	explicitPick := c.Flags.Present("model") && override == ""
+	oneShot := c.Flags.Present("model")
+	explicitPick := oneShot && override == ""
 	if override != "" {
 		slots[config.SlotDefault] = override
 	}
@@ -176,17 +181,24 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 
 	// 其余槽只能取自同一把 Key —— 一次启动只注入一把 Key。
 	own := modelsOf(cands, keyName)
-	if c.UI.Interactive(c.Flags.Bool("yes")) {
+	if !oneShot && c.UI.Interactive(c.Flags.Bool("yes")) {
 		askSlots(c, h, slots, own)
 	}
 	fill(h, slots, own)
+	warnIdenticalSlots(c, h, slots)
+
+	if oneShot {
+		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf(
+			c.UI.T("仅本次生效；固化用 tkr model %s", "this run only; make it stick with: tkr model %s"),
+			h.Name)))
+		return keyName, slots, nil
+	}
 
 	hc.Slots = slots
 	bindKey(c, cfg, h, keyName)
 	if err := cfg.Save(); err != nil {
 		c.UI.Warnf(c.UI.T("模型选择未能写入配置：%v", "could not persist the model choice: %v"), err)
 	}
-	warnIdenticalSlots(c, h, slots)
 	return keyName, slots, nil
 }
 

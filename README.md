@@ -55,13 +55,16 @@ harness 没装时会问你要不要装，并列出可用的包管理器。非交
 
 ```sh
 tkr keys                          # 有哪些 Key，各自能跑什么
-tkr model claude                  # 看模型槽
+tkr model claude                  # 交互编辑模型槽（选槽 → 选模型）
 tkr model claude --set fast=claude-haiku-4-5-20251001
-tkr claude -m                     # 本次换个模型（进选择器，不写盘）
+tkr claude -m                     # 本次换个模型（进选择器）
 tkr claude -e high                # 本次调思考强度
 tkr codex -k work                 # 本次用哪把 Key
 tkr claude -- --resume            # -- 之后原样透传给 harness
 ```
+
+**flag 管这一次，`tkr model` 管以后。** `-m`、`-e`、`-k` 都只影响本次运行，
+绝不写盘；要固化就用 `tkr model <harness>`。
 
 ### 多把 Key
 
