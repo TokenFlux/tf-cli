@@ -23,7 +23,7 @@ type Credential struct {
 }
 
 const (
-	SourcePaste  = "paste"  // tkr login --with-key
+	SourcePaste  = "paste"  // tf login --with-key
 	SourceImport = "import" // 网页「导入 tkr」按钮
 	SourceEnv    = "env"    // 环境变量，不落盘
 )
@@ -88,9 +88,9 @@ func (c *Credentials) Save() error {
 
 // Get 返回某 profile 的凭据。
 //
-// 环境变量 TKR_API_KEY 优先于落盘凭据，且不写盘 —— 容器与 CI 场景。
+// 环境变量 TF_API_KEY 优先于落盘凭据，且不写盘 —— 容器与 CI 场景。
 func (c *Credentials) Get(name string) (*Credential, bool) {
-	if k := os.Getenv("TKR_API_KEY"); k != "" {
+	if k := os.Getenv("TF_API_KEY"); k != "" {
 		return &Credential{Key: k, Source: SourceEnv}, true
 	}
 	cred, ok := c.Items[name]

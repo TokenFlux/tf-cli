@@ -11,7 +11,7 @@ import (
 func newLogoutCommand() *Command {
 	return &Command{
 		Name:  "logout",
-		Usage: "tkr logout [<名字>] [--all]",
+		Usage: "tf logout [<名字>] [--all]",
 		Summary: func(u *ui.UI) string {
 			return u.T("删除本机的 Key", "Remove a key stored here")
 		},
@@ -40,7 +40,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 	if !c.UI.Interactive(c.Flags.Bool("yes")) {
 		return "", ui.Errf(ui.CodeUsage,
 			c.UI.T("存了多把 Key，指定删哪一把", "several keys are stored; name the one to remove")).
-			WithHint("tkr logout " + strings.Join(stored, " | "))
+			WithHint("tf logout " + strings.Join(stored, " | "))
 	}
 
 	items := make([]ui.Item, 0, len(stored))
@@ -66,7 +66,7 @@ func runLogout(c *Context) error {
 	if len(stored) == 0 {
 		return ui.Errf(ui.CodeNotLoggedIn,
 			c.UI.T("本机没有保存任何 Key", "no keys are stored on this machine")).
-			WithHint("tkr login")
+			WithHint("tf login")
 	}
 
 	var removed []string

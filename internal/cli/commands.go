@@ -15,11 +15,11 @@ func newVersionCommand() *Command {
 		},
 		Run: func(c *Context) error {
 			c.UI.Emit("version", map[string]string{
-				"name":    "tkr",
+				"name":    "tf",
 				"version": buildinfo.Version,
 				"commit":  buildinfo.Commit,
 			}, func() {
-				c.UI.Printf("tkr %s\n", buildinfo.Version)
+				c.UI.Printf("tf %s\n", buildinfo.Version)
 			})
 			return nil
 		},
@@ -28,12 +28,12 @@ func newVersionCommand() *Command {
 
 // newConfigCommand 只负责「东西在哪」。
 //
-// 「有哪些 Key、各自能跑什么」归 tkr keys —— 曾经两个命令各打印一遍，
+// 「有哪些 Key、各自能跑什么」归 tf keys —— 曾经两个命令各打印一遍，
 // 同一份信息两处维护、两处会走样。
 func newConfigCommand() *Command {
 	return &Command{
 		Name:  "config",
-		Usage: "tkr config",
+		Usage: "tf config",
 		Summary: func(u *ui.UI) string {
 			return u.T("显示配置文件位置", "Show where the files live")
 		},

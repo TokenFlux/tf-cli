@@ -32,7 +32,7 @@ func eligibleKeys(c *Context, cfg *config.Config, creds *config.Credentials, h *
 	if len(names) == 0 {
 		return nil, ui.Errf(ui.CodeNotLoggedIn,
 			c.UI.T("本机没有保存任何 Key", "no keys are stored on this machine")).
-			WithHint("tkr login")
+			WithHint("tf login")
 	}
 
 	if want := c.Flags.String("key"); want != "" {
@@ -266,7 +266,7 @@ func candidateItems(cands []candidate) []ui.Item {
 	items := make([]ui.Item, 0, len(cands))
 	for _, c := range cands {
 		r := model.Parse(c.Model)
-		// 分组带斜杠，与 tkr keys 一致，也对上模型 ID 的写法。
+		// 分组带斜杠，与 tf keys 一致，也对上模型 ID 的写法。
 		detail := r.Prefix
 		if detail != "" {
 			detail += "/"

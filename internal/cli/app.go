@@ -73,7 +73,7 @@ func (a *App) Run(argv []string) int {
 	if !ok {
 		u.Fail("", ui.Errf(ui.CodeUnknownCommand,
 			u.T(fmt.Sprintf("未知命令：%s", name), fmt.Sprintf("unknown command: %s", name))).
-			WithHint("tkr --help"))
+			WithHint("tf --help"))
 		return 2
 	}
 
@@ -116,12 +116,12 @@ func hasFlag(argv []string, name, short string) bool {
 
 func (a *App) runVersion(u *ui.UI) int {
 	data := map[string]string{
-		"name":    "tkr",
+		"name":    "tf",
 		"version": buildinfo.Version,
 		"commit":  buildinfo.Commit,
 	}
 	u.Emit("version", data, func() {
-		u.Printf("tkr %s\n", buildinfo.Version)
+		u.Printf("tf %s\n", buildinfo.Version)
 	})
 	return 0
 }
@@ -142,10 +142,10 @@ func desc(u *ui.UI, s string) string {
 
 func (a *App) printHelp(u *ui.UI) {
 	u.Printf("%s\n", u.T(
-		"tkr —— 用 TokenFlux / TokenRouter 启动你已经在用的 AI 编码工具。",
-		"tkr — launch the AI coding harnesses you already use, against TokenFlux / TokenRouter.",
+		"tf —— 用 TokenFlux / TokenRouter 启动你已经在用的 AI 编码工具。",
+		"tf — launch the AI coding harnesses you already use, against TokenFlux / TokenRouter.",
 	))
-	u.Printf("\n%s\n  tkr <command> [flags]\n", u.Bold(u.T("用法", "USAGE")))
+	u.Printf("\n%s\n  tf <command> [flags]\n", u.Bold(u.T("用法", "USAGE")))
 
 	var visible []*Command
 	for _, c := range a.commands {
@@ -175,7 +175,7 @@ func (a *App) printCommandHelp(u *ui.UI, c *Command) {
 	u.Printf("%s\n", c.Summary(u))
 	usage := c.Usage
 	if usage == "" {
-		usage = "tkr " + c.Name + " [flags]"
+		usage = "tf " + c.Name + " [flags]"
 	}
 	u.Printf("\n%s\n  %s\n", u.Bold(u.T("用法", "USAGE")), usage)
 

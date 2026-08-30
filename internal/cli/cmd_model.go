@@ -13,7 +13,7 @@ import (
 func newModelCommand() *Command {
 	return &Command{
 		Name:  "model",
-		Usage: "tkr model [<harness>] [--set slot=model ...] [--reset] [--list]",
+		Usage: "tf model [<harness>] [--set slot=model ...] [--reset] [--list]",
 		Summary: func(u *ui.UI) string {
 			return u.T("查看与修改模型槽", "Inspect and change model slots")
 		},
@@ -43,7 +43,7 @@ func runModel(c *Context) error {
 	if !ok {
 		return ui.Errf(ui.CodeHarnessNotFound,
 			fmt.Sprintf(c.UI.T("没有名为 %q 的 harness", "no harness named %q"), name)).
-			WithHint("tkr harness list")
+			WithHint("tf harness list")
 	}
 
 	if c.Flags.Bool("reset") {
@@ -63,7 +63,7 @@ func runModel(c *Context) error {
 		if !found || slot == "" || model == "" {
 			return ui.Errf(ui.CodeUsage,
 				c.UI.T("--set 的格式是 slot=model", "--set expects slot=model")).
-				WithHint(fmt.Sprintf("tkr model %s --set default=<model>", h.Name))
+				WithHint(fmt.Sprintf("tf model %s --set default=<model>", h.Name))
 		}
 		if !hasSlot(h, slot) {
 			return ui.Errf(ui.CodeUsage,
@@ -88,7 +88,7 @@ func runModel(c *Context) error {
 
 // editSlots 是一屏槽位编辑器：选槽 → 选模型 → 回到列表。
 //
-// 放在 tkr model 而不是启动路径上：启动该让路，不该拦路；
+// 放在 tf model 而不是启动路径上：启动该让路，不该拦路；
 // 而专门跑来改配置的人，本来就是为了看见全貌。
 func editSlots(c *Context, st *state, h *harness.Harness) error {
 	keys, err := eligibleKeys(c, st.cfg, st.creds, h)
@@ -199,7 +199,7 @@ func listModelSlots(c *Context, cfg *config.Config) error {
 		}
 		// 这一屏只能看不能改，得说清楚改在哪儿。
 		c.UI.Logf("%s", c.UI.Dim(c.UI.T(
-			"改模型：tkr model <harness>", "to change models: tkr model <harness>")))
+			"改模型：tf model <harness>", "to change models: tf model <harness>")))
 	})
 	return nil
 }
@@ -222,7 +222,7 @@ func showHarnessSlots(c *Context, cfg *config.Config, h *harness.Harness) error 
 // 内置默认模型，而那个模型多半不在用户的分组里。
 // slotWidth 量出一屏里槽位值需要的列宽。
 //
-// 必须按整屏算，不能各算各的：tkr model 一次列出三个 harness，
+// 必须按整屏算，不能各算各的：tf model 一次列出三个 harness，
 // 每块自己算宽度会让三块的模型列互相错开。
 func slotWidth(c *Context, cfg *config.Config, hs []*harness.Harness) int {
 	width := 0

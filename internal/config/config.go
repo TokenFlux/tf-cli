@@ -23,7 +23,7 @@ import (
 //	go build -ldflags "-X github.com/tokenflux/tkr/internal/config.DefaultHost=https://router.acme.com"
 //
 // 自建 TokenRouter 的地址属于部署方的决定，不该问每一个登录的人 ——
-// 部署方构建一次，团队里的人照常 tkr login 就好。
+// 部署方构建一次，团队里的人照常 tf login 就好。
 // 拿到官方二进制又要指向自建网关的，用 --host。
 var DefaultHost = "https://tokenflux.dev"
 

@@ -17,7 +17,7 @@ func newLaunchCommand(h *harness.Harness) *Command {
 		Name:        h.Name,
 		Aliases:     h.Aliases,
 		Passthrough: true,
-		Usage:       fmt.Sprintf("tkr %s [tkr flags] [%s args...]", h.Name, h.Name),
+		Usage:       fmt.Sprintf("tf %s [tf flags] [%s args...]", h.Name, h.Name),
 		Summary: func(u *ui.UI) string {
 			return fmt.Sprintf(u.T("通过 TokenFlux 启动 %s", "Launch %s against TokenFlux"), h.Name)
 		},
@@ -70,7 +70,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	if !ok {
 		return ui.Errf(ui.CodeKeyNotFound, fmt.Sprintf(
 			c.UI.T("没有名为 %q 的 Key", "no key named %q"), keyName)).
-			WithHint("tkr login")
+			WithHint("tf login")
 	}
 	host := cfg.HostOf(keyName)
 	if hv := c.Flags.String("host"); hv != "" {
@@ -99,7 +99,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	//
 	// 有多把 Key 时必须写出用的是哪把：用错 Key 的表现是
 	// “模型列表没见过”，不写出来用户很难联想到是 Key 的问题。
-	banner := fmt.Sprintf("%s → %s", c.UI.Bold("tkr"), h.Name)
+	banner := fmt.Sprintf("%s → %s", c.UI.Bold("tf"), h.Name)
 	if len(creds.Names()) > 1 {
 		banner += "   " + c.UI.Dim(c.UI.T("Key", "key")) + " " + keyName
 	}
@@ -148,7 +148,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 
 	// -m 只影响本次运行，绝不写盘。
 	//
-	// 规矩要能一句话说清：**flag 管这一次，tkr model 管以后。**
+	// 规矩要能一句话说清：**flag 管这一次，tf model 管以后。**
 	// 之前 -m 的注释写着不写盘、代码却存了盘 —— 用户改一次就再也回不去，
 	// 而他以为自己只是试一下。
 	override := c.Flags.String("model")
@@ -202,7 +202,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		if !c.UI.Interactive(c.Flags.Bool("yes")) {
 			return "", nil, ui.Errf(ui.CodeUsage,
 				fmt.Sprintf(c.UI.T("%s 尚未选定主模型", "no main model chosen for %s"), h.Name)).
-				WithHint(fmt.Sprintf("tkr model %s --set default=<model>", h.Name))
+				WithHint(fmt.Sprintf("tf model %s --set default=<model>", h.Name))
 		}
 		explicitPick = true
 	}
@@ -227,7 +227,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 
 	// 主模型决定用哪把 Key。
 	//
-	// 绑定可能压根不存在（tkr model --set 只写槽位，它无从知道该绑谁），
+	// 绑定可能压根不存在（tf model --set 只写槽位，它无从知道该绑谁），
 	// 也可能指向一把已经 logout 的 Key。两种都是合法状态，
 	// 之前会一路把空名字带到 creds.Get 那里去崩掉。
 	if !contains(keys, keyName) {
@@ -235,7 +235,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		if !ok {
 			return "", nil, ui.Errf(ui.CodeKeyNotFound, fmt.Sprintf(
 				c.UI.T("没有 Key 能提供 %s", "no key offers %s"), slots[config.SlotDefault])).
-				WithHint(fmt.Sprintf("tkr model %s", h.Name))
+				WithHint(fmt.Sprintf("tf model %s", h.Name))
 		}
 		keyName = k
 	}

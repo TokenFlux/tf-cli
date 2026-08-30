@@ -19,8 +19,8 @@ func TestDetectSource(t *testing.T) {
 		path string
 		want Source
 	}{
-		{"/opt/homebrew/lib/node_modules/tkr/bin/tkr", SourceNPM},
-		{"/Users/x/.bun/install/global/node_modules/tkr/bin/tkr", SourceNPM},
+		{"/opt/homebrew/lib/node_modules/tf/bin/tf", SourceNPM},
+		{"/Users/x/.bun/install/global/node_modules/tf/bin/tf", SourceNPM},
 		{"/opt/homebrew/Cellar/tkr/0.1.0/bin/tkr", SourceHomebrew},
 		{"/home/linuxbrew/.linuxbrew/Cellar/tkr/0.1.0/bin/tkr", SourceHomebrew},
 		{"/Users/x/go/bin/tkr", SourceGoInstall},
@@ -72,7 +72,7 @@ func TestNewer(t *testing.T) {
 // 归档名必须与 release.yml 的打包规则一致，否则自更新找不到文件。
 func TestAssetName(t *testing.T) {
 	got := AssetName("0.1.0")
-	want := fmt.Sprintf("tkr_0.1.0_%s_%s", runtime.GOOS, runtime.GOARCH)
+	want := fmt.Sprintf("tf_0.1.0_%s_%s", runtime.GOOS, runtime.GOARCH)
 	if runtime.GOOS == "windows" {
 		want += ".zip"
 	} else {
@@ -87,7 +87,7 @@ func TestAssetName(t *testing.T) {
 func TestVerify(t *testing.T) {
 	archive := []byte("pretend this is a tarball")
 	sum := sha256.Sum256(archive)
-	name := "tkr_0.1.0_linux_amd64.tar.gz"
+	name := "tf_0.1.0_linux_amd64.tar.gz"
 	good := fmt.Sprintf("%s  %s\nffff  other.tar.gz\n", hex.EncodeToString(sum[:]), name)
 
 	if err := verify(archive, []byte(good), name); err != nil {
@@ -111,7 +111,7 @@ func TestExtractTarGz(t *testing.T) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
-	if err := tw.WriteHeader(&tar.Header{Name: "tkr", Mode: 0o755, Size: int64(len(want))}); err != nil {
+	if err := tw.WriteHeader(&tar.Header{Name: "tf", Mode: 0o755, Size: int64(len(want))}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tw.Write(want); err != nil {
@@ -132,7 +132,7 @@ func TestExtractTarGz(t *testing.T) {
 // 替换必须是原子的，且新文件要可执行。
 func TestReplace(t *testing.T) {
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "tkr")
+	exe := filepath.Join(dir, "tf")
 	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestReplaceUnwritable(t *testing.T) {
 		t.Skip("root can write anywhere")
 	}
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "tkr")
+	exe := filepath.Join(dir, "tf")
 	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}

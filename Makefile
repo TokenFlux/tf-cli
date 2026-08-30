@@ -1,9 +1,9 @@
-BINARY := tkr
+BINARY := tf
 PKG    := github.com/tokenflux/tkr
 VERSION ?= dev
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-# 自建 TokenRouter 在这里定死默认网关，团队里的人照常 tkr login 即可：
+# 自建 TokenRouter 在这里定死默认网关，团队里的人照常 tf login 即可：
 #   make build HOST=https://router.acme.com
 HOST ?=
 LDFLAGS := -s -w \
@@ -16,7 +16,7 @@ endif
 .PHONY: build test fmt vet check cross clean install
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./cmd/tkr
+	go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./cmd/tf
 
 test:
 	go test ./...
@@ -31,11 +31,11 @@ vet:
 check: fmt vet test
 
 install:
-	go install -ldflags "$(LDFLAGS)" ./cmd/tkr
+	go install -ldflags "$(LDFLAGS)" ./cmd/tf
 
 clean:
 	rm -rf bin
 
 # 发布矩阵里的每个目标都要能编译。本机 go build 看不到这类问题。
 cross:
-	@for t in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do 		GOOS=$${t%/*} GOARCH=$${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/tkr 			&& echo "  ok $$t" || exit 1; 	done
+	@for t in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do 		GOOS=$${t%/*} GOARCH=$${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/tf 			&& echo "  ok $$t" || exit 1; 	done

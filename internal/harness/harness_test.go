@@ -178,7 +178,7 @@ func TestClaudeDefersContextWindowToAPI(t *testing.T) {
 	}
 	// 绝不替用户猜窗口大小：猜错的两个方向都有害。
 	if got := envOf(plan.Env, "CLAUDE_CODE_MAX_CONTEXT_TOKENS"); got != "" {
-		t.Errorf("tkr must not invent a context window, got %q", got)
+		t.Errorf("tf must not invent a context window, got %q", got)
 	}
 }
 

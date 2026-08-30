@@ -40,7 +40,7 @@ jobs:
           set -eu
           for t in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do
             echo "→ $t"
-            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/tkr
+            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/tf
           done
 
       # 零第三方依赖是硬约束，不是偏好。
@@ -57,6 +57,6 @@ jobs:
           set -eu
           for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do
             GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 \
-              go build -o /dev/null ./cmd/tkr
+              go build -o /dev/null ./cmd/tf
             echo "ok $target"
           done

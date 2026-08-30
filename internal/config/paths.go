@@ -11,10 +11,10 @@ import (
 //	<config>/credentials.json   0600  仅凭据，独立文件
 //	<cache>/                    0700  目录数据与探测结果
 //
-// 默认 <config> = ~/.tkr，<cache> = ~/.tkr/cache；
+// 默认 <config> = ~/.tf，<cache> = ~/.tf/cache；
 // 设置了 XDG_CONFIG_HOME / XDG_CACHE_HOME 时优先遵循 XDG。
 const (
-	dirName        = "tkr"
+	dirName        = "tf"
 	configFileName = "config.json"
 	credsFileName  = "credentials.json"
 	dirPerm        = 0o700

@@ -18,5 +18,5 @@ var (
 // 绝不能出现在注入给 harness 的环境里 —— 覆盖 harness 的 UA 会破坏
 // claude_code_only 分组的 UA + TLS 指纹识别。见 docs/design/product-decisions.md 第 0 节。
 func UserAgent() string {
-	return "tkr/" + Version
+	return "tf/" + Version
 }

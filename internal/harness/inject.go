@@ -140,7 +140,7 @@ func planClaude(in Input) (*Plan, error) {
 // 因此 codex 必须落在开启了 openai_responses 的分组上。
 func planCodex(in Input) (*Plan, error) {
 	const provider = "tokenflux"
-	const keyEnv = "TKR_UPSTREAM_KEY"
+	const keyEnv = "TF_UPSTREAM_KEY"
 
 	args := []string{
 		"-c", "model_provider=" + provider,

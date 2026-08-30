@@ -17,7 +17,7 @@ import (
 func newLoginCommand() *Command {
 	return &Command{
 		Name:  "login",
-		Usage: "tkr login [<名字>]",
+		Usage: "tf login [<名字>]",
 		Summary: func(u *ui.UI) string {
 			return u.T("保存 API Key", "Store an API key")
 		},
@@ -65,7 +65,7 @@ func runLogin(c *Context) error {
 	}
 	if key == "" {
 		return ui.Errf(ui.CodeUsage, c.UI.T("没有读到 Key", "no key was provided")).
-			WithHint("echo $KEY | tkr login")
+			WithHint("echo $KEY | tf login")
 	}
 
 	// 当场校验：/v1/models 是唯一能用 API Key 读到的目录接口。
@@ -150,7 +150,7 @@ func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 		return "", ui.Errf(ui.CodeUsage, fmt.Sprintf(
 			c.UI.T("%q 下已存着另一把 Key（%s）", "%q already holds a different key (%s)"),
 			target, config.Mask(existing.Key))).
-			WithHint(fmt.Sprintf("tkr login %s   |   tkr login --force", suggestion))
+			WithHint(fmt.Sprintf("tf login %s   |   tf login --force", suggestion))
 	}
 
 	idx, err := c.UI.Select(fmt.Sprintf(
@@ -365,7 +365,7 @@ func readKey(c *Context) (string, error) {
 	if !c.UI.Interactive(c.Flags.Bool("yes")) {
 		return "", ui.Errf(ui.CodeUsage,
 			c.UI.T("非交互时用管道传 Key", "pipe the key in when non-interactive")).
-			WithHint("echo $KEY | tkr login")
+			WithHint("echo $KEY | tf login")
 	}
 
 	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（不回显）：", "Paste your API key (hidden):"))
@@ -374,7 +374,7 @@ func readKey(c *Context) (string, error) {
 		// 直接抛上去会让中文界面顶着一句英文。
 		return "", ui.Errf(ui.CodeUsage,
 			c.UI.T("隐藏输入需要终端", "hidden input needs a terminal")).
-			WithHint("echo $KEY | tkr login")
+			WithHint("echo $KEY | tf login")
 	}
 	return key, nil
 }

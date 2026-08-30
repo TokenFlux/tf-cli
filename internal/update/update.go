@@ -48,11 +48,11 @@ const (
 func (s Source) UpgradeCommand() string {
 	switch s {
 	case SourceNPM:
-		return "npm install -g tkr@latest"
+		return "npm install -g tf@latest"
 	case SourceHomebrew:
-		return "brew upgrade tkr"
+		return "brew upgrade tf"
 	case SourceGoInstall:
-		return "go install github.com/tokenflux/tkr/cmd/tkr@latest"
+		return "go install github.com/tokenflux/tkr/cmd/tf@latest"
 	case SourceDevel:
 		return "git pull && make build"
 	}
@@ -138,7 +138,7 @@ func AssetName(version string) string {
 	if runtime.GOOS == "windows" {
 		ext = ".zip"
 	}
-	return fmt.Sprintf("tkr_%s_%s_%s%s", version, runtime.GOOS, runtime.GOARCH, ext)
+	return fmt.Sprintf("tf_%s_%s_%s%s", version, runtime.GOOS, runtime.GOARCH, ext)
 }
 
 // Newer 报告 remote 是否比 local 新。
@@ -263,7 +263,7 @@ func extract(archive []byte) ([]byte, error) {
 			return nil, err
 		}
 		for _, f := range zr.File {
-			if filepath.Base(f.Name) != "tkr.exe" {
+			if filepath.Base(f.Name) != "tf.exe" {
 				continue
 			}
 			rc, err := f.Open()
@@ -273,7 +273,7 @@ func extract(archive []byte) ([]byte, error) {
 			defer rc.Close()
 			return io.ReadAll(io.LimitReader(rc, 128<<20))
 		}
-		return nil, errors.New("archive contains no tkr.exe")
+		return nil, errors.New("archive contains no tf.exe")
 	}
 
 	gz, err := gzip.NewReader(newByteReader(archive))
@@ -291,11 +291,11 @@ func extract(archive []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if filepath.Base(h.Name) == "tkr" {
+		if filepath.Base(h.Name) == "tf" {
 			return io.ReadAll(io.LimitReader(tr, 128<<20))
 		}
 	}
-	return nil, errors.New("archive contains no tkr")
+	return nil, errors.New("archive contains no tf")
 }
 
 // replace 原子替换可执行文件。
@@ -304,7 +304,7 @@ func extract(archive []byte) ([]byte, error) {
 // 而 /tmp 与 /usr/local/bin 常常就不是同一个文件系统。
 func replace(exe string, data []byte) error {
 	dir := filepath.Dir(exe)
-	tmp, err := os.CreateTemp(dir, ".tkr-update-*")
+	tmp, err := os.CreateTemp(dir, ".tf-update-*")
 	if err != nil {
 		return fmt.Errorf("%s is not writable: %w", dir, err)
 	}

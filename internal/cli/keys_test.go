@@ -87,7 +87,7 @@ func TestEligibleKeysFailsLoudly(t *testing.T) {
 	}
 	e, ok := err.(*ui.Error)
 	if !ok || e.Code != ui.CodeProtocolMismatch {
-		t.Fatalf("error = %v, want TKR_PROTOCOL_MISMATCH", err)
+		t.Fatalf("error = %v, want TF_PROTOCOL_MISMATCH", err)
 	}
 	for _, want := range []string{"max", "kiro", "anthropic_messages"} {
 		if !strings.Contains(e.Hint, want) {
@@ -243,7 +243,7 @@ func TestFittingWithClaudeCodeLock(t *testing.T) {
 	}
 }
 
-// flag 管这一次，tkr model 管以后：-m 绝不写盘。
+// flag 管这一次，tf model 管以后：-m 绝不写盘。
 func TestOneShotModelDoesNotPersist(t *testing.T) {
 	dir := t.TempDir()
 	paths := config.Paths{ConfigDir: dir, CacheDir: dir}
@@ -484,7 +484,7 @@ func TestSuggestKeyNameNeedsAMajority(t *testing.T) {
 
 // 绑定的 Key 被 logout 后仍然可以启动 —— 之前会 panic。
 //
-// 「槽位已设、但没有绑定 Key」是合法状态：tkr model --set 只写槽位，
+// 「槽位已设、但没有绑定 Key」是合法状态：tf model --set 只写槽位，
 // 它无从知道该绑哪把 Key。之前这个空名字会一路带到 creds.Get，
 // 返回值里的 ok 又被丢掉，于是用户看到的是一屏 panic 而不是一句话。
 func TestLaunchSurvivesADanglingBinding(t *testing.T) {

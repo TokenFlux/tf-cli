@@ -15,7 +15,7 @@ import (
 func newUpdateCommand() *Command {
 	return &Command{
 		Name:  "update",
-		Usage: "tkr update [--check]",
+		Usage: "tf update [--check]",
 		Summary: func(u *ui.UI) string {
 			return u.T("更新 tkr 自身", "Update tkr itself")
 		},
@@ -78,8 +78,8 @@ func runUpdate(c *Context) error {
 	// 悄悄换回来，留下「更新了但又没更新」的状态，比不更新更难排查。
 	if cmd := source.UpgradeCommand(); cmd != "" {
 		return ui.Errf(ui.CodeUsage, fmt.Sprintf(
-			c.UI.T("tkr 由 %s 安装，请用它升级（%s → %s）",
-				"tkr was installed via %s; upgrade with it (%s → %s)"),
+			c.UI.T("tf 由 %s 安装，请用它升级（%s → %s）",
+				"tf was installed via %s; upgrade with it (%s → %s)"),
 			source, current, rel.Version())).WithHint(cmd)
 	}
 

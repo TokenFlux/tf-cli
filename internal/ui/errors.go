@@ -10,25 +10,25 @@ import (
 type Code string
 
 const (
-	CodeUsage           Code = "TKR_USAGE"
-	CodeUnknownCommand  Code = "TKR_UNKNOWN_COMMAND"
-	CodeUnknownFlag     Code = "TKR_UNKNOWN_FLAG"
-	CodeMissingValue    Code = "TKR_FLAG_MISSING_VALUE"
-	CodeConfigRead      Code = "TKR_CONFIG_READ"
-	CodeConfigWrite     Code = "TKR_CONFIG_WRITE"
-	CodeCredentialsRead Code = "TKR_CREDENTIALS_READ"
-	CodeNotLoggedIn     Code = "TKR_NOT_LOGGED_IN"
+	CodeUsage           Code = "TF_USAGE"
+	CodeUnknownCommand  Code = "TF_UNKNOWN_COMMAND"
+	CodeUnknownFlag     Code = "TF_UNKNOWN_FLAG"
+	CodeMissingValue    Code = "TF_FLAG_MISSING_VALUE"
+	CodeConfigRead      Code = "TF_CONFIG_READ"
+	CodeConfigWrite     Code = "TF_CONFIG_WRITE"
+	CodeCredentialsRead Code = "TF_CREDENTIALS_READ"
+	CodeNotLoggedIn     Code = "TF_NOT_LOGGED_IN"
 
-	CodeHarnessNotFound     Code = "TKR_HARNESS_NOT_FOUND"
-	CodeHarnessNotInstalled Code = "TKR_HARNESS_NOT_INSTALLED"
-	CodeInstallFailed       Code = "TKR_INSTALL_FAILED"
-	CodeInstallIncomplete   Code = "TKR_INSTALL_INCOMPLETE"
-	CodeCancelled           Code = "TKR_CANCELLED"
+	CodeHarnessNotFound     Code = "TF_HARNESS_NOT_FOUND"
+	CodeHarnessNotInstalled Code = "TF_HARNESS_NOT_INSTALLED"
+	CodeInstallFailed       Code = "TF_INSTALL_FAILED"
+	CodeInstallIncomplete   Code = "TF_INSTALL_INCOMPLETE"
+	CodeCancelled           Code = "TF_CANCELLED"
 
-	CodeKeyNotFound      Code = "TKR_KEY_NOT_FOUND"
-	CodeProtocolMismatch Code = "TKR_PROTOCOL_MISMATCH"
-	CodeNetwork          Code = "TKR_NETWORK"
-	CodeInternal         Code = "TKR_INTERNAL"
+	CodeKeyNotFound      Code = "TF_KEY_NOT_FOUND"
+	CodeProtocolMismatch Code = "TF_PROTOCOL_MISMATCH"
+	CodeNetwork          Code = "TF_NETWORK"
+	CodeInternal         Code = "TF_INTERNAL"
 )
 
 // Error 是带错误码与修复建议的结构化错误。

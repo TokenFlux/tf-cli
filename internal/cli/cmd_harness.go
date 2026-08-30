@@ -12,7 +12,7 @@ import (
 func newHarnessCommand() *Command {
 	return &Command{
 		Name:  "harness",
-		Usage: "tkr harness [list|install <name>]",
+		Usage: "tf harness [list|install <name>]",
 		Summary: func(u *ui.UI) string {
 			return u.T("查看与安装 harness", "Inspect and install harnesses")
 		},
@@ -28,13 +28,13 @@ func newHarnessCommand() *Command {
 				if len(c.Args) < 2 {
 					return ui.Errf(ui.CodeUsage,
 						c.UI.T("需要指定 harness 名称", "a harness name is required")).
-						WithHint("tkr harness install claude")
+						WithHint("tf harness install claude")
 				}
 				return runHarnessInstall(c, c.Args[1])
 			default:
 				return ui.Errf(ui.CodeUsage,
 					fmt.Sprintf(c.UI.T("未知子命令：%s", "unknown subcommand: %s"), action)).
-					WithHint("tkr harness [list|install <name>]")
+					WithHint("tf harness [list|install <name>]")
 			}
 		},
 	}
@@ -85,7 +85,7 @@ func runHarnessInstall(c *Context, name string) error {
 	if !ok {
 		return ui.Errf(ui.CodeHarnessNotFound,
 			fmt.Sprintf(c.UI.T("没有名为 %q 的 harness", "no harness named %q"), name)).
-			WithHint("tkr harness list")
+			WithHint("tf harness list")
 	}
 
 	if st := h.Detect(); st.Installed {

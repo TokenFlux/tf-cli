@@ -93,7 +93,7 @@ func TestEnvKeyWins(t *testing.T) {
 	creds, _, _ := LoadCredentials(paths)
 	creds.Set("default", &Credential{Key: "sk-file", Source: SourcePaste})
 
-	t.Setenv("TKR_API_KEY", "sk-env")
+	t.Setenv("TF_API_KEY", "sk-env")
 	cred, ok := creds.Get("default")
 	if !ok || cred.Key != "sk-env" || cred.Source != SourceEnv {
 		t.Errorf("env key should win, got %+v", cred)

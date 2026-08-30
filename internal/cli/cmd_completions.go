@@ -24,7 +24,7 @@ import (
 func newCompletionsCommand() *Command {
 	return &Command{
 		Name:  "completions",
-		Usage: "tkr completions <bash|zsh|fish>",
+		Usage: "tf completions <bash|zsh|fish>",
 		Summary: func(u *ui.UI) string {
 			return u.T("输出 shell 补全脚本", "Print the shell completion script")
 		},
@@ -36,7 +36,7 @@ func newCompletionsCommand() *Command {
 			if len(c.Args) == 0 {
 				return ui.Errf(ui.CodeUsage,
 					c.UI.T("需要指定 shell", "a shell is required")).
-					WithHint("tkr completions zsh")
+					WithHint("tf completions zsh")
 			}
 			shell := c.Args[0]
 			script, ok := completionScripts[shell]
@@ -292,30 +292,30 @@ func filter(candidates []string, prefix string) []string {
 // 脚本里一律用「用户实际输入的那个路径」回调，而不是写死 `tkr`。
 // 否则 ./bin/tkr 这种未入 PATH 的跑法会因找不到命令而静默无补全。
 var completionScripts = map[string]string{
-	"bash": `# tkr bash completion. eval "$(tkr completions bash)"
-_tkr_complete() {
+	"bash": `# tf bash completion. eval "$(tf completions bash)"
+_tf_complete() {
     local IFS=$'\n'
     COMPREPLY=($("${COMP_WORDS[0]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
 }
 # 同时注册裸命令名与常见的相对路径写法。
-complete -o default -F _tkr_complete tkr ./tkr ./bin/tkr bin/tkr
+complete -o default -F _tf_complete tf ./tf ./bin/tf bin/tf
 `,
-	"zsh": `# tkr zsh completion. eval "$(tkr completions zsh)"
-_tkr_complete() {
+	"zsh": `# tf zsh completion. eval "$(tf completions zsh)"
+_tf_complete() {
     local -a candidates
     candidates=(${(f)"$(${words[1]} __complete ${words[2,$CURRENT]} 2>/dev/null)"})
     compadd -a candidates
 }
-compdef _tkr_complete tkr
-# 模式注册：让 ./bin/tkr、/usr/local/bin/tkr 等写法也能补全。
-compdef _tkr_complete -p '*/tkr'
+compdef _tf_complete tf
+# 模式注册：让 ./bin/tf、/usr/local/bin/tf 等写法也能补全。
+compdef _tf_complete -p '*/tf'
 `,
-	"fish": `# tkr fish completion. tkr completions fish --install
-function __tkr_complete
+	"fish": `# tf fish completion. tf completions fish --install
+function __tf_complete
     set -l tokens (commandline -opc) (commandline -ct)
     $tokens[1] __complete $tokens[2..-1] 2>/dev/null
 end
-complete -c tkr -f -a '(__tkr_complete)'
+complete -c tkr -f -a '(__tf_complete)'
 `,
 }
 
@@ -332,14 +332,14 @@ func installCompletion(c *Context, shell, script string) error {
 	var path, note string
 	switch shell {
 	case "fish":
-		path = filepath.Join(home, ".config", "fish", "completions", "tkr.fish")
+		path = filepath.Join(home, ".config", "fish", "completions", "tf.fish")
 	case "zsh":
 		path = filepath.Join(home, ".zsh", "completions", "_tkr")
 		note = c.UI.T(
 			"若补全未生效，请确保 .zshrc 里有：fpath=(~/.zsh/completions $fpath) 与 autoload -U compinit && compinit",
 			"if it does not kick in, ensure .zshrc has: fpath=(~/.zsh/completions $fpath) and autoload -U compinit && compinit")
 	case "bash":
-		path = filepath.Join(home, ".local", "share", "bash-completion", "completions", "tkr")
+		path = filepath.Join(home, ".local", "share", "bash-completion", "completions", "tf")
 		note = c.UI.T("需要已安装 bash-completion（brew install bash-completion@2）",
 			"requires bash-completion to be installed (brew install bash-completion@2)")
 	}
@@ -350,8 +350,8 @@ func installCompletion(c *Context, shell, script string) error {
 	body := script
 	if shell == "zsh" {
 		// 放进 fpath 的文件需要 #compdef 头，且不能再调 compdef。
-		body = "#compdef tkr\n" + strings.ReplaceAll(script, "compdef _tkr_complete", "# compdef _tkr_complete")
-		body += "\n_tkr_complete \"$@\"\n"
+		body = "#compdef tkr\n" + strings.ReplaceAll(script, "compdef _tf_complete", "# compdef _tf_complete")
+		body += "\n_tf_complete \"$@\"\n"
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		return ui.Errf(ui.CodeConfigWrite, err.Error())

@@ -25,7 +25,7 @@ func TestParsePassthrough(t *testing.T) {
 		wantPassthr []string
 	}{
 		{
-			name:        "tkr 的 flag 紧跟子命令时被吃掉",
+			name:        "tf 的 flag 紧跟子命令时被吃掉",
 			args:        []string{"-m", "gpt-5.4"},
 			wantModel:   "gpt-5.4",
 			wantPresent: true,

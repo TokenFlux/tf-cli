@@ -10,7 +10,7 @@ import (
 func newKeysCommand() *Command {
 	return &Command{
 		Name:  "keys",
-		Usage: "tkr keys",
+		Usage: "tf keys",
 		Summary: func(u *ui.UI) string {
 			return u.T("列出本机的 Key", "List the keys stored here")
 		},
@@ -35,7 +35,7 @@ func runKeys(c *Context) error {
 	}
 	if len(names) == 0 {
 		return ui.Errf(ui.CodeNotLoggedIn, c.UI.T("本机没有保存任何 Key", "no keys are stored on this machine")).
-			WithHint("tkr login")
+			WithHint("tf login")
 	}
 
 	type scope struct {

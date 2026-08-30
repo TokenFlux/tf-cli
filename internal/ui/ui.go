@@ -2,7 +2,7 @@
 // 以及 --json 的统一信封。
 //
 // 约定（见 docs/PLAN.md）：
-//   - 文案跟随 locale，TKR_LANG 可覆盖；错误码始终是英文常量。
+//   - 文案跟随 locale，TF_LANG 可覆盖；错误码始终是英文常量。
 //   - --json 必须显式指定，不因为管道而自动切换格式。
 //   - 非 TTY 时日志转 stderr、去掉颜色与动画。
 package ui
@@ -46,9 +46,9 @@ func New(jsonMode bool) *UI {
 	}
 }
 
-// detectLang 依次读取 TKR_LANG、LC_ALL、LC_MESSAGES、LANG。
+// detectLang 依次读取 TF_LANG、LC_ALL、LC_MESSAGES、LANG。
 func detectLang() Lang {
-	for _, k := range []string{"TKR_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
+	for _, k := range []string{"TF_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
 		v := strings.ToLower(strings.TrimSpace(os.Getenv(k)))
 		if v == "" {
 			continue

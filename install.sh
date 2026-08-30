@@ -1,12 +1,12 @@
 #!/bin/sh
-# tkr 安装脚本。
+# tf 安装脚本。
 #
 #   curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 #
 # 装到 ~/.local/bin（不需要 sudo）。用 TKR_INSTALL_DIR 可以改。
 set -eu
 
-REPO="tokenflux/tkr"
+REPO="tokenflux/tf"
 DIR="${TKR_INSTALL_DIR:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*"; }
@@ -35,7 +35,7 @@ tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
 [ -n "$tag" ] || die "还没有任何发布 / no releases yet"
 version="${tag#v}"
 
-asset="tkr_${version}_${os}_${arch}.tar.gz"
+asset="tf_${version}_${os}_${arch}.tar.gz"
 base="https://github.com/$REPO/releases/download/$tag"
 
 tmp=$(mktemp -d)
@@ -60,14 +60,14 @@ want=$(grep " $asset\$" "$tmp/SHA256SUMS" | cut -d' ' -f1)
 
 tar xzf "$tmp/$asset" -C "$tmp"
 mkdir -p "$DIR"
-mv "$tmp/tkr" "$DIR/tkr"
-chmod +x "$DIR/tkr"
+mv "$tmp/tf" "$DIR/tf"
+chmod +x "$DIR/tf"
 
 say ""
-say "✓ tkr $version → $DIR/tkr"
+say "✓ tf $version → $DIR/tf"
 
 case ":$PATH:" in
-  *":$DIR:"*) say "运行 tkr login 开始。" ;;
+  *":$DIR:"*) say "运行 tf login 开始。" ;;
   *)
     say ""
     say "$DIR 不在 PATH 里，把这行加进你的 shell 配置："

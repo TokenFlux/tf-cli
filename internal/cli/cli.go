@@ -148,7 +148,7 @@ func parse(cmd *Command, args []string) (*Context, error) {
 			}
 			return nil, ui.Errf(ui.CodeUnknownFlag,
 				fmt.Sprintf("unknown flag: %s", a)).
-				WithHint(fmt.Sprintf("tkr %s --help", cmd.Name))
+				WithHint(fmt.Sprintf("tf %s --help", cmd.Name))
 		}
 
 		vals.present[f.Name] = true

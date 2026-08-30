@@ -47,14 +47,14 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           set -eu
-          name="tkr"
-          [ "$GOOS" = windows ] && name="tkr.exe"
+          name="tf"
+          [ "$GOOS" = windows ] && name="tf.exe"
           mkdir -p dist
           go build -trimpath \
             -ldflags "-s -w \
               -X github.com/tokenflux/tkr/internal/buildinfo.Version=${{ steps.v.outputs.version }} \
               -X github.com/tokenflux/tkr/internal/buildinfo.Commit=${GITHUB_SHA::7}" \
-            -o "dist/$name" ./cmd/tkr
+            -o "dist/$name" ./cmd/tf
 
       # 归档名要与 internal/update 里的推导规则严格一致，否则自更新会找不到文件。
       - name: 打包
@@ -64,13 +64,13 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           set -eu
-          base="tkr_${{ steps.v.outputs.version }}_${GOOS}_${GOARCH}"
+          base="tf_${{ steps.v.outputs.version }}_${GOOS}_${GOARCH}"
           cd dist
           if [ "$GOOS" = windows ]; then
-            zip -q "../$base.zip" tkr.exe
+            zip -q "../$base.zip" tf.exe
             echo "asset=$base.zip" >> "$GITHUB_OUTPUT"
           else
-            tar czf "../$base.tar.gz" tkr
+            tar czf "../$base.tar.gz" tf
             echo "asset=$base.tar.gz" >> "$GITHUB_OUTPUT"
           fi
 
@@ -94,7 +94,7 @@ jobs:
         run: |
           set -eu
           cd staging
-          sha256sum tkr_* > SHA256SUMS
+          sha256sum tf_* > SHA256SUMS
           cat SHA256SUMS
 
       # gh CLI 在 runner 上自带，不引第三方 action。

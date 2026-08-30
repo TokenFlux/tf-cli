@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// 需要真实网关，默认跳过：TKR_LIVE_KEY=<key> go test ./internal/gateway/ -run Live -v
+// 需要真实网关，默认跳过：TF_LIVE_KEY=<key> go test ./internal/gateway/ -run Live -v
 func TestLiveProbeProtocols(t *testing.T) {
-	key := os.Getenv("TKR_LIVE_KEY")
+	key := os.Getenv("TF_LIVE_KEY")
 	if key == "" {
-		t.Skip("set TKR_LIVE_KEY to run")
+		t.Skip("set TF_LIVE_KEY to run")
 	}
 	got, err := New("https://tokenflux.dev", key).ProbeProtocols(context.Background(), nil)
 	if err != nil {

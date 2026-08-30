@@ -20,7 +20,7 @@ var ErrNotInteractive = Errf(CodeUsage, "not an interactive terminal")
 // 后者是用户明确要求不要打断。
 //
 // 判据是「能不能拿到控制终端」而不是「stdin 是不是终端」：
-// 选择器直接读写 /dev/tty，所以 `echo $KEY | tkr login` 这种
+// 选择器直接读写 /dev/tty，所以 `echo $KEY | tf login` 这种
 // stdin 被管道占用的场景依然可以交互。
 func (u *UI) Interactive(assumeYes bool) bool {
 	return !u.JSON && !assumeYes && hasControllingTTY()
@@ -69,7 +69,7 @@ func (u *UI) Choose(title string, options []string) (int, error) {
 // ReadLine 在控制终端上提问并读一行（回显可见）。
 //
 // 直接读写 /dev/tty 而不是 stdin：stdin 可能已被管道占用
-// （echo $KEY | tkr login），但用户仍然坐在终端前。
+// （echo $KEY | tf login），但用户仍然坐在终端前。
 func (u *UI) ReadLine(prompt string) (string, error) {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
