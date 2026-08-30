@@ -39,7 +39,11 @@ func Run(s Spec) (Result, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	// 必须在子进程动终端之前记下状态。
+	term := captureTerm()
+
 	if err := cmd.Start(); err != nil {
+		term.restore(false)
 		return Result{ExitCode: 127}, err
 	}
 
@@ -50,6 +54,7 @@ func Run(s Spec) (Result, error) {
 	res := Result{Duration: time.Since(start)}
 
 	if err == nil {
+		term.restore(false)
 		return res, nil
 	}
 
@@ -57,12 +62,16 @@ func Run(s Spec) (Result, error) {
 	if errors.As(err, &exitErr) {
 		// 被信号终止时按 shell 惯例返回 128+signal。
 		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+			// 死于信号 = 没机会自己收尾，终端要由我们复位。
+			term.restore(true)
 			res.ExitCode = 128 + int(status.Signal())
 			return res, nil
 		}
+		term.restore(false)
 		res.ExitCode = exitErr.ExitCode()
 		return res, nil
 	}
+	term.restore(true)
 	res.ExitCode = 1
 	return res, err
 }
