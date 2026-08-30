@@ -157,3 +157,44 @@ func TestSuggestKeyName(t *testing.T) {
 		}
 	}
 }
+
+// 任何位置都不能返回空候选。
+//
+// 空结果在 zsh 里不等于「什么都不补」：菜单补全会沿用上一次的候选，
+// 于是 tf codex <TAB> 会把 codex 再插一遍 —— 用户看到的是补出了个
+// tf codex codex。没得补时也得给出 tf 自己的 flag。
+func TestCompletionNeverReturnsNothing(t *testing.T) {
+	for _, words := range [][]string{
+		{""},                    // tf <TAB>
+		{"codex", ""},           // 启动命令的参数位
+		{"claude", ""},          //
+		{"keys", ""},            //
+		{"config", ""},          // 不带参数的命令
+		{"version", ""},         //
+		{"login", ""},           //
+		{"model", ""},           //
+		{"harness", "list", ""}, //
+	} {
+		if got := complete(words); len(got) == 0 {
+			t.Errorf("complete(%q) returned nothing", words)
+		}
+	}
+
+	// 唯一该返回空的地方：越过透传边界之后，那些参数属于 harness。
+	if got := complete([]string{"codex", "exec", ""}); len(got) != 0 {
+		t.Errorf("past the passthrough boundary should yield nothing, got %v", got)
+	}
+}
+
+// 候选里不能有重复项：--key 在启动命令和全局 flag 里各有一份，
+// 出现两次会让人以为是两个不同的东西。
+func TestCompletionHasNoDuplicates(t *testing.T) {
+	got := complete([]string{"codex", ""})
+	seen := map[string]bool{}
+	for _, c := range got {
+		if seen[c] {
+			t.Errorf("duplicate candidate %q in %v", c, got)
+		}
+		seen[c] = true
+	}
+}

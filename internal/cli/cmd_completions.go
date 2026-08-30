@@ -104,8 +104,6 @@ func complete(words []string) []string {
 		}
 	case "model":
 		return filter(completeModel(rest, cur), cur)
-	case "config":
-		return nil
 	case "completions":
 		return filter([]string{"bash", "zsh", "fish"}, cur)
 	case "login":
@@ -114,12 +112,11 @@ func complete(words []string) []string {
 		return filter([]string{"--check"}, cur)
 	case "logout":
 		return filter(append(storedKeys(), "--all"), cur)
+	case "keys":
+		return filter(dedupe(append([]string{"--refresh"}, globalFlagNames()...)), cur)
 	}
 
-	if strings.HasPrefix(cur, "-") {
-		return filter(globalFlagNames(), cur)
-	}
-	return nil
+	return filter(dedupe(globalFlagNames()), cur)
 }
 
 // completeLaunch 处理 `tkr claude ...`。
@@ -153,10 +150,27 @@ func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 		}
 	}
 
-	if strings.HasPrefix(cur, "-") {
-		return append([]string{"--model", "--effort", "--key"}, globalFlagNames()...)
+	// 光标停在参数位时也要给出 tf 自己的 flag。
+	//
+	// 空结果在 zsh 里不等于「什么都不补」：菜单补全会沿用上一次的候选，
+	// 于是 tf codex <TAB> 会把 codex 再插一遍。没得补时也得说点什么。
+	return dedupe(append([]string{"--model", "--effort"}, globalFlagNames()...))
+}
+
+// dedupe 去掉重复项并保持原有顺序。
+//
+// 启动命令自己的 flag 与全局 flag 有重叠（--key 两边都有），
+// 补全列表里出现两次会让人以为是两个不同的东西。
+func dedupe(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := in[:0:0]
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
 	}
-	return nil
+	return out
 }
 
 // effortNames 优先给出缓存模型里真实存在的强度变体，
