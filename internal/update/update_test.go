@@ -21,12 +21,12 @@ func TestDetectSource(t *testing.T) {
 	}{
 		{"/opt/homebrew/lib/node_modules/tf/bin/tf", SourceNPM},
 		{"/Users/x/.bun/install/global/node_modules/tf/bin/tf", SourceNPM},
-		{"/opt/homebrew/Cellar/tkr/0.1.0/bin/tkr", SourceHomebrew},
-		{"/home/linuxbrew/.linuxbrew/Cellar/tkr/0.1.0/bin/tkr", SourceHomebrew},
-		{"/Users/x/go/bin/tkr", SourceGoInstall},
-		{"/var/folders/xx/go-build123/b001/exe/tkr", SourceDevel},
-		{"/usr/local/bin/tkr", SourceBinary},
-		{"/Users/x/.local/bin/tkr", SourceBinary},
+		{"/opt/homebrew/Cellar/tf/0.1.0/bin/tf", SourceHomebrew},
+		{"/home/linuxbrew/.linuxbrew/Cellar/tf/0.1.0/bin/tf", SourceHomebrew},
+		{"/Users/x/go/bin/tf", SourceGoInstall},
+		{"/var/folders/xx/go-build123/b001/exe/tf", SourceDevel},
+		{"/usr/local/bin/tf", SourceBinary},
+		{"/Users/x/.local/bin/tf", SourceBinary},
 	}
 	for _, c := range cases {
 		if got := DetectSource(c.path); got != c.want {
@@ -106,7 +106,7 @@ func TestExtractTarGz(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("windows uses zip")
 	}
-	want := []byte("#!/bin/sh\necho tkr\n")
+	want := []byte("#!/bin/sh\necho tf\n")
 
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)

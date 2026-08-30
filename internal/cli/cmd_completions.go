@@ -322,6 +322,29 @@ complete -c tkr -f -a '(__tf_complete)'
 // installCompletion 把脚本写进该 shell 的补全目录。
 //
 // 只写专用的补全目录，**绝不去改 .bashrc / .zshrc** —— tkr 不改
+// zshSiteFunctions 找一个已经在 zsh 默认 fpath 里、且可写的目录。
+//
+// 找不到就返回空，调用方退回到家目录下的写法。
+func zshSiteFunctions() string {
+	for _, d := range []string{
+		"/opt/homebrew/share/zsh/site-functions",
+		"/usr/local/share/zsh/site-functions",
+	} {
+		info, err := os.Stat(d)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		// 可写才算数：只读目录写下去只会得到一个权限错误。
+		probe := filepath.Join(d, ".tf-write-probe")
+		if f, err := os.Create(probe); err == nil {
+			f.Close()
+			os.Remove(probe)
+			return d
+		}
+	}
+	return ""
+}
+
 // 用户的配置文件，补全也不例外。需要用户自己动手的部分直接告知。
 func installCompletion(c *Context, shell, script string) error {
 	home, err := os.UserHomeDir()
@@ -334,10 +357,19 @@ func installCompletion(c *Context, shell, script string) error {
 	case "fish":
 		path = filepath.Join(home, ".config", "fish", "completions", "tf.fish")
 	case "zsh":
-		path = filepath.Join(home, ".zsh", "completions", "_tkr")
+		// 优先装进已经在 fpath 里的目录，用户就不必再改 .zshrc。
+		//
+		// 装到 ~/.zsh/completions 是最常见的写法，但那个目录不在任何人的
+		// 默认 fpath 里 —— 于是「装好了却不生效」，还要用户自己去补一行，
+		// 而且那一行必须排在 compinit 之前，追加到文件末尾是没用的。
+		if dir := zshSiteFunctions(); dir != "" {
+			path = filepath.Join(dir, "_tf")
+			break
+		}
+		path = filepath.Join(home, ".zsh", "completions", "_tf")
 		note = c.UI.T(
-			"若补全未生效，请确保 .zshrc 里有：fpath=(~/.zsh/completions $fpath) 与 autoload -U compinit && compinit",
-			"if it does not kick in, ensure .zshrc has: fpath=(~/.zsh/completions $fpath) and autoload -U compinit && compinit")
+			"还需在 .zshrc 的 compinit 之前加：fpath=(~/.zsh/completions $fpath)",
+			"also add this before compinit in .zshrc: fpath=(~/.zsh/completions $fpath)")
 	case "bash":
 		path = filepath.Join(home, ".local", "share", "bash-completion", "completions", "tf")
 		note = c.UI.T("需要已安装 bash-completion（brew install bash-completion@2）",
@@ -350,7 +382,7 @@ func installCompletion(c *Context, shell, script string) error {
 	body := script
 	if shell == "zsh" {
 		// 放进 fpath 的文件需要 #compdef 头，且不能再调 compdef。
-		body = "#compdef tkr\n" + strings.ReplaceAll(script, "compdef _tf_complete", "# compdef _tf_complete")
+		body = "#compdef tf\n" + strings.ReplaceAll(script, "compdef _tf_complete", "# compdef _tf_complete")
 		body += "\n_tf_complete \"$@\"\n"
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {

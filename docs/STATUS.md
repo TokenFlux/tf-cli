@@ -21,7 +21,7 @@
 | M3 启动 | 机制完成 | fork+wait、信号转发、退出码穿透、注入配方。三项实测未做 |
 | M4 模型 | 完成 | ID 解析（分组前缀 + 强度后缀）、族折叠、方向键 TUI、按 harness 分开的模型槽、一屏确认 |
 | M5 预检 | 部分完成 | 协议探测（零 token）、按分组前缀的准入记录、Key 与模型两级筛选。缺 `doctor` |
-| M6 harness | 1/3 实测 | opencode 实跑通过；claude/codex 配方已写但未验证 |
+| M6 harness | 1/3 实测 | opencode 实测通过；claude/codex 配方已写但未验证 |
 | M7 分发 | 未开始 | goreleaser、npm 平台包、install.sh、Apache-2.0、SECURITY.md |
 
 M1 走公开的 `/api/v1/marketplace/models`。倍率、定价、可用率、模态都在这份数据里，
@@ -51,7 +51,7 @@ Claude Max（倍率 20）这条主线就不成立。
 | 缺口 | 影响 | 优先级 |
 |---|---|---|
 | `claude_code_only` 分组靠什么识别 Claude Code（UA？header？），tf 注入的 header 会不会破坏识别 | Claude Max 倍率 20，是最有价值的分组，识别不过就用不了 | P0 |
-| 三个 harness 端到端实际跑通 | 适配表的正确性 | P0 |
+| 三个 harness 的端到端实测 | 适配表的正确性 | P0 |
 | opencode 的 AI SDK provider 实际走 responses 还是 chat | 候选列表顺序 | P1 |
 | `ENABLE_TOOL_SEARCH` 在 Anthropic 分组是否生效 | 省近一半系统提示词 token | P1 |
 | 复合 Key 的 `composite_groups` 实际结构与前缀形态 | 前缀自动补全 | P1 |

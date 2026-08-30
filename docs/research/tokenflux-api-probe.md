@@ -17,7 +17,7 @@
 | `GET /api/v1/user/profile` | — | 401 `INVALID_TOKEN` | 200 | 用户信息 |
 | `/api/v1/marketplace/groups`、`/api/v1/groups`、`/api/v1/public/groups` | 404 | | | 不存在 |
 
-### 两条关键结论
+### 关键结论
 
 **（1）公开端点能拿到目录、价格、容量、可用率，但拿不到协议。**
 
@@ -27,11 +27,11 @@
 
 推论：
 
-- `tf models` / `tf groups` **完全未登录就能工作**——`pnpx tf models` 开箱即用，首次体验很好。
+- `tf models` / `tf groups` **完全未登录就能工作**，`pnpx tf models` 开箱即用。
 - 但**协议准入仍只能靠 JWT 或主动探测**（§3）。
 - v0.5 的「导入 tf」按钮价值因此被大幅抬高：页面持有 JWT，能把 Key **连同完整分组元数据（含协议集合）**一起推给 CLI。它不再只是「省一次粘贴」，而是**唯一能一次性拿齐预检数据的路径**。
 
-### 公开 marketplace 端点的内容（意外丰富）
+### 公开 marketplace 端点的内容
 
 结构：`data[]` = 12 个上架分组，每个带 `models[]`。
 
@@ -51,7 +51,7 @@
 直接可用的产品机会：
 
 - **比价**：同一个模型在多个分组里时，`tf models <id>` 直接列出哪个分组更便宜（分段价 + 倍率）。
-- **健康度**：`tf groups` 显示「Claude Max 当前并发 15/310、3 天可用率 99.2%」——零成本、网页上也不一眼可见。
+- **健康度**：`tf groups` 显示「Claude Max 当前并发 15/310、3 天可用率 99.2%」，零成本，且网页上不一眼可见。
 - **离线模型→分组映射**：复合 Key 前缀补全、模型名纠错、「这个模型在哪些分组有」都能本地算。
 
 ⚠️ **marketplace 不等于可用集合**：公开 12 个 vs JWT 下 `groups/available` 14 个（少了「百炼（Anthropic格式）」和「Grok (Super Grok)」）。marketplace 是**上架展示子集**，CLI 不能拿它当权威可用列表，文案上要区分「市场上有」和「你能用」。
@@ -86,18 +86,18 @@
 2. **分组名字完全不能用来推断能力**：叫「Google」的分组，`platform` 是 **anthropic**。这一条本身就足以证明「本地预检」比「让用户看文档猜」有价值。
 3. **倍率差异极大**（0.8 ~ 50），`tf groups` / `tf models` 展示倍率是高价值信息。
 
-### 意料之外的字段（原设计完全没覆盖）
+### 原设计未覆盖的字段
 
-- **`claude_code_only: true`** —— 真实存在（Claude Max，倍率 20）。分组可以限定只给 Claude Code 用。
+- **`claude_code_only: true`**：真实存在（Claude Max，倍率 20）。分组可以限定只给 Claude Code 用。
   - 预检必须加这一维：非 claude harness 选到这类分组要本地拦下。
   - 反过来这是 tf 的卖点：`tf claude` 是用上这类高价值分组的正规方式。
-  - 待确认：网关靠什么识别 Claude Code（UA？特定 header？）——tf 启动的是真 `claude` 二进制，理论上天然满足，但要实测确认注入的 header 不会破坏识别。
-- **`max_reasoning_effort` / `reasoning_effort_mappings`** —— 字段已存在（当前值为空）。说明 effort 是**三层**而不是两层：
+  - 待确认：网关靠什么识别 Claude Code（UA？特定 header？）。tf 启动的是真 `claude` 二进制，理论上天然满足，但要实测确认注入的 header 不会破坏识别。
+- **`max_reasoning_effort` / `reasoning_effort_mappings`**：字段已存在（当前值为空）。说明 effort 是**三层**而不是两层：
   ```
   用户输入 → harness 能力表 → 分组上限/映射 → 最终请求
   ```
   设计要给第三层留位置。
-- **`fallback_group_id` / `fallback_group_id_on_invalid_request` / `unavailable_fallback_group_id`** —— 分组可配置故障转移到别的分组。**实际执行的分组可能不是选中的那个**，这是「预检只能证伪、不能证真」的又一条硬证据。
+- **`fallback_group_id` / `fallback_group_id_on_invalid_request` / `unavailable_fallback_group_id`**：分组可配置故障转移到别的分组。**实际执行的分组可能不是选中的那个**，这是「预检只能证伪、不能证真」的又一条硬证据。
 - `require_oauth_only`、`require_privacy_set`、`data_sharing_enabled`、`session_isolation_enabled`、`allow_live`、`allow_image_generation`、`rpm_limit`、各类价格字段。
 
 ---
@@ -133,7 +133,7 @@ Gemini 那条用空 body 也能拿到 403，证明准入确实在 body 解析之
 | JWT 无效/用 Key 调管理接口 | 401 | `{"code":"INVALID_TOKEN","message":"Invalid token"}` |
 | 请求体缺字段 | 400 | `{"error":{"message":"model is required","type":"invalid_request_error"}}` |
 
-两个高价值细节：
+其中：
 
 - **两种 403 语义完全不同**（协议层 vs 模型层），CLI 必须分开报，否则用户会去改错东西。
 - **「模型不在分组」的 403 直接带 available models 列表** → CLI 可以解析出来，立刻给出「你可以用这些模型」的建议，甚至做拼写纠正。
@@ -173,6 +173,6 @@ current_concurrency, expires_at, fallback_to_default_group_when_unavailable,
 data_sharing_confirmed_group_id, data_sharing_notice_version, ip_whitelist, ip_blacklist
 ```
 
-**关键**：Key 对象里**嵌套了完整的 group 对象**。所以「导入 tf」按钮只要推送这一个对象，CLI 就拿到了预检所需的全部信息，不需要再拼第二个接口。
+**关键**：Key 对象里**嵌套了完整的 group 对象**。因此「导入 tf」按钮只要推送这一个对象，CLI 就拿到了预检所需的全部信息，不需要再拼第二个接口。
 
 `usage_{5h,1d,7d}` + `window_*_start` + `current_concurrency` 让 `tf status` 能显示「限速窗口还剩多少、什么时候重置」，这是网页上也不容易一眼看到的信息。

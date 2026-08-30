@@ -1,12 +1,10 @@
 # tf 认证与 Key 发放：与后端讨论用的事实与议题
 
-本文只做两件事：把 TokenRouter 现状**查清楚写下来**，再列出需要后端拍板的问题。不预设实现。
-
 代码依据：`backend/internal/server/routes/{auth,user}.go`、`backend/internal/handler/api_key_handler.go`、`backend/internal/handler/dto/mappers.go`、`docs/interfaces/http_api.md`。
 
 ---
 
-## 一、现状事实：登录是"自订协议"，不是 OAuth
+## 一、登录是自订协议，不是 OAuth
 
 **TokenRouter 是 OAuth 的消费方（client），不是提供方（authorization server）。**
 
@@ -17,7 +15,7 @@
   - 第三方登录新用户走 `oauth/pending/*` 的补全状态机 + HttpOnly pending cookie
 - 全部认证入口挂 `BackendModeAuthGuard` + 审计中间件 + Redis fail-close 限流（login 20/min，register 5/min…）。
 
-**结论**：没有现成的 `authorization_code` / `device_code` 端点可以给 CLI 复用；也不能指望第三方 IdP 直接给 CLI 发 token——第三方登录的最终产物仍是这套自订 JWT。**CLI 授权是新增能力，不是"接一下 OAuth"。**
+**结论**：没有现成的 `authorization_code` / `device_code` 端点可以给 CLI 复用；也不能指望第三方 IdP 直接给 CLI 发 token，第三方登录的最终产物仍是这套自订 JWT。**CLI 授权是新增能力，不是「接一下 OAuth」。**
 
 同时它解释了为什么 CLI 不能直接调 `/auth/login`：这条路径前面挂着 Cloudflare 质询、可能的 Turnstile/天御动作验证码、2FA、passkey，全都是**为浏览器设计的**。
 
@@ -26,7 +24,7 @@
 1. **走标准还是走自订？**
    - A. 把 TokenRouter 做成最小 OAuth 2.0 authorization server：只服务 first-party client `tf`，只支持 `authorization_code + PKCE`（public client、无 client_secret）。收益是以后 CC-Switch、编辑器插件、第三方工具能统一接，`device_code` 顺带解决无浏览器场景；成本是要引入 client 注册 / scope / consent 三个新概念。
    - B. 非标准的一次性 code 交换（`grant` + `exchange` 两个接口）。实现最小，语义清楚，但只能自己用。
-   - 我的倾向：**先 B 后 A**，B 的接口形状按 OAuth 命名（`code_challenge`/`code_verifier`/`S256`），将来升级 A 不破坏 CLI。
+   - 倾向：**先 B 后 A**，B 的接口形状按 OAuth 命名（`code_challenge`/`code_verifier`/`S256`），将来升级 A 不破坏 CLI。
 2. **授权码存哪**：Redis（项目已重度依赖，且有 fail-close 惯例）还是 DB？建议 Redis、TTL 60s、一次性消费、`S256(verifier)==challenge` 校验。
 3. **授权页放哪**：新增前端路由 `/cli/auth`，还是在 `/keys` 页加一个授权模式？（现有 router 已有一堆 `/auth/*` callback 页，新增路由风格一致）
 4. **backend mode 下**（`BackendModeAuthGuard`）CLI 授权是禁用还是放行？
@@ -35,7 +33,7 @@
 
 ---
 
-## 二、现状事实：Key 是怎么建出来的
+## 二、Key 是怎么建出来的
 
 `POST /api/v1/keys`（用户 JWT，`internal/handler/api_key_handler.go`）：
 
@@ -50,18 +48,18 @@
 | `rate_limit_{5h,1d,7d}` / `ip_whitelist` / `ip_blacklist` / `fast_mode_policy` | 限制 |
 | **`data_sharing_confirmed` + `data_sharing_notice_version`** | **数据共享同意** |
 
-三个对设计影响最大的事实：
+对设计影响最大的几条：
 
 1. **有数据共享同意门槛。** 这是法律/合规确认，**CLI 不应该代替用户勾选**。这条本身就足以决定：Key 应该在浏览器页面里创建，CLI 只接收结果。
 2. **写操作已有幂等**：`executeUserIdempotentJSON("user.api_keys.create", ...)` 配合 `Idempotency-Key`，重试安全，不会重复建 key。
-3. **Key 明文存储、可再次读取**（`dto.APIKeyFromService` 直出 `Key` 字段，无掩码），所以"复用已有 Key"是可行的，不必每次新建。
+3. **Key 明文存储、可再次读取**（`dto.APIKeyFromService` 直出 `Key` 字段，无掩码），因此可以复用已有 Key，不必每次新建。
 
 配套只读接口（CLI 或授权页可用）：
 - `GET /api/v1/groups/available?scope=personal|team&subscription_id=`
 - `GET /api/v1/keys/billing-options?scope=`
 - `GET /api/v1/groups/rates`、`GET /api/v1/keys`
 
-### 「优雅地新建 Key」的三个候选
+### 新建 Key 的候选方案
 
 **A. 浏览器建、CLI 取（倾向方案）**
 授权页展示分组下拉 + 数据共享勾选 + Key 名称，用户确认后页面用**现有 JWT 调现有 `POST /api/v1/keys`**，再把 `key_id` 绑到一次性 code；CLI 只做 exchange。
@@ -94,7 +92,7 @@ exchange 时服务端顺手建 key。
 
 ## 三、无浏览器场景（SSH / 容器 / 无 GUI）
 
-浏览器流解决不了纯终端环境，需要一条兜底路径。三选一，也需要讨论：
+浏览器流解决不了纯终端环境，需要一条兜底路径：
 
 1. `tf login --with-key`：用户从 `/keys` 页复制粘贴。**零后端改动，v0 就该先做这个。**
 2. `--no-browser`：打印 URL，用户在别的设备打开，页面显示一段一次性 code 粘回终端（device-code 变体，需要后端支持轮询或粘贴码）。

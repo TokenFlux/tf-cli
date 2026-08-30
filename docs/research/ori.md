@@ -7,12 +7,12 @@
 
 ## 一、Ori 是什么
 
-一句话：**不是聊天 CLI，而是"harness 启动器"**——把你已经装好的 Claude Code / Codex / opencode 等 agent，用一套经过调优的环境变量与配置启动，指向 OpenRouter。
+**不是聊天 CLI，而是 harness 启动器**：把用户已安装的 Claude Code / Codex / opencode 等 agent，用一套经过调优的环境变量与配置启动，指向 OpenRouter。
 
 官方博客：https://openrouter.ai/blog/announcements/ori-harness
 分发仓库：https://github.com/OpenRouterLabs/ori-releases （只有产物，源码在私有的 `OpenRouterIncubator/ori`）
 
-核心论点（值得照抄的产品定位）：用户接网关时要么写 ad-hoc 脚本，要么在环境变量里考古；不同 harness 需要的变量数量差异巨大，Claude Code 尤其多，而且**变量取值要随模型而变**（例如 `ENABLE_TOOL_SEARCH` 只对 Anthropic 模型该开）。这个"每个 harness × 每个模型的最优配置矩阵"就是产品价值。
+核心论点（值得照抄的产品定位）：用户接网关时要么写 ad-hoc 脚本，要么在环境变量里考古；不同 harness 需要的变量数量差异巨大，Claude Code 尤其多，而且**变量取值要随模型而变**（例如 `ENABLE_TOOL_SEARCH` 只对 Anthropic 模型该开）。这张「每个 harness × 每个模型的最优配置矩阵」就是产品价值。
 
 ### 分发方式
 
@@ -52,7 +52,7 @@ changelog / update / version
 
 ### 每个 harness 具体干了什么（从 binary 里还原）
 
-**Claude Code** —— 最复杂，两套 profile：
+**Claude Code**（最复杂，两套 profile）：
 ```
 ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN(空) / ANTHROPIC_API_KEY / OPENROUTER_API_KEY
 CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
@@ -66,7 +66,7 @@ ANTHROPIC_CUSTOM_HEADERS 里注入 X-Session-Id
 ```
 另外：把一整张竞争变量表**显式清空**（`ANTHROPIC_*_BASE_URL`、`CLAUDE_CODE_USE_{BEDROCK,VERTEX,GATEWAY,...}`、`CLAUDE_CODE_OAUTH_TOKEN` …）；读用户 `~/.claude/settings.json` 的 env 做"可覆盖项"的合并；把 apiKeyHelper + env 写进一个进程私有的 `<cwd>/.ori/claude-launch-settings-<pid>.json` 再用 `--settings` 传入（并清理 24h 前的残留），只有用户自己传了 `--settings/--setting-sources` 时才让路；还会原子改写 `.claude.json` 缓存模型列表；给 secure storage 单独指目录 `~/.ori/claude-secure-storage`。变量分 `overridable / non-overridable` 两类，这个建模很干净。
 
-**Codex** —— 不设环境变量，全部用 `-c` 覆盖：
+**Codex**（不设环境变量，全部用 `-c` 覆盖）：
 ```
 -c model_provider=openrouter
 -c model_providers.openrouter.base_url='https://openrouter.ai/api/v1'
@@ -78,9 +78,9 @@ ANTHROPIC_CUSTOM_HEADERS 里注入 X-Session-Id
 ```
 `harness-doctor codex` 会扫 `/etc/codex/{config,managed_config,requirements}.toml`、逐级向上的 `.codex/config.toml`、代理变量与 `OPENAI_*/CODEX_*` 变量，报冲突。
 
-**opencode** —— `OPENROUTER_API_KEY` + `OPENCODE_CONFIG_CONTENT`（内联 JSON 注入 `X-Session-Id` header，用户已设则不覆盖），模型自动补 `openrouter/` 前缀，effort → `--variant`。**并且检测 `~/.local/share/opencode/auth.json` 里已存的 openrouter key 与注入 key 不一致时警告**（存储凭据优先级更高，会导致认证失败）。
+**opencode**：`OPENROUTER_API_KEY` + `OPENCODE_CONFIG_CONTENT`（内联 JSON 注入 `X-Session-Id` header，用户已设则不覆盖），模型自动补 `openrouter/` 前缀，effort → `--variant`。**并且检测 `~/.local/share/opencode/auth.json` 里已存的 openrouter key 与注入 key 不一致时警告**（存储凭据优先级更高，会导致认证失败）。
 
-**其它**：grok 改 `GROK_MODELS_BASE_URL/GROK_MODELS_LIST_URL/GROK_XAI_API_BASE_URL/XAI_API_KEY` 并关掉其 telemetry；hermes 只有 key，明确报错说自己不支持 effort 翻译；omp 走 `--provider openrouter`/`--model openrouter/x` + `--thinking`；kilo 读多层配置定模型、检测 `KILO_AUTH_CONTENT` 冲突；prime-agent 生成一个 `~/.ori/prime-agent/openrouter-auth.ts` 扩展并清空 **30+ 个别家 provider 的 API key 变量**；dsh 写 `~/.dsh/.credentials.yaml` 并装插件。
+**其余 harness**：grok 改 `GROK_MODELS_BASE_URL/GROK_MODELS_LIST_URL/GROK_XAI_API_BASE_URL/XAI_API_KEY` 并关掉其 telemetry；hermes 只有 key，明确报错说自己不支持 effort 翻译；omp 走 `--provider openrouter`/`--model openrouter/x` + `--thinking`；kilo 读多层配置定模型、检测 `KILO_AUTH_CONTENT` 冲突；prime-agent 生成一个 `~/.ori/prime-agent/openrouter-auth.ts` 扩展并清空 **30+ 个别家 provider 的 API key 变量**；dsh 写 `~/.dsh/.credentials.yaml` 并装插件。
 
 模式很统一，抄的时候按这个抽象：
 ```
@@ -99,12 +99,12 @@ effort 能力表（不支持的档位直接报错并列出可用档）：
 
 ### 值得学的取舍
 
-1. 不重造 agent，只做"配置层"，接入成本低、护城河在配置矩阵。
+1. 不重造 agent，只做配置层，接入成本低，护城河在配置矩阵。
 2. 配置**随模型变**，而不是一套静态 env。
 3. 主动做冲突诊断（doctor / 凭据冲突警告），这是网关类产品最大的支持成本来源。
 4. 机器可读输出是一等公民（管道即 JSON）。
 5. 独立二进制 + 校验和 + 双通道更新，用户零运行时依赖。
-6. 源码闭源但产物 Apache-2.0，分发仓库明确写"这里没有代码可读"。
+6. 源码闭源但产物 Apache-2.0，分发仓库明确写「这里没有代码可读」。
 
 ---
 
@@ -180,7 +180,7 @@ tf update / version
 >
 > 下面的内容保留，作为 ori 做法的调研记录与将来做授权服务器时的参考。
 
-**结论：CLI 永远不碰密码、不直接调 `/api/v1/auth/login`。** 用户名密码登录路径挂着 Cloudflare 质询 / Turnstile / 腾讯天御，CLI 里的 HTTP client 天生过不去，也不该试图过去（绕质询本身就是错的方向）。把交互挪进浏览器——浏览器有 cookie、能过质询、已经登录。
+**结论：CLI 永远不碰密码、不直接调 `/api/v1/auth/login`。** 用户名密码登录路径挂着 Cloudflare 质询 / Turnstile / 腾讯天御，CLI 里的 HTTP client 天生过不去，也不该试图过去（绕质询本身就是错的方向）。把交互挪进浏览器：浏览器有 cookie、能过质询、已经登录。
 
 ### 浏览器授权流（照抄 ori 的 PKCE，但授权页是自家前端）
 
@@ -233,7 +233,7 @@ tf                          (主包，~5KB)
 包管理器按 `os`/`cpu`/`libc` 字段只装匹配的那一个，于是：
 
 - `pnpx tf login` / `npx tf claude` 开箱即用，只下 ~10MB。
-- **没有 postinstall 下载脚本**——不受 `--ignore-scripts`、企业内网、离线 registry 镜像影响，这点比「postinstall 里 curl 二进制」的方案稳得多。
+- **没有 postinstall 下载脚本**，不受 `--ignore-scripts`、企业内网、离线 registry 镜像影响，这点比「postinstall 里 curl 二进制」的方案稳得多。
 - Go 二进制约 10–15MB，装进 npm 完全合理；对比 ori 的 Bun `--compile` 产物 80MB，**Go 在这条路上反而是优势**。
 
 shim 注意事项：`execFileSync(bin, process.argv.slice(2), { stdio: 'inherit' })` 保持 TTY（agent 是全屏 TUI，必须继承）；Windows 补 `.exe`；透传退出码与信号；平台包缺失时给出可读报错（提示 `--no-optional` 或不支持的平台）。

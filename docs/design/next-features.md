@@ -1,6 +1,6 @@
 # login 之后：下一批功能的想法
 
-给你参考的初稿，不是定案。核心判断写在每节开头。
+初稿，不是定案。
 
 ---
 
@@ -54,7 +54,7 @@ headers         能否注入自定义 header（决定能不能带 session id）
 
 ### 三行具体的（依据 TokenDocs 现有教程 + ori 逆向）
 
-**claude** — protocol: anthropic
+**claude**（protocol: anthropic）
 ```
 locked:      ANTHROPIC_BASE_URL=<host>
              ANTHROPIC_AUTH_TOKEN=<key>
@@ -70,7 +70,7 @@ settings:    写进程私有的 <cwd>/.tf/claude-<pid>.json 用 --settings 传�
 ```
 待验证：`ENABLE_TOOL_SEARCH` 在 TokenFlux 的 Anthropic 分组下是否生效（上游是真 Anthropic 账号，理论上可行；能省近一半系统提示词 token，值得实测）。
 
-**codex** — protocol: `openai_responses`，可降级到 `openai_chat_completions`（**由分组能力自动决定，不用猜**，见第 3 节）
+**codex**（protocol: `openai_responses`，可降级到 `openai_chat_completions`；降级由分组能力自动决定，见第 3 节）
 ```
 全部走 -c 覆盖，不碰用户的 config.toml：
   -c model_provider=tokenflux
@@ -84,9 +84,9 @@ settings:    写进程私有的 <cwd>/.tf/claude-<pid>.json 用 --settings 传�
             或 auth.command='sh' auth.args=['-c','echo $TOKENFLUX_API_KEY']（ori 的做法，更通用）
   [-m <model>] [-c model_reasoning_effort=<effort>]
 ```
-注意教程目前教用户写 `auth.json` + `requires_openai_auth=true`，那是持久化方案；tf 用 `-c` 就完全不落盘。`wire_api` 必须能按分组降级——TokenRouter 文档明确 `preserve_client_protocol` 下 Chat 请求只走 `/v1/chat/completions`，Anthropic 格式分组接 responses 是另一条转换路径，要实测。
+注意教程目前教用户写 `auth.json` + `requires_openai_auth=true`，那是持久化方案；tf 用 `-c` 就完全不落盘。`wire_api` 必须能按分组降级：TokenRouter 文档明确 `preserve_client_protocol` 下 Chat 请求只走 `/v1/chat/completions`，Anthropic 格式分组接 responses 是另一条转换路径，要实测。
 
-**opencode** — protocol: openai-chat
+**opencode**（protocol: openai-chat）
 ```
 OPENCODE_CONFIG_CONTENT = {"provider":{"tokenflux":{...baseURL:"<host>/v1", apiKey, headers}}}
 （用户已设该变量则不覆盖，只警告）
@@ -105,7 +105,7 @@ conflicts: ~/.local/share/opencode/auth.json 里的同名 provider key 会压过
 
 ---
 
-## 3. 分组协议预检 —— 我认为这是 tf 最该做对的一件事
+## 3. 分组协议预检
 
 **问题**：Key 绑错分组，线上返回 403 `This group does not allow ... requests`。用户在终端看到的是 harness 转述后的模糊报错，得去翻文档才知道是分组选错了。这是**纯粹的信息缺失**，而信息在本地就拿得到。
 
@@ -117,7 +117,7 @@ conflicts: ~/.local/share/opencode/auth.json 里的同名 provider key 会压过
 - 集合取值固定这四个，且返回顺序固定：
   `anthropic_messages` / `openai_responses` / `openai_chat_completions` / `gemini_generate_content`
 - **可以只支持其中一种，也可以支持两三种**；创建时省略用平台默认，切换平台时只保留两平台的交集。
-- **空数组是合法的**——所有平台都接受显式空集合，CLI 必须能优雅处理「这个分组不支持任何文本协议」。
+- **空数组是合法的**：所有平台都接受显式空集合，CLI 必须能优雅处理「这个分组不支持任何文本协议」。
 - `allow_messages_dispatch` 是**弃用字段**，值由新集合派生。CLI 只读 `allowed_client_protocols`。
 - 好消息：这个字段在**公开 Group DTO** 里就有，`GET /api/v1/groups/available` 直接能拿到，不需要管理员权限。
 
@@ -130,14 +130,14 @@ conflicts: ~/.local/share/opencode/auth.json 里的同名 provider key 会压过
 | opencode | `openai_chat_completions` | `openai_responses`（待确认其 AI SDK provider 走哪条）| 本地拦下 |
 | hermes | `openai_chat_completions` | — | 本地拦下 |
 
-**关键推论：`openai_chat_completions` 和 `openai_responses` 不能笼统当成「OpenAI 格式」。** 一个只开 `openai_chat_completions` 的分组，opencode / hermes / Cherry Studio 都能跑，**但 `tf codex` 跑不了**。这正是预检最该抓的一类错配——分组名字写着「OpenAI格式」，用户很自然会以为 codex 能用。
+**关键推论：`openai_chat_completions` 和 `openai_responses` 不能笼统当成「OpenAI 格式」。** 一个只开 `openai_chat_completions` 的分组，opencode / hermes / Cherry Studio 都能跑，**但 `tf codex` 跑不了**。这正是预检最该抓的一类错配：分组名字写着「OpenAI格式」，用户很自然会以为 codex 能用。
 
 ### 3.2 复合 Key：检查粒度是「模型解析后的最终分组」
 
 文档写得很明确：准入用的是**认证后最终选中的分组**；复合 Key 要先解析正文才知道打到哪个子分组。所以预检不能按 Key 做，得按 `(模型 → 最终分组)` 做：
 
 - 普通 Key：一个分组，直接比。
-- 复合 Key：先按模型前缀解析出目标分组，再比该分组的集合。同一把 Key 里，`claude-*` 走的分组可能支持 `anthropic_messages`，`gpt-*` 走的分组只支持 `openai_chat_completions` —— **同一把 Key 对 `tf claude` 可用、对 `tf codex` 也可用，但换个模型就不一定**。这个组合关系必须在 `tf models` 里显式展示出来。
+- 复合 Key：先按模型前缀解析出目标分组，再比该分组的集合。同一把 Key 里，`claude-*` 走的分组可能支持 `anthropic_messages`，`gpt-*` 走的分组只支持 `openai_chat_completions`：**同一把 Key 对 `tf claude` 可用、对 `tf codex` 也可用，但换个模型就不一定**。这个组合关系必须在 `tf models` 里显式展示出来。
 
 ### 3.3 预检只能证伪，不能证真（措辞要诚实）
 
@@ -168,7 +168,7 @@ tf claude 需要 anthropic_messages 协议。
   · 开启复合 Key，一把 Key 绑多个分组，用模型前缀切换
 ```
 
-第二条「换 harness」是反向建议——既然本地已经知道这个分组开放了哪些协议，就顺手告诉用户**手上这把 Key 能跑什么**，而不只是说它不能跑什么。
+第二条「换 harness」是反向建议：既然本地已经知道这个分组开放了哪些协议，就顺手告诉用户**手上这把 Key 能跑什么**，而不只是说它不能跑什么。
 
 4. 新增 `tf groups`：直接把矩阵摊开给用户看，一屏解决所有困惑。
 
@@ -225,15 +225,15 @@ harness 前缀    tokenflux/ds/deepseek-v3（opencode）/ 原样（claude、code
 
 ---
 
-## 7. 开工前建议先实测的三件事
+## 7. 开工前建议先实测的项
 
 这几条会实质影响适配表，不实测就是猜：
 
 1. **`ENABLE_TOOL_SEARCH` 在 TokenFlux 的 Anthropic 分组能不能用**（省 token，收益大）。
-2. **`allowed_client_protocols` 通过、但账号 endpoint capability 更窄**时，网关实际返回什么错误——决定 `doctor` 怎么把这类失败和「分组协议不匹配」区分开。
+2. **`allowed_client_protocols` 通过、但账号 endpoint capability 更窄**时，网关实际返回什么错误。这决定 `doctor` 怎么把这类失败和「分组协议不匹配」区分开。
 3. **`X-Session-Id` 打到网关后，粘性调度和用量归因是否真的按预期生效**（这条要问后端确认字段名，可能不是 `X-Session-Id`）。
 
-（原来的「codex wire_api 兼容边界」已经不用测了——读 `allowed_client_protocols` 即可确定。）
+（原来的「codex wire_api 兼容边界」不用测了，读 `allowed_client_protocols` 即可确定。）
 
 三条都可以做成 `tf harness test` 的契约用例，以后回归也用它。
 
@@ -249,4 +249,4 @@ harness 前缀    tokenflux/ds/deepseek-v3（opencode）/ 原样（claude、code
 
 3. **`/api/v1/marketplace/models` 加 `allowed_client_protocols`。**
    现在 tf 只能靠发探针、读拒绝文案来反推，文案一改就失灵。
-   `claude_code_only` 同理 —— 那本该是一个字段。
+   `claude_code_only` 同理，那本该是一个字段。

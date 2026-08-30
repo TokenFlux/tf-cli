@@ -54,12 +54,12 @@ model=gpt-5.4-nano  small=true  agent=title
 **这个失败是静默的**：主对话正常返回，进程退出码 0，用户只会觉得「标题没生成」。
 注入 `small_model` 后新增日志里该错误归零。
 
-三条推论：
+推论：
 
 1. 模型槽设计必须覆盖**所有** harness 会用到的槽位，不只是主模型。
 2. 预检要校验全部槽位，只验主模型会漏掉这一类。
 3. TokenDocs 的 opencode 教程里 `small_model: openai/gpt-5.6-luna` 在本测试 Key 的分组中同样不存在
-   —— 文档给的是固定值，而分组可用模型因人而异。tf 从分组实际模型列表里选，正好解决这个问题。
+：文档给的是固定值，而分组可用模型因人而异。tf 从分组实际模型列表里选，正好解决这个问题。
 
 ---
 
@@ -98,13 +98,13 @@ model=gpt-5.4-nano  small=true  agent=title
 
 需要先安装对应 harness：
 
-- **claude** —— 最高风险项：`claude_code_only` 分组（Claude Max，倍率 20）
+- **claude**（最高风险项）：`claude_code_only` 分组（Claude Max，倍率 20）
   在 tf 的 exec 路径下能否正常通过 UA + TLS 指纹识别；
   以及 `HTTPS_PROXY` 存在时是否破坏识别。
-- **codex** —— `-c` 覆盖 + `env_key` 是否足以完全避免落盘；
+- **codex**：`-c` 覆盖 + `env_key` 是否足以完全避免落盘；
   `wire_api` 只剩 `responses` 后与 `openai_responses` 准入的对应关系。
 
-## opencode 的两个必备条件（实测 2025-xx）
+## opencode 的必备条件
 
 1. **模型必须显式声明。** opencode 会拿模型 ID 去比对内置目录，网关的
    模型名（`claude-opus-4-6`、`gpt-5.6-terra`…）不在任何目录里，
@@ -114,7 +114,7 @@ model=gpt-5.4-nano  small=true  agent=title
 2. **baseURL 都要带 `/v1`，包括 anthropic provider。**
    这与 Claude Code 相反：CC 自己补 `/v1/messages`，而
    `@ai-sdk/anthropic` 只补 `/messages`。写成根地址时请求打到
-   `/messages`，网关 404，而 opencode **静默吞掉** —— 退出码 0、
+   `/messages`，网关 404，而 opencode **静默吞掉**：退出码 0、
    没有回答、也没有报错。这是最难排查的一种失败。
 
 实测通过：Kiro 分组 + `claude-opus-4-6` 走 anthropic provider，
@@ -135,8 +135,8 @@ AI SDK 按 `item_id` 跟踪文本片段，而这个 id 从未通过
 为此建一个本地代理去过滤流会违背「绝不 MITM」的定位，
 代价远大于收益。
 
-顺带发现：ChatGPT 分组的 `instructions` 字段里是完整的 Codex 系统提示词
-—— 该分组是账号型的，网关会代填上游客户端的提示词。
+顺带发现：ChatGPT 分组的 `instructions` 字段里是完整的 Codex 系统提示词；
+该分组是账号型的，网关会代填上游客户端的提示词。
 
 ## Claude Kiro 与 Claude Max 的差别
 
@@ -147,6 +147,6 @@ Kiro **不是** `claude_code_only`：`/v1/messages` 与 `/v1/chat/completions`
 
 探测时 `/v1/responses` 对不存在的模型返回的是 **503**
 `No available accounts: The current group does not support the requested
-model ...` —— 状态码是新形状，但文案里仍有 `requested model`，
+model ...`。状态码是新形状，但文案里仍有 `requested model`，
 分类器按文案判定为「协议准入、模型不存在」，结论正确。
 这也说明判据放在文案上比放在状态码上更稳。

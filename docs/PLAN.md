@@ -10,19 +10,19 @@
 |---|---|
 | 定位 | 启动器，进程内注入，退出不留痕，不改用户配置文件 |
 | 语言 / 分发 | Go 单二进制；npm 平台包（optionalDeps + JS shim）+ install.sh + brew/scoop |
-| 进程模型 | **fork + wait**（信号转发自己写，换取确定性清理与用量摘要）|
+| 进程模型 | fork + wait（信号转发自己写，换取确定性清理与用量摘要）|
 | 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA（会破坏 `claude_code_only` 的 UA+TLS 指纹识别）|
 | 认证 | v0 `--with-key`；v0.5 网页「导入 tf」+ localhost 回环 + 带 Origin 的预览确认 |
 | 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；`--` 无条件透传；`--model` 由 tf 吃掉 |
 | 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；v0 不用钥匙串 |
-| 文案 | 跟随 locale + `TKR_LANG`；**错误码保持英文常量** |
+| 文案 | 跟随 locale + `TKR_LANG`；错误码保持英文常量 |
 | 输出 | 显式 `--json`；非 TTY 时日志转 stderr、去色，但不自动改格式 |
 | 缓存 | 目录 24h / 探测 1h；刷新超时 2s 用旧数据；离线放行并说明 |
 | 模型 | 必须注入；三层策略（默认直用 / 首次选择器 / 非交互启发式）；`-m` 空值进选择器；槽按 harness 分开存 |
 | harness 未装 | 交互式二选一（退出 / 由 tf 装），非交互默认拒绝，绝不 sudo |
-| 用量摘要 | **详细显示** |
-| Telemetry | **默认关**，版本信息只走 tf 自身请求的 UA |
-| License | **Apache-2.0**，开源 |
+| 用量摘要 | 详细显示 |
+| Telemetry | 默认关，版本信息只走 tf 自身请求的 UA |
+| License | Apache-2.0，开源 |
 | Windows | v0 出二进制，标注实验性 |
 
 ---
@@ -71,7 +71,7 @@ CLI 框架、config/credentials 读写与权限、错误码与双语文案脚手
 **验收**：`tf claude` 能起真实 Claude Code 并正常对话；Ctrl+C 语义正确；退出码透传；临时文件确定性清理；退出后打印详细用量。
 
 **本阶段必须完成的实测**：
-1. **`claude_code_only` 分组（Claude Max）能否正常识别** —— 最高优先级，验证 UA+TLS 指纹在 tf 启动路径下不受影响。
+1. `claude_code_only` 分组（Claude Max）能否正常识别。最高优先级，验证 UA+TLS 指纹在 tf 启动路径下不受影响。
 2. 环境里存在 `HTTPS_PROXY` 时是否破坏识别 → 转化为 doctor 规则。
 3. `ENABLE_TOOL_SEARCH` 在 Anthropic 分组是否生效。
 
@@ -88,7 +88,7 @@ CLI 框架、config/credentials 读写与权限、错误码与双语文案脚手
 ### M6 codex 与 opencode
 按适配表加两行 + 各自的冲突检测。
 
-**验收**：`tf codex` / `tf opencode` 跑通且不写用户配置文件；codex 走 `-c` 覆盖 + `env_key`；**opencode 必须同时注入 `model` 与 `small_model`**（否则内置小模型撞 404 且静默失败，已实测）；检测到 harness 自存凭据时警告。
+**验收**：`tf codex` / `tf opencode` 正常启动且不写用户配置文件；codex 走 `-c` 覆盖 + `env_key`；opencode 必须同时注入 `model` 与 `small_model`（否则内置小模型撞 404 且静默失败，已实测）；检测到 harness 自存凭据时警告。
 
 > opencode 配方已实测通过，见 `research/harness-probe.md`。
 
@@ -110,15 +110,7 @@ goreleaser 交叉编译、npm 主包 + 平台包、install.sh + SHA256SUMS、bre
 
 ## 并行推进：要问后端的事
 
-不阻塞 v0，但越早有答案越省事。
-
-| 事项 | 影响的里程碑 | 优先级 |
-|---|---|---|
-| **公开端点 `/api/v1/marketplace/models` 能否加 `allowed_client_protocols`** | M5 —— 若能加，**整个零成本探测子系统可以不做** | **最高** |
-| 会话粘性 / 用量归因的确切 header 名 | M3 | 高 |
-| Key 加 `source` 标记以便识别与撤销 | v0.5 | 中 |
-| `max_reasoning_effort` / `reasoning_effort_mappings` 语义 | M4 | 中 |
-| fallback 分组链能否对客户端可见 | M5 | 低 |
+不阻塞任何里程碑，但越早有答案越省事。清单见 [`STATUS.md` 二.B](STATUS.md#b-要问后端的)。
 
 ---
 
@@ -126,8 +118,8 @@ goreleaser 交叉编译、npm 主包 + 平台包、install.sh + SHA256SUMS、bre
 
 | 风险 | 应对 |
 |---|---|
-| **`claude_code_only` 识别在 tf 路径下失效** | M3 最先验证；一旦失效需重新设计注入方式 |
+| `claude_code_only` 识别在 tf 路径下失效 | M3 最先验证；一旦失效需重新设计注入方式 |
 | harness 迭代导致注入 flag 失效 | 记录已验证版本范围，不匹配只警告；不做版本嗅探分支 |
 | 分组配置被管理员改动导致缓存过期 | 探测结果 TTL 短（1h）；403 时自动失效缓存并重试一次 |
-| **harness 内置的隐式模型槽撞分组限制** | 适配表必须穷举每个 harness 的**全部**模型槽；预检逐槽校验（opencode 的 `small_model` 已暴露此类问题）|
+| harness 内置的隐式模型槽撞分组限制 | 适配表必须穷举每个 harness 的全部模型槽；预检逐槽校验（opencode 的 `small_model` 已暴露此类问题）|
 | npm 平台包体积与发布复杂度 | 用 optionalDependencies，无 postinstall；CI 里一次性把六个平台包发完 |
