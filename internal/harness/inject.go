@@ -172,18 +172,34 @@ func planCodex(in Input) (*Plan, error) {
 func planOpencode(in Input) (*Plan, error) {
 	// 覆盖哪个内置 provider，取决于这次走哪种协议。
 	// 分组只开 anthropic_messages 时，openai provider 会被网关直接拒掉。
-	provider, base := "openai", OpenAIBase(in.Host)
+	//
+	// 两个 provider 的 baseURL 都要带 /v1 —— 注意这与 Claude Code 相反：
+	// CC 自己补 /v1/messages，而 @ai-sdk/anthropic 只补 /messages。
+	// 写成根地址的话请求会打到 /messages，网关 404，且 opencode 静默吞掉：
+	// 退出码 0、没有回答、没有报错。实测过。
+	provider := "openai"
 	if in.Protocol == ProtoAnthropicMessages {
-		provider, base = "anthropic", AnthropicBase(in.Host)
+		provider = "anthropic"
+	}
+
+	// 必须显式声明模型。opencode 会拿模型 ID 去比对内置目录，
+	// 而网关的模型名（claude-opus-4-6、gpt-5.6-terra…）不在任何目录里，
+	// 否则报 Model not found: <provider>/<id>。
+	models := map[string]any{}
+	for _, slot := range []string{"default", "small"} {
+		if m := in.Slots[slot]; m != "" {
+			models[m] = map[string]any{"name": m}
+		}
 	}
 
 	cfg := map[string]any{
 		"provider": map[string]any{
 			provider: map[string]any{
 				"options": map[string]any{
-					"baseURL": base,
+					"baseURL": OpenAIBase(in.Host),
 					"apiKey":  in.Key,
 				},
+				"models": models,
 			},
 		},
 	}

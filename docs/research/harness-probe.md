@@ -103,3 +103,35 @@ model=gpt-5.4-nano  small=true  agent=title
   以及 `HTTPS_PROXY` 存在时是否破坏识别。
 - **codex** —— `-c` 覆盖 + `env_key` 是否足以完全避免落盘；
   `wire_api` 只剩 `responses` 后与 `openai_responses` 准入的对应关系。
+
+## opencode 的两个必备条件（实测 2025-xx）
+
+1. **模型必须显式声明。** opencode 会拿模型 ID 去比对内置目录，网关的
+   模型名（`claude-opus-4-6`、`gpt-5.6-terra`…）不在任何目录里，
+   直接用会报 `Model not found: openai/claude-opus-4-6`。
+   注入配置里补上 `provider.<p>.models.<id> = {"name": <id>}` 即可。
+
+2. **baseURL 都要带 `/v1`，包括 anthropic provider。**
+   这与 Claude Code 相反：CC 自己补 `/v1/messages`，而
+   `@ai-sdk/anthropic` 只补 `/messages`。写成根地址时请求打到
+   `/messages`，网关 404，而 opencode **静默吞掉** —— 退出码 0、
+   没有回答、也没有报错。这是最难排查的一种失败。
+
+实测通过：Kiro 分组 + `claude-opus-4-6` 走 anthropic provider，
+以及 ChatGPT 分组 + `gpt-5.6-sol` 走 openai provider。
+
+偶发：`text part SSE-Keep-Alive not found`（网关保活帧撞上 AI-SDK
+的解析）。重试即可，不在 tkr 的控制范围内。
+
+## Claude Kiro 与 Claude Max 的差别
+
+Kiro **不是** `claude_code_only`：`/v1/messages` 与 `/v1/chat/completions`
+都准入，`/v1/responses` 也真跑得通（网关做协议翻译）。
+所以 Kiro 的 Claude 模型在 codex 与 opencode 里都能用，
+而 Max 只有 Claude Code 本身过得去。
+
+探测时 `/v1/responses` 对不存在的模型返回的是 **503**
+`No available accounts: The current group does not support the requested
+model ...` —— 状态码是新形状，但文案里仍有 `requested model`，
+分类器按文案判定为「协议准入、模型不存在」，结论正确。
+这也说明判据放在文案上比放在状态码上更稳。

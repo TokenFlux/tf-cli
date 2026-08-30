@@ -249,16 +249,17 @@ func TestOpencodeAnthropicRecipe(t *testing.T) {
 	cfg := envOf(plan.Env, "OPENCODE_CONFIG_CONTENT")
 	for _, want := range []string{
 		`"anthropic"`,
-		`"baseURL":"https://tokenflux.dev"`, // Anthropic 用根，不带 /v1
+		// 与 Claude Code 相反：@ai-sdk/anthropic 只补 /messages，
+		// 所以 baseURL 必须带 /v1。写成根地址会 404 且被静默吞掉。
+		`"baseURL":"https://tokenflux.dev/v1"`,
 		`"anthropic/claude-opus-5"`,
 		`"anthropic/claude-haiku-4-5"`, // 缺 small_model 会静默回落到内置模型
+		// 网关的模型名不在 opencode 的内置目录里，必须显式声明。
+		`"claude-opus-5":{"name":"claude-opus-5"}`,
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config %s\n missing %s", cfg, want)
 		}
-	}
-	if strings.Contains(cfg, "/v1") {
-		t.Errorf("anthropic base must not carry /v1: %s", cfg)
 	}
 }
 
@@ -279,5 +280,9 @@ func TestOpencodeOpenAIRecipe(t *testing.T) {
 	}
 	if !strings.Contains(cfg, `"openai/gpt-5.6-sol"`) {
 		t.Errorf("model id needs the provider prefix: %s", cfg)
+	}
+	// gpt-5.6-terra 之类同样不是真实的 OpenAI 模型名，一样要声明。
+	if !strings.Contains(cfg, `"gpt-5.6-sol":{"name":"gpt-5.6-sol"}`) {
+		t.Errorf("gateway model ids must be declared: %s", cfg)
 	}
 }
