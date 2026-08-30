@@ -1,25 +1,9 @@
 # tf
 
 用 [TokenFlux](https://tokenflux.dev) 或自建的 TokenRouter 启动 Claude Code、Codex、opencode。
+只注入环境变量与命令行参数，不改动 harness 自己的配置文件，可与 CC-Switch 这类配置管理器共存。
 
-```sh
-tf claude
-tf codex
-tf opencode
-```
-
-## 启动时做了什么
-
-设置环境变量与命令行参数，需要时写一个进程私有的临时配置文件，然后 exec harness。
-临时文件在退出时删除，`~/.claude/settings.json`、`~/.codex/config.toml`
-这些文件不被写入。
-
-tf 不在请求路径上：没有本地代理，也不改写 User-Agent。部分分组按客户端指纹放行，
-经过代理会被拒绝。
-
-不上报遥测。
-
-tf 与 CC-Switch 这类配置管理器可以同时使用：那类工具管持久配置，tf 管单次启动。
+v0。已在 Claude Code 2.1、Codex 0.151、opencode 1.18 上实测。Windows 能编译，交互路径未验证。
 
 ## 安装
 
@@ -27,66 +11,59 @@ tf 与 CC-Switch 这类配置管理器可以同时使用：那类工具管持久
 curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 ```
 
-安装到 `~/.local/bin`，不需要 sudo。也可以从源码构建：
+装到 `~/.local/bin`，不需要 sudo。从源码构建：
 
 ```sh
 git clone https://github.com/tokenflux/tkr && cd tkr && make build
 ```
 
-## 第一次运行
+## 快速开始
 
 ```sh
 tf login     # 粘贴 API Key，输入不回显，当场校验
 tf claude    # 选一个主模型，之后直接启动
 ```
 
-harness 未安装时会询问，并列出可用的包管理器。非交互环境（`--yes`、`--json`、无终端）
-只打印安装命令，不会自行安装。
+harness 没装时 tf 列出可用的包管理器让你选。`--yes`、`--json`、无终端时只打印安装命令。
 
-## 日常使用
+## 命令
 
-```sh
-tf keys                          # 有哪些 Key，各自可用于哪些 harness
-tf model                         # 查看全部 harness 的模型槽
-tf model claude                  # 交互编辑：选槽位，再选模型
-tf model claude --set fast=claude-haiku-4-5-20251001
-tf claude -m                     # 本次换个模型，进入选择界面
-tf claude -e high                # 本次调整思考强度
-tf codex -k work                 # 本次使用哪把 Key
-tf claude -- --resume            # -- 之后的参数原样交给 harness
-```
+| | |
+| --- | --- |
+| `tf claude` `tf codex` `tf opencode` | 启动 harness |
+| `tf login [名称]` | 保存一把 Key |
+| `tf keys` | 列出 Key，及各自能跑哪些 harness |
+| `tf model [harness]` | 查看或编辑模型槽 |
+| `tf config` | 打印配置文件路径 |
+| `tf update` | 升级自身 |
 
-`-m`、`-e`、`-k` 只影响本次运行，不写入磁盘；持久修改用 `tf model`。
-
-## 升级
+启动时的一次性参数，都不写盘：
 
 ```sh
-tf update            # 校验 SHA256 后原子替换
-tf update --check    # 只查看有无新版
+tf claude -m              # 换模型，进入选择界面
+tf claude -e high         # 调思考强度
+tf codex  -k work         # 指定用哪把 Key
+tf claude -- --resume     # -- 之后的参数原样交给 harness
 ```
 
-用包管理器安装的不自替换，只打印对应的升级命令。自替换的结果会在下次
-`npm i -g` 时被换回旧版。
+改默认值用 `tf model claude --set fast=claude-haiku-4-5-20251001`。
 
-## 多把 Key 与分组
+## Key 与模型
 
-绑定属于 harness，没有全局的「当前 Key」：
+Key 的绑定属于 harness，不存在全局的「当前 Key」：
 
 ```
-tf codex   → 用可运行 codex 的那把
-tf claude  → 用可运行 claude 的那把
+tf codex   → 用能跑 codex 的那把
+tf claude  → 用能跑 claude 的那把
 ```
 
-有多把符合条件时询问一次并记住。启动前 tf 会探测每把 Key 的分组允许哪些客户端协议，
-这一步不消耗 token，不可用的 Key 和模型不会进入候选。
+多把都符合时问一次并记住。启动前 tf 探测每把 Key 的分组允许哪些客户端协议，不消耗 token，
+不可用的 Key 和模型不进候选。
 
-harness 支持哪几种协议就按哪几种判断。opencode 内置 openai 与 anthropic 两个 provider，
-只开放 `anthropic_messages` 的分组它同样可用，注入配方随之切换。
+`claude_code_only` 分组（如 Claude Max）按客户端指纹放行，只有 Claude Code 过得去，
+它的模型只出现在 `tf claude` 里。
 
-`claude_code_only` 分组（如 Claude Max）按客户端指纹放行，只有 Claude Code 本身能通过。
-这类分组的模型只出现在 `tf claude` 的候选里，其他 harness 下会说明隐藏了多少个模型和原因。
-
-一把复合 Key 横跨多个分组，各分组能力不同，tf 按分组前缀分别判断：
+一把复合 Key 横跨多个分组，各分组能力不同，按分组前缀分别判断：
 
 ```
 $ tf keys
@@ -97,39 +74,39 @@ work  sk-d61…5b1c
 
 ## 自建 TokenRouter
 
-编译期写死网关地址，团队成员照常 `tf login`，不必知道地址：
+编译期写死网关地址，团队成员照常 `tf login`：
 
 ```sh
 make build HOST=https://router.acme.com
 ```
 
-用官方二进制指向自建网关，则在登录时给出地址，它随这把 Key 一起保存：
+用官方二进制则在登录时给地址，它随这把 Key 保存：
 
 ```sh
 tf login work --host https://router.acme.com
 ```
 
-地址优先级：`--host` > 这把 Key 保存的 host > 编译期注入的默认值。
-换一个二进制不会改掉存量 Key 的归属。
+优先级：`--host` > Key 保存的 host > 编译期默认值。
 
-## 文件与环境变量
+## 配置与环境变量
 
-```sh
-tf config
-```
+`tf config` 打印路径。
 
 - `config.json` 0644：Key 标签、host、harness 绑定与模型槽
 - `credentials.json` 0600：只存密钥本身，权限过宽会被自动收紧
+- `TKR_API_KEY` 优先于已保存的凭据，不写盘，供容器与 CI 使用
+- `TKR_LANG` 取 `zh` 或 `en`，默认跟随系统 locale
 
-`TKR_API_KEY` 优先于已保存的凭据且不写入磁盘，供容器与 CI 使用。
-`TKR_LANG=zh` 或 `en` 覆盖界面语言，默认跟随系统 locale。
+凭据处理与安全边界见 [SECURITY.md](SECURITY.md)。
 
-## 状态
+## 升级
 
-v0。Claude Code 2.1、Codex 0.151、opencode 1.18 均已实测：可正常启动并完成真实对话，
-退出码透传正确，用户配置文件未被修改。
+```sh
+tf update            # 校验 SHA256 后原子替换
+tf update --check    # 只查有无新版
+```
 
-Windows 可以编译，交互路径未经验证。
+用包管理器装的不自替换，只打印对应的升级命令。
 
 ## 许可
 

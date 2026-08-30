@@ -121,6 +121,10 @@ func runLogin(c *Context) error {
 			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("可用于", "can run"), 8), strings.Join(runnable(cfg, keyName), " "))
 		}
 	})
+
+	// 放在结果之后：先让用户看见登录成功，再问补全。
+	// 顺序反了会像是「还没成功就又要我做事」。
+	offerCompletions(c, cfg)
 	return nil
 }
 

@@ -21,6 +21,66 @@ import (
 //   - 脚本本身是薄的，逻辑全在 `tf __complete` 里，这样升级 tf
 //     就等于升级补全，用户不必重新安装脚本。
 
+// offerCompletions 在 login 之后问一次要不要装 shell 补全。
+//
+// tf 不擅自改用户的环境，但问一句和偷偷写是两回事 —— 装 harness
+// 走的就是同一条规矩。放在 login 末尾：那本来就是配置时刻，
+// 用户正在回答问题，而且一辈子只经历一次。
+func offerCompletions(c *Context, cfg *config.Config) {
+	if cfg.CompletionsAsked || !c.UI.Interactive(c.Flags.Bool("yes")) {
+		return
+	}
+	shell := currentShell()
+	if shell == "" || completionInstalled(shell) {
+		return
+	}
+
+	// 无论答什么都记下来，免得每次 login 都问。
+	cfg.CompletionsAsked = true
+	defer func() { _ = cfg.Save() }()
+
+	idx, err := c.UI.Select(
+		fmt.Sprintf(c.UI.T("装上 %s 的命令补全？", "Install %s completions?"), shell),
+		[]ui.Item{
+			{Label: c.UI.T("装", "yes"), Detail: mustPath(shell)},
+			{Label: c.UI.T("不用", "no")},
+		})
+	if err != nil || idx != 0 {
+		return
+	}
+	if err := installCompletion(c, shell, completionScripts[shell]); err != nil {
+		c.UI.Warnf("%s", err.Error())
+	}
+}
+
+// mustPath 给出补全文件位置，用于让用户看清将要写到哪里。
+func mustPath(shell string) string {
+	p, err := completionPath(shell)
+	if err != nil {
+		return ""
+	}
+	return p
+}
+
+// currentShell 从 $SHELL 认出当前 shell。认不出就返回空。
+func currentShell() string {
+	base := filepath.Base(os.Getenv("SHELL"))
+	if _, ok := completionScripts[base]; ok {
+		return base
+	}
+	return ""
+}
+
+// completionInstalled 报告补全文件是否已经就位。
+func completionInstalled(shell string) bool {
+	path, err := completionPath(shell)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
 func newCompletionsCommand() *Command {
 	return &Command{
 		Name:  "completions",
@@ -47,6 +107,13 @@ func newCompletionsCommand() *Command {
 			}
 			if c.Flags.Bool("install") {
 				return installCompletion(c, shell, script)
+			}
+			// 直接打到终端多半不是用户想要的：这串东西是给 eval 用的。
+			// 提示走 stderr，eval "$(tf completions zsh)" 照常工作。
+			if c.UI.Interactive(false) {
+				c.UI.Logf("%s", c.UI.Dim(
+					c.UI.T("这是给 eval 用的脚本。直接安装加 --install",
+						"this script is meant for eval. add --install to install it")))
 			}
 			c.UI.Printf("%s", script)
 			return nil
@@ -363,16 +430,17 @@ func zshSiteFunctions() string {
 }
 
 // 用户的配置文件，补全也不例外。需要用户自己动手的部分直接告知。
-func installCompletion(c *Context, shell, script string) error {
+// completionPath 给出该 shell 的补全文件位置。
+//
+// 安装和「是否已装」的判断必须共用这一处，否则两边会慢慢长歪。
+func completionPath(shell string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ui.Errf(ui.CodeConfigWrite, err.Error())
+		return "", err
 	}
-
-	var path, note string
 	switch shell {
 	case "fish":
-		path = filepath.Join(home, ".config", "fish", "completions", "tf.fish")
+		return filepath.Join(home, ".config", "fish", "completions", "tf.fish"), nil
 	case "zsh":
 		// 优先装进已经在 fpath 里的目录，用户就不必再改 .zshrc。
 		//
@@ -380,15 +448,28 @@ func installCompletion(c *Context, shell, script string) error {
 		// 默认 fpath 里 —— 于是「装好了却不生效」，还要用户自己去补一行，
 		// 而且那一行必须排在 compinit 之前，追加到文件末尾是没用的。
 		if dir := zshSiteFunctions(); dir != "" {
-			path = filepath.Join(dir, "_tf")
-			break
+			return filepath.Join(dir, "_tf"), nil
 		}
-		path = filepath.Join(home, ".zsh", "completions", "_tf")
+		return filepath.Join(home, ".zsh", "completions", "_tf"), nil
+	case "bash":
+		return filepath.Join(home, ".local", "share", "bash-completion", "completions", "tf"), nil
+	}
+	return "", fmt.Errorf("unsupported shell %q", shell)
+}
+
+func installCompletion(c *Context, shell, script string) error {
+	path, err := completionPath(shell)
+	if err != nil {
+		return ui.Errf(ui.CodeConfigWrite, err.Error())
+	}
+
+	var note string
+	switch {
+	case shell == "zsh" && zshSiteFunctions() == "":
 		note = c.UI.T(
 			"还需在 .zshrc 的 compinit 之前加：fpath=(~/.zsh/completions $fpath)",
 			"also add this before compinit in .zshrc: fpath=(~/.zsh/completions $fpath)")
-	case "bash":
-		path = filepath.Join(home, ".local", "share", "bash-completion", "completions", "tf")
+	case shell == "bash":
 		note = c.UI.T("需要已安装 bash-completion（brew install bash-completion@2）",
 			"requires bash-completion to be installed (brew install bash-completion@2)")
 	}

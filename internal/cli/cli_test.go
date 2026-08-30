@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/tokenflux/tkr/internal/config"
 	"reflect"
 	"strings"
 	"testing"
@@ -217,5 +218,30 @@ func TestZshScriptQuotesWordArray(t *testing.T) {
 	}
 	if !strings.Contains(completionScripts["bash"], `"${COMP_WORDS[@]:1:COMP_CWORD}"`) {
 		t.Error("bash script must quote COMP_WORDS too")
+	}
+}
+
+// 问过一次就不再问。
+//
+// 答过「不要」的人不该在每次 login 时被重新打扰，所以无论答什么
+// 都要落盘记住。
+func TestCompletionsAskedOnlyOnce(t *testing.T) {
+	c := testCtx()
+	cfg := &config.Config{CompletionsAsked: true}
+
+	// 已问过：不该再走到选择器（testCtx 是非交互，走到就会挂）。
+	offerCompletions(c, cfg)
+
+	if !cfg.CompletionsAsked {
+		t.Error("the flag must survive")
+	}
+}
+
+// 非交互环境绝不弹选择器。
+func TestCompletionsNotOfferedNonInteractive(t *testing.T) {
+	cfg := &config.Config{}
+	offerCompletions(testCtx(), cfg)
+	if cfg.CompletionsAsked {
+		t.Error("must not mark as asked when it never asked")
 	}
 }

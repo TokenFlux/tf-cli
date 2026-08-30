@@ -174,6 +174,11 @@ type Config struct {
 	Harnesses map[string]*HarnessConfig `json:"harnesses,omitempty"`
 	Installs  map[string]InstallRecord  `json:"installs,omitempty"`
 
+	// CompletionsAsked 记下已经问过要不要装 shell 补全。
+	//
+	// 问一次就够了：答过「不要」的人不该在每次 login 时再被打扰。
+	CompletionsAsked bool `json:"completions_asked,omitempty"`
+
 	paths Paths
 }
 
