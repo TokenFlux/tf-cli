@@ -165,6 +165,19 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	}
 	noteHiddenKeys(c, cfg, creds.Names(), keys, h)
 
+	// 存着的模型现在没有 Key 能提供 —— Key 被 logout，或分组里撤了它。
+	//
+	// 能问就问，不要把人赶去另一条命令：选择器就在手边，而用户的目的
+	// 本来就是启动。清空全部槽位而不只是主槽 —— 一次启动只注入一把 Key，
+	// 留着旧槽会让新旧两把 Key 的模型混在一起。
+	if m := slots[config.SlotDefault]; m != "" {
+		if _, ok := ownerOf(cands, m); !ok {
+			c.UI.Warnf(c.UI.T("现在没有 Key 能提供 %s，请重新选一个",
+				"no key offers %s any more; pick another"), m)
+			slots = config.ModelSlots{}
+		}
+	}
+
 	// -m 指定了具体模型：认出它属于哪把 Key。
 	if override != "" {
 		if k, ok := ownerOf(cands, override); ok {

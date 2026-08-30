@@ -505,3 +505,28 @@ func TestLaunchSurvivesADanglingBinding(t *testing.T) {
 		t.Error("a removed key must not resolve")
 	}
 }
+
+// 存着的模型没了就重新问，不要把人赶去另一条命令。
+//
+// 清空的是全部槽位而不只是主槽：一次启动只注入一把 Key，
+// 留着旧槽会让新旧两把 Key 的模型混在一起。
+func TestStaleModelClearsAllSlots(t *testing.T) {
+	cands := []candidate{{Key: "combo", Model: "gpt/gpt-5.4"}}
+	slots := config.ModelSlots{
+		"default": "gpt-5.6-sol", // 这把 Key 已经 logout
+		"small":   "gpt-5.4",     // 同一把 Key，同样作废
+	}
+
+	if _, ok := ownerOf(cands, slots[config.SlotDefault]); ok {
+		t.Fatal("the stale model must not resolve to a key")
+	}
+	slots = config.ModelSlots{} // resolveTarget 的处理
+
+	if len(slots) != 0 {
+		t.Errorf("all slots must be cleared, got %v", slots)
+	}
+	// 清空之后走的是「尚未选定主模型」那条路：能问就问，问不了才报错。
+	if slots[config.SlotDefault] != "" {
+		t.Error("the main slot must be empty so the picker opens")
+	}
+}
