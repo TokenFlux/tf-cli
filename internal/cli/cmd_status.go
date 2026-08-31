@@ -1,11 +1,17 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/tokenflux/tkr/internal/gateway"
 
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
@@ -18,8 +24,9 @@ import (
 // 启动横幅写着用了哪把 Key、哪个模型，但 Claude Code 与 codex 一进
 // alternate screen 那行就没了 —— 出问题回头找，找不到。
 //
-// 不联网：这是一条随时可以敲的命令，等 8 秒就没人愿意敲了。
-// 显示的是本机存着的状态，要刷新用 tf keys --refresh。
+// 只发一次 /v1/usage：那是唯一会改变「下一次请求能不能成」的东西。
+// 额度用完时 harness 只会报一个 429，不说为什么 —— 这条命令要能答上。
+// 取不到就不显示，本机状态照常出。
 func newStatusCommand() *Command {
 	return &Command{
 		Name:  "status",
@@ -40,10 +47,11 @@ type statusHarness struct {
 }
 
 type statusOut struct {
-	ConfigDir string          `json:"config_dir"`
-	Keys      []string        `json:"keys"`
-	Harnesses []statusHarness `json:"harnesses"`
-	Problems  []string        `json:"problems,omitempty"`
+	ConfigDir string                    `json:"config_dir"`
+	Keys      []string                  `json:"keys"`
+	Harnesses []statusHarness           `json:"harnesses"`
+	Usage     map[string]*gateway.Usage `json:"usage,omitempty"`
+	Problems  []string                  `json:"problems,omitempty"`
 }
 
 func runStatus(c *Context) error {
@@ -68,6 +76,7 @@ func runStatus(c *Context) error {
 			Key: hc.Key, Slots: hc.Slots,
 		})
 	}
+	out.Usage = fetchUsage(cfg, creds)
 	out.Problems = checkEnvironment(c, paths)
 
 	c.UI.Emit("status", out, func() { printStatus(c, cfg, creds, out) })
@@ -88,6 +97,7 @@ func printStatus(c *Context, cfg *config.Config, creds *config.Credentials, out 
 		meta := cfg.KeyMetaOf(name)
 		c.UI.Printf("\n%s  %s  %s\n", name, c.UI.Dim(config.Mask(cred.Key)),
 			c.UI.Dim(fmt.Sprintf(c.UI.T("%d 个模型", "%d models"), len(meta.Models))))
+		printUsage(c, out.Usage[name])
 	}
 
 	// 列宽按本屏内容量出来：Key 名长短不一，写死会错位。
@@ -124,6 +134,70 @@ func printStatus(c *Context, cfg *config.Config, creds *config.Credentials, out 
 	for _, p := range out.Problems {
 		c.UI.Warnf("%s", p)
 	}
+}
+
+// fetchUsage 并发取各把 Key 的额度。取不到就没有，不报错。
+func fetchUsage(cfg *config.Config, creds *config.Credentials) map[string]*gateway.Usage {
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+
+	var (
+		wg  sync.WaitGroup
+		mu  sync.Mutex
+		out = map[string]*gateway.Usage{}
+	)
+	for _, name := range creds.Names() {
+		cred, ok := creds.Get(name)
+		if !ok {
+			continue
+		}
+		wg.Add(1)
+		go func(name, key string) {
+			defer wg.Done()
+			u, err := gateway.New(cfg.HostOf(name), key).Usage(ctx)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			out[name] = u
+			mu.Unlock()
+		}(name, cred.Key)
+	}
+	wg.Wait()
+	return out
+}
+
+// printUsage 只讲会影响下一次请求的两件事：还剩多少、今天用了多少。
+func printUsage(c *Context, u *gateway.Usage) {
+	if u == nil {
+		return
+	}
+	unit := u.Quota.Unit
+	if unit == "" {
+		unit = c.UI.T("额度", "credits")
+	}
+
+	line := fmt.Sprintf(c.UI.T("  剩余 %s/%s %s", "  %s/%s %s left"),
+		trimNum(u.Quota.Remaining), trimNum(u.Quota.Limit), unit)
+	if u.Exhausted() {
+		// 额度用完时 harness 只报一个 429。这句话是那个 429 的翻译。
+		line += "  " + c.UI.T("已用完，请求会被拒", "exhausted; requests will be rejected")
+		c.UI.Printf("%s\n", line)
+	} else {
+		c.UI.Printf("%s\n", c.UI.Dim(line))
+	}
+
+	if t := u.Usage.Today; t.Requests > 0 {
+		c.UI.Printf("%s\n", c.UI.Dim(fmt.Sprintf(
+			c.UI.T("  今天 %d 次请求，%d tokens", "  today %d requests, %d tokens"),
+			t.Requests, t.TotalTokens)))
+	}
+}
+
+// trimNum 去掉无意义的小数位：额度是给人看的，10.000000 只会碍眼。
+func trimNum(f float64) string {
+	s := strconv.FormatFloat(f, 'f', 1, 64)
+	return strings.TrimSuffix(s, ".0")
 }
 
 // checkEnvironment 找出会让 tf 的注入落空、或让凭据流经别处的东西。

@@ -52,6 +52,48 @@ func (c *Client) Models(ctx context.Context) ([]Model, error) {
 	return out.Data, nil
 }
 
+// Usage 是 /v1/usage 的应答里 tf 用得上的部分。
+//
+// 只取会影响「下一次请求能不能成」的字段。接口还返回按模型、按日的
+// 明细和账单细节 —— 那些属于网页控制台，塞进命令行只会挤掉重点。
+type Usage struct {
+	Status string `json:"status"` // quota_exhausted 等
+	Quota  struct {
+		Limit     float64 `json:"limit"`
+		Used      float64 `json:"used"`
+		Remaining float64 `json:"remaining"`
+		Unit      string  `json:"unit"`
+	} `json:"quota"`
+	Billing struct {
+		Available bool    `json:"available"`
+		PlanName  string  `json:"plan_name"`
+		Remaining float64 `json:"remaining"`
+		Unit      string  `json:"unit"`
+	} `json:"billing"`
+	Usage struct {
+		Today struct {
+			Requests    int     `json:"requests"`
+			TotalTokens int     `json:"total_tokens"`
+			Cost        float64 `json:"cost"`
+		} `json:"today"`
+	} `json:"usage"`
+}
+
+// Exhausted 报告配额是否已经用尽。
+//
+// 判据用 remaining 而不是 status 字符串：status 的取值集合没有文档，
+// 而 remaining <= 0 的含义不会变。
+func (u Usage) Exhausted() bool { return u.Quota.Limit > 0 && u.Quota.Remaining <= 0 }
+
+// Usage 取这把 Key 的用量与剩余额度。
+func (c *Client) Usage(ctx context.Context) (*Usage, error) {
+	var out Usage
+	if err := c.getJSON(ctx, "/v1/usage", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Host+path, nil)
 	if err != nil {

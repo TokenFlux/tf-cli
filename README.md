@@ -137,6 +137,8 @@ $ tf status
 ~/.tf
 
 default  sk-d7d…a4fe  13 个模型
+  剩余 0/10 推理积分  已用完，请求会被拒
+  今天 8 次请求，170933 tokens
 
   claude    default  claude-sonnet-5
   codex     default  gpt-5.6-terra
@@ -145,7 +147,8 @@ default  sk-d7d…a4fe  13 个模型
 ```
 
 启动横幅写着这次用了哪把 Key、哪个模型，但 Claude Code 与 codex 一进备用屏那行就没了。
-`tf status` 不联网，随时可以敲。
+
+额度用完时 harness 只会报一个 429，不说为什么。`tf status` 会把它翻译出来。
 
 它还会指出会让注入落空的东西：`~/.claude/settings.json` 里的 `env` 段优先级高于
 tf 注入的环境变量，写在那里的 `ANTHROPIC_BASE_URL` 会让 tf 指定的网关不生效。
