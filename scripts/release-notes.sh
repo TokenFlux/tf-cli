@@ -40,6 +40,9 @@ fi
 PREV=$(git tag --sort=-v:refname | grep -A1 -x "$TAG" | tail -1 || true)
 [ "$PREV" = "$TAG" ] && PREV=""
 
+# 标题头：发布页上方那行 v0.5.0 是 GitHub 画的，正文里再点一次名，
+# 从别处引用这段内容时才知道说的是哪个版本。
+printf '## tf v%s\n\n本版由 GitHub Actions 构建，产物与校验和见下。\n\n' "$VER"
 printf '%s\n' "$BODY"
 
 # 该下哪个文件 —— 发布页上摆着六个产物，不说明就得让人自己猜。
@@ -83,28 +86,24 @@ sha256sum -c SHA256SUMS --ignore-missing
 ```
 ARTIFACTS
 
-# 贡献者按提交作者列出。
+# 引用版本：这个二进制是从哪个提交、用什么工具链构建的。
 #
-# 与 GitHub 自动生成的那段互补而不重复：GitHub 那段只认合并的 PR，
-# 列不出直推 main 的提交；这里按 git 作者列，两种来源都覆盖到。
-# 代价是这里只有姓名没有 @ 账号 —— git 作者名与 GitHub 账号不是一回事，
-# 猜映射会张冠李戴。写清楚哪些提交出自 AI —— 仓库里绝大多数提交
-# 由 AI 代理写成，把它们记在一个人名下会误导读者。
-printf '\n## 贡献者\n\n'
-if [ -n "$PREV" ] && git rev-parse -q --verify "$PREV" >/dev/null 2>&1; then
-  RANGE="$PREV..$TAG"
-else
-  RANGE="$TAG" # 首个版本：整段历史
-fi
-git log --format='%an|%ae' "$RANGE" | sort -u | while IFS='|' read -r name email; do
-  case "$email" in
-    dev@tf|dev@tkr) printf -- '- %s（早期的合成提交身份，非真人）\n' "$name" ;;
-    *) printf -- '- %s\n' "$name" ;;
-  esac
-done
+# 不写默认网关：官方产物永远指向同一个地址，写出来是恒定的噪音。
+SHA=$(git rev-parse --short "$TAG^{commit}" 2>/dev/null || echo "?")
+GOV=$(awk '/^go /{print $2}' go.mod 2>/dev/null || echo "?")
+printf '\n引用版本：提交 `%s` / Go `%s`\n' "$SHA" "$GOV"
 
-# 末尾留一个空行：GitHub 把自动生成的那段直接接在后面，
-# 不留的话「What's Changed」会贴着贡献者名单的最后一行。
+# 贡献者不在这里写。
+#
+# GitHub 会在正文下面渲染一块带头像的 Contributors，但它的数据源是
+# mentions_count，而那个数只从「What's Changed」里的 PR 作者算出来。
+# 这个仓库全是直推 main，PR 数为 0 —— 所以那块本来就不会出现，
+# 调格式补不出来，只能靠改协作方式（走 PR 合入）。
+#
+# 手写一份也不行：git 作者名不是 GitHub 账号，给不出头像和链接，
+# 还会把 dev@tkr 这种早期的合成提交身份列成一个不存在的用户。
+#
+# 末尾留一个空行：自动生成的那段直接接在后面。
 printf '\n'
 
 # 完整变更那行不自己打：发布时会同时传 --generate-notes，
