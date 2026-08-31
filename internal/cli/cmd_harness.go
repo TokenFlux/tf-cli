@@ -111,13 +111,13 @@ func runHarnessInstall(c *Context, name string) error {
 func EnsureInstalled(c *Context, h *harness.Harness) error {
 	options := h.AvailableInstalls()
 
-	// 本机没有任何可用的包管理器：只能给出命令。
+	// 本机没有任何可用的包管理器：只能给出命令，并说明它现在还跑不了。
 	if len(options) == 0 {
-		return notInstalledErr(c, h, h.Installs)
+		return notInstalledErr(c, h, h.Installs, false)
 	}
 
 	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
-		return notInstalledErr(c, h, options)
+		return notInstalledErr(c, h, options, true)
 	}
 
 	items := make([]ui.Item, 0, len(options)+1)
@@ -161,10 +161,19 @@ func EnsureInstalled(c *Context, h *harness.Harness) error {
 }
 
 // notInstalledErr 构造「没装且不能替你装」的错误，附上可复制的命令。
-func notInstalledErr(c *Context, h *harness.Harness, options []harness.InstallOption) error {
+//
+// available 为假表示本机连那个包管理器都没有。这时必须说出来：
+// 实测在一台没有 npm 的 Ubuntu 上，tf 给的建议是 npm install -g ...，
+// 用户照做只会得到 command not found，白跑一趟。
+func notInstalledErr(c *Context, h *harness.Harness, options []harness.InstallOption, available bool) error {
 	hint := ""
 	if len(options) > 0 {
 		hint = options[0].Command()
+		if !available {
+			hint = fmt.Sprintf(c.UI.T("本机没有 %s，装上它再运行：%s",
+				"%s is not on this machine; install it, then run: %s"),
+				options[0].Manager, hint)
+		}
 	}
 	return ui.Errf(ui.CodeHarnessNotInstalled,
 		fmt.Sprintf(c.UI.T("未安装 %s", "%s is not installed"), h.Name)).

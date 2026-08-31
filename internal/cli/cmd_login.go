@@ -74,9 +74,14 @@ func runLogin(c *Context) error {
 				c.UI.T("这把 Key 不被网关接受", "the gateway rejected this key")).
 				WithHint(host + "/keys").WithCause(err)
 		}
-		return ui.Errf(ui.CodeNotLoggedIn,
-			fmt.Sprintf(c.UI.T("无法校验 Key：%v", "could not verify the key: %v"), err)).
-			WithHint(host)
+		// 连不上网关和 Key 被拒是两件事。都报 TF_NOT_LOGGED_IN 会把人
+		// 引向重新登录，而重新登录解决不了网络不通 —— 实测在一台需要
+		// 走代理的机器上，登录失败给出的正是这个误导性的码。
+		return ui.Errf(ui.CodeNetwork,
+			fmt.Sprintf(c.UI.T("连不上网关 %s", "cannot reach the gateway at %s"), host)).
+			WithHint(c.UI.T("检查网络，或用 --host 指定别的地址",
+				"check your connection, or point --host elsewhere")).
+			WithCause(err)
 	}
 
 	ids := make([]string, 0, len(models))

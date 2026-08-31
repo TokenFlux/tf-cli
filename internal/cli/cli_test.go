@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -479,5 +480,42 @@ func TestWarnOverridesOnlyFlagsRealCollisions(t *testing.T) {
 	}
 	if got := collide(write(`{"theme":"dark"}`)); len(got) != 0 {
 		t.Errorf("no env section must stay quiet, got %v", got)
+	}
+}
+
+// 建议里的命令必须在这台机器上真的存在。
+//
+// 实测在一台没有 npm、没有 brew 的 Ubuntu 上，tf 建议 npm install -g，
+// 补全提示建议 brew install —— 照做只会得到 command not found。
+func TestSuggestionsNameOnlyAvailableTools(t *testing.T) {
+	c := testCtx()
+
+	// zsh 的候选目录必须包含 Linux 的标准位置，否则 Linux 用户永远
+	// 落到家目录，还得自己去 .zshrc 加一行 fpath。
+	var found bool
+	for _, d := range zshSiteFunctionDirs() {
+		if d == "/usr/share/zsh/site-functions" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("zsh 候选目录漏了 Linux 的标准位置")
+	}
+
+	// bash-completion 装好了就不该再提示。
+	if bashCompletionPresent() && bashCompletionNote(c) == "" {
+		return // 本机已装，无从检验文案，跳过即可
+	}
+	note := bashCompletionNote(c)
+	if note == "" {
+		t.Fatal("未装 bash-completion 时应给出说明")
+	}
+	// 文案里若出现命令，那个命令的可执行文件必须存在。
+	for _, bin := range []string{"brew", "apt", "dnf", "pacman"} {
+		if strings.Contains(note, bin+" ") {
+			if _, err := exec.LookPath(bin); err != nil {
+				t.Errorf("建议了本机没有的 %s：%s", bin, note)
+			}
+		}
 	}
 }

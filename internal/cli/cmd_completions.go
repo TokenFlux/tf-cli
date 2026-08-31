@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -409,17 +410,25 @@ complete -c tf -f -a '(__tf_complete)'
 `,
 }
 
-// installCompletion 把脚本写进该 shell 的补全目录。
-//
-// 只写专用的补全目录，**绝不去改 .bashrc / .zshrc** —— tkr 不改
+// zshSiteFunctionDirs 是 zsh 默认 fpath 里常见的可写候选，按优先级排。
+func zshSiteFunctionDirs() []string {
+	return []string{
+		// macOS 的 homebrew（ARM 与 Intel 两个前缀）
+		"/opt/homebrew/share/zsh/site-functions",
+		// Linux 发行版的标准位置；/usr/local 那个两边都可能有
+		"/usr/share/zsh/site-functions",
+		"/usr/local/share/zsh/site-functions",
+	}
+}
+
 // zshSiteFunctions 找一个已经在 zsh 默认 fpath 里、且可写的目录。
+//
+// 装到已在 fpath 里的目录，用户才不必自己动手改 .zshrc —— 而那行
+// fpath 还必须排在 compinit 之前，等于留了份作业给用户。
 //
 // 找不到就返回空，调用方退回到家目录下的写法。
 func zshSiteFunctions() string {
-	for _, d := range []string{
-		"/opt/homebrew/share/zsh/site-functions",
-		"/usr/local/share/zsh/site-functions",
-	} {
+	for _, d := range zshSiteFunctionDirs() {
 		info, err := os.Stat(d)
 		if err != nil || !info.IsDir() {
 			continue
@@ -435,7 +444,45 @@ func zshSiteFunctions() string {
 	return ""
 }
 
-// 用户的配置文件，补全也不例外。需要用户自己动手的部分直接告知。
+// bashCompletionPresent 判断本机是否已经装了 bash-completion。
+//
+// 装好了就什么都不说 —— 提示一件已经成立的事只会让人怀疑是不是没装好。
+func bashCompletionPresent() bool {
+	for _, p := range []string{
+		"/usr/share/bash-completion/bash_completion",     // 多数 Linux 发行版
+		"/etc/bash_completion",                           // 较老的布局
+		"/opt/homebrew/etc/profile.d/bash_completion.sh", // macOS homebrew（ARM）
+		"/usr/local/etc/profile.d/bash_completion.sh",    // macOS homebrew（Intel）
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// bashCompletionNote 说明还缺什么，并且只给本机真跑得动的命令。
+//
+// 原先写死的是 brew install bash-completion@2 —— 实测在 Ubuntu 上
+// 照着做只会得到 command not found。与「没有 npm 却让人 npm install」
+// 是同一类错误：建议里的命令必须在这台机器上存在。
+func bashCompletionNote(c *Context) string {
+	// 连标点都得跟着语言走：全角冒号出现在英文句子里和当初把
+	// 「推理积分」塞进英文句子是同一类错误。
+	base := c.UI.T("需要先装 bash-completion：", "requires bash-completion: ")
+	for _, m := range []struct{ bin, cmd string }{
+		{"brew", "brew install bash-completion@2"},
+		{"apt", "sudo apt install bash-completion"},
+		{"dnf", "sudo dnf install bash-completion"},
+		{"pacman", "sudo pacman -S bash-completion"},
+	} {
+		if _, err := exec.LookPath(m.bin); err == nil {
+			return base + m.cmd
+		}
+	}
+	return strings.TrimRight(base, "：: ")
+}
+
 // completionPath 给出该 shell 的补全文件位置。
 //
 // 安装和「是否已装」的判断必须共用这一处，否则两边会慢慢长歪。
@@ -463,6 +510,10 @@ func completionPath(shell string) (string, error) {
 	return "", fmt.Errorf("unsupported shell %q", shell)
 }
 
+// installCompletion 把脚本写进该 shell 的补全目录。
+//
+// 只写专用的补全目录，绝不去改 .bashrc / .zshrc —— tf 不改用户的
+// 配置文件，补全也不例外。需要用户自己动手的部分直接告知。
 func installCompletion(c *Context, shell, script string) error {
 	path, err := completionPath(shell)
 	if err != nil {
@@ -475,9 +526,8 @@ func installCompletion(c *Context, shell, script string) error {
 		note = c.UI.T(
 			"还需在 .zshrc 的 compinit 之前加：fpath=(~/.zsh/completions $fpath)",
 			"also add this before compinit in .zshrc: fpath=(~/.zsh/completions $fpath)")
-	case shell == "bash":
-		note = c.UI.T("需要已安装 bash-completion（brew install bash-completion@2）",
-			"requires bash-completion to be installed (brew install bash-completion@2)")
+	case shell == "bash" && !bashCompletionPresent():
+		note = bashCompletionNote(c)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
