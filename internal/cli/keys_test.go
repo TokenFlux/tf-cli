@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tokenflux/tkr/internal/access"
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/ui"
@@ -201,48 +202,6 @@ func TestFillPicksCheaperModelForFastSlot(t *testing.T) {
 	}
 }
 
-// claude_code_only 分组拦的是客户端指纹而不是协议：
-// 只有 Claude Code 本身过得去，codex 拿同一把 Key 也不行。
-func TestCanRunRespectsClaudeCodeLock(t *testing.T) {
-	locked := &config.KeyMeta{ClaudeCodeOnly: map[string]bool{config.GroupScope: true}}
-
-	claude, _ := harness.Lookup("claude")
-	codex, _ := harness.Lookup("codex")
-	oc, _ := harness.Lookup("opencode")
-
-	if !canRun(locked, config.GroupScope, claude) {
-		t.Error("Claude Code itself passes the fingerprint check")
-	}
-	if canRun(locked, config.GroupScope, codex) {
-		t.Error("codex must not be offered a claude-code-only group")
-	}
-	if canRun(locked, config.GroupScope, oc) {
-		t.Error("opencode must not be offered a claude-code-only group either")
-	}
-}
-
-// 一把 Key 只要有一个分组能跑该 harness，就该进候选；
-// 全都不能跑才排除。
-func TestFittingWithClaudeCodeLock(t *testing.T) {
-	codex, _ := harness.Lookup("codex")
-	claude, _ := harness.Lookup("claude")
-
-	dir := t.TempDir()
-	cfg, _ := config.Load(config.Paths{ConfigDir: dir, CacheDir: dir})
-	cfg.KeyMetaOf("max").ClaudeCodeOnly = map[string]bool{config.GroupScope: true}
-	cfg.KeyMetaOf("gpt").Protocols = map[string][]string{
-		config.GroupScope: {"anthropic_messages", "openai_responses"},
-	}
-	names := []string{"gpt", "max"}
-
-	if got := fitting(cfg, names, codex); len(got) != 1 || got[0] != "gpt" {
-		t.Errorf("codex candidates = %v, want [gpt] only", got)
-	}
-	if got := fitting(cfg, names, claude); len(got) != 2 {
-		t.Errorf("claude candidates = %v, want both keys", got)
-	}
-}
-
 // flag 管这一次，tf model 管以后：-m 绝不写盘。
 func TestOneShotModelDoesNotPersist(t *testing.T) {
 	dir := t.TempDir()
@@ -341,42 +300,8 @@ func TestAllDeniedIsTreatedAsUnknown(t *testing.T) {
 		t.Error("an empty probe result must not count as probed")
 	}
 	claude, _ := harness.Lookup("claude")
-	if !canRun(meta, config.GroupScope, claude) {
+	if !access.CanRun(meta, config.GroupScope, claude) {
 		t.Error("without evidence tf must not filter the key out")
-	}
-}
-
-// 模型的原生协议优先：网关两种都能翻译，但翻译只会丢信息，
-// 而且 opencode 会照实显示 provider —— 用 openai 跑 claude 模型
-// 界面上写着「OpenAI」，看起来像配错了。
-func TestNativeProtocolWins(t *testing.T) {
-	meta := &config.KeyMeta{Protocols: map[string][]string{
-		config.GroupScope: {"anthropic_messages", "openai_responses"},
-	}}
-	oc, _ := harness.Lookup("opencode")
-
-	got, ok := pickProtocolFor(meta, config.GroupScope, "claude-opus-4-6", oc)
-	if !ok || got != harness.ProtoAnthropicMessages {
-		t.Errorf("claude model → %v, want anthropic_messages", got)
-	}
-	// 非 Claude 模型仍按 harness 的偏好顺序。
-	got, ok = pickProtocolFor(meta, config.GroupScope, "gpt-5.6-sol", oc)
-	if !ok || got != harness.ProtoOpenAIResponses {
-		t.Errorf("gpt model → %v, want openai_responses", got)
-	}
-	// codex 不会 anthropic，Claude 模型也只能走 responses（网关翻译）。
-	cx, _ := harness.Lookup("codex")
-	got, ok = pickProtocolFor(meta, config.GroupScope, "claude-opus-4-6", cx)
-	if !ok || got != harness.ProtoOpenAIResponses {
-		t.Errorf("codex → %v, want openai_responses", got)
-	}
-	// 分组不准入原生协议时回落，不能因为偏好而挑一个跑不通的。
-	only := &config.KeyMeta{Protocols: map[string][]string{
-		config.GroupScope: {"openai_responses"},
-	}}
-	got, ok = pickProtocolFor(only, config.GroupScope, "claude-opus-4-6", oc)
-	if !ok || got != harness.ProtoOpenAIResponses {
-		t.Errorf("fallback → %v, want openai_responses", got)
 	}
 }
 

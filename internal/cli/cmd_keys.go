@@ -3,6 +3,7 @@ package cli
 import (
 	"strings"
 
+	"github.com/tokenflux/tkr/internal/access"
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/ui"
 )
@@ -60,7 +61,7 @@ func runKeys(c *Context) error {
 		// 复合 Key 一把横跨多个分组，各分组能跑的 harness 不同。
 		// 笼统地说这把 Key「能跑 claude codex」是谎报。
 		for _, prefix := range meta.Scopes() {
-			sc := scope{Prefix: prefix, Harnesses: runnableIn(meta, prefix)}
+			sc := scope{Prefix: prefix, Harnesses: access.RunnableIn(meta, prefix)}
 			if meta.LockedToClaudeCode(prefix) {
 				sc.Protocols = []string{"claude-code-only"}
 			} else if meta != nil {

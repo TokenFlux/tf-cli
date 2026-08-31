@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tokenflux/tkr/internal/access"
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/gateway"
 	"github.com/tokenflux/tkr/internal/harness"
@@ -44,106 +45,19 @@ func eligibleKeys(c *Context, cfg *config.Config, creds *config.Credentials, h *
 		return []string{want}, nil
 	}
 
-	fit := fitting(cfg, names, h)
+	fit := access.Fitting(cfg, names, h)
 	if len(fit) == 0 {
 		// 探测结果会过期：用户在网页上改了分组绑定后，缓存的「不支持」
 		// 会让一把现在可用的 Key 凭空消失，而用户无从得知。
 		// 放在失败路径上重探：顺利时零开销，出事时自愈。
 		if reprobe(c, cfg, creds, names) {
-			fit = fitting(cfg, names, h)
+			fit = access.Fitting(cfg, names, h)
 		}
 	}
 	if len(fit) == 0 {
 		return nil, noKeyFitsError(c, cfg, h, names)
 	}
 	return fit, nil
-}
-
-// canRun 报告某个分组能否跑这个 harness。
-//
-// claude_code_only 分组拦的是客户端指纹而不是协议：只有 Claude Code
-// 本身过得去，其它 harness 无论用什么协议都会被拒。
-func canRun(meta *config.KeyMeta, prefix string, h *harness.Harness) bool {
-	_, ok := pickProtocol(meta, prefix, h)
-	return ok
-}
-
-// pickProtocol 选出这次该走哪种协议。
-//
-// harness 会的协议按偏好排序，取第一个该分组也允许的。
-// 多数 harness 不止会一种：opencode 两个 provider 都内置，
-// 因此它在只开 anthropic_messages 的分组上照样能跑。
-func pickProtocol(meta *config.KeyMeta, prefix string, h *harness.Harness) (harness.Protocol, bool) {
-	return pickProtocolFor(meta, prefix, "", h)
-}
-
-// pickProtocolFor 在知道具体模型时按模型的原生协议优先。
-//
-// 网关两种协议都能翻译（实测 /v1/responses 打 claude-opus-4-6 确实能用），
-// 但翻译只会丢信息不会补信息 —— 思考块、缓存标记、工具调用的细节都要
-// 过一道映射。而且 opencode 会照实显示 provider：用 openai 跑 claude 模型
-// 界面上写着「OpenAI」，看起来像配错了。
-//
-// 猜错也无害：网关照样翻译。所以这只是偏好排序，不是准入判断。
-func pickProtocolFor(meta *config.KeyMeta, prefix, modelID string, h *harness.Harness) (harness.Protocol, bool) {
-	if meta.LockedToClaudeCode(prefix) {
-		if h.IsClaudeCode {
-			return harness.ProtoAnthropicMessages, true
-		}
-		return "", false
-	}
-	if native := nativeProtocol(modelID); native != "" &&
-		h.Speaks(string(native)) && meta.SupportsIn(prefix, string(native)) {
-		return native, true
-	}
-	for _, p := range h.Protocols {
-		if meta.SupportsIn(prefix, string(p)) {
-			return p, true
-		}
-	}
-	return "", false
-}
-
-// nativeProtocol 报告该模型「原生」说哪种协议。认不出来就返回空。
-//
-// 只按模型名判断，不去猜分组的 platform：认错的代价仅仅是多一道翻译，
-// 而为此在客户端建一套推断才是真的得不偿失。
-func nativeProtocol(modelID string) harness.Protocol {
-	if modelID == "" {
-		return ""
-	}
-	if strings.HasPrefix(model.Parse(modelID).Base, "claude-") {
-		return harness.ProtoAnthropicMessages
-	}
-	return ""
-}
-
-// protocolList 列出该 harness 会的协议，用于解释为什么没有 Key 合格。
-func protocolList(h *harness.Harness) string {
-	out := make([]string, 0, len(h.Protocols))
-	for _, p := range h.Protocols {
-		out = append(out, string(p))
-	}
-	return strings.Join(out, " / ")
-}
-
-// fitting 返回至少有一个分组能跑该 harness 的 Key。未探测过的视为可用。
-func fitting(cfg *config.Config, names []string, h *harness.Harness) []string {
-	var out []string
-	for _, n := range names {
-		meta := cfg.Keys[n]
-		if !meta.Probed() {
-			out = append(out, n)
-			continue
-		}
-		for _, prefix := range meta.Scopes() {
-			if canRun(meta, prefix, h) {
-				out = append(out, n)
-				break
-			}
-		}
-	}
-	return out
 }
 
 // gatherCandidates 汇总所有合格 Key 能提供的模型。
@@ -163,7 +77,7 @@ func gatherCandidates(c *Context, cfg *config.Config, creds *config.Credentials,
 		for _, id := range lists[name] {
 			// 同一把 Key 内不同分组的准入也不同：复合 Key 里
 			// GPT/* 能跑 codex，Claude/* 只能跑 claude。
-			if canRun(meta, model.Parse(id).Prefix, h) {
+			if access.CanRun(meta, model.Parse(id).Prefix, h) {
 				out = append(out, candidate{Key: name, Model: id})
 			}
 		}
@@ -329,7 +243,7 @@ func noKeyFitsError(c *Context, cfg *config.Config, h *harness.Harness, names []
 	return ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
 		c.UI.T("没有一把 Key 的分组允许 %s 所需的协议（%s）",
 			"no key's group allows what %s needs (%s)"),
-		h.Name, protocolList(h))).
+		h.Name, access.ProtocolList(h))).
 		WithHint(strings.Join(lines, "; ") + "  →  " +
 			c.UI.T("换一个允许该协议的分组，或新建一把 Key",
 				"switch to a group that allows this protocol, or create another key"))
@@ -377,22 +291,6 @@ func probeAndStore(cfg *config.Config, name, host, key string) {
 	meta.ProbedAt = time.Now()
 }
 
-// runnable 列出这把 Key 能跑的 harness。
-func runnable(cfg *config.Config, name string) []string {
-	return runnableIn(cfg.Keys[name], config.GroupScope)
-}
-
-// runnableIn 列出某个分组能跑的 harness。
-func runnableIn(meta *config.KeyMeta, prefix string) []string {
-	var out []string
-	for _, h := range harness.All {
-		if canRun(meta, prefix, h) {
-			out = append(out, h.Name)
-		}
-	}
-	return out
-}
-
 // noteHiddenKeys 说明哪些模型没有出现在候选里，以及为什么。
 //
 // 静默过滤是最难排查的一种行为：用户看到的是「我的模型不见了」，
@@ -424,11 +322,11 @@ func noteHiddenKeys(c *Context, cfg *config.Config, all, _ []string, h *harness.
 		sort.Strings(prefixes)
 
 		for _, prefix := range prefixes {
-			if canRun(meta, prefix, h) {
+			if access.CanRun(meta, prefix, h) {
 				continue
 			}
 			why := fmt.Sprintf(c.UI.T("该分组不允许 %s 需要的协议（%s）",
-				"that group does not allow what %s needs (%s)"), h.Name, protocolList(h))
+				"that group does not allow what %s needs (%s)"), h.Name, access.ProtocolList(h))
 			if meta.LockedToClaudeCode(prefix) {
 				why = c.UI.T("该分组只接受 Claude Code 客户端",
 					"that group only accepts the Claude Code client")

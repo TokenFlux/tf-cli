@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/tokenflux/tkr/internal/access"
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/launch"
@@ -86,7 +87,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	// 协议按本次选定的模型所在分组决定 —— 同一个 harness 在不同分组上
 	// 可能走不同协议，注入配方要跟着变。
 	main := slots[config.SlotDefault]
-	proto, _ := pickProtocolFor(cfg.Keys[keyName], model.Parse(main).Prefix, main, h)
+	proto, _ := access.PickFor(cfg.Keys[keyName], model.Parse(main).Prefix, main, h)
 
 	plan, err := h.BuildPlan(harness.Input{
 		Host: host, Key: cred.Key, Slots: slots, Effort: effort,
@@ -535,7 +536,7 @@ func noModelError(c *Context, cfg *config.Config, keys []string, h *harness.Harn
 		lines = append(lines, k+": "+strings.Join(cfg.Keys[k].ProtocolSummary(), " / "))
 	}
 	return ui.Errf(ui.CodeProtocolMismatch, fmt.Sprintf(
-		c.UI.T("%s 没有可用模型（需要 %s）", "no model %s can use (needs %s)"), h.Name, protocolList(h))).
+		c.UI.T("%s 没有可用模型（需要 %s）", "no model %s can use (needs %s)"), h.Name, access.ProtocolList(h))).
 		WithHint(strings.Join(lines, "; "))
 }
 

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/tokenflux/tkr/internal/access"
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/gateway"
 	"github.com/tokenflux/tkr/internal/model"
@@ -119,7 +120,7 @@ func runLogin(c *Context) error {
 		c.UI.Printf("  %s %d %s\n", ui.Pad(c.UI.T("模型", "models"), 8), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
 		if protos := cfg.Keys[keyName].ProtocolSummary(); len(protos) > 0 {
 			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("协议", "protocols"), 8), c.UI.Dim(strings.Join(protos, " / ")))
-			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("可用于", "can run"), 8), strings.Join(runnable(cfg, keyName), " "))
+			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("可用于", "can run"), 8), strings.Join(access.Runnable(cfg, keyName), " "))
 		}
 	})
 

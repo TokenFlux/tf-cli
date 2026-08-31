@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tokenflux/tkr/internal/access"
+	"github.com/tokenflux/tkr/internal/completions"
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/model"
@@ -31,8 +33,8 @@ func offerCompletions(c *Context, cfg *config.Config) {
 	if cfg.CompletionsAsked || !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return
 	}
-	shell := currentShell()
-	if shell == "" || completionInstalled(shell) {
+	shell := completions.CurrentShell()
+	if shell == "" || completions.Installed(shell) {
 		return
 	}
 
@@ -57,7 +59,7 @@ func offerCompletions(c *Context, cfg *config.Config) {
 		remember()
 		return
 	}
-	if err := installCompletion(c, shell, completionScripts[shell]); err != nil {
+	if err := installCompletion(c, shell, completions.Scripts[shell]); err != nil {
 		c.UI.Warnf("%s", err.Error())
 		return // 下次再问
 	}
@@ -66,30 +68,11 @@ func offerCompletions(c *Context, cfg *config.Config) {
 
 // mustPath 给出补全文件位置，用于让用户看清将要写到哪里。
 func mustPath(shell string) string {
-	p, err := completionPath(shell)
+	p, err := completions.Path(shell)
 	if err != nil {
 		return ""
 	}
 	return p
-}
-
-// currentShell 从 $SHELL 认出当前 shell。认不出就返回空。
-func currentShell() string {
-	base := filepath.Base(os.Getenv("SHELL"))
-	if _, ok := completionScripts[base]; ok {
-		return base
-	}
-	return ""
-}
-
-// completionInstalled 报告补全文件是否已经就位。
-func completionInstalled(shell string) bool {
-	path, err := completionPath(shell)
-	if err != nil {
-		return false
-	}
-	_, err = os.Stat(path)
-	return err == nil
 }
 
 func newCompletionsCommand() *Command {
@@ -110,7 +93,7 @@ func newCompletionsCommand() *Command {
 					WithHint("tf completions zsh")
 			}
 			shell := c.Args[0]
-			script, ok := completionScripts[shell]
+			script, ok := completions.Scripts[shell]
 			if !ok {
 				return ui.Errf(ui.CodeUsage,
 					fmt.Sprintf(c.UI.T("不支持 shell %q", "unsupported shell %q"), shell)).
@@ -328,7 +311,7 @@ func cachedModels(harnessName string) []string {
 	}
 	out := make([]string, 0, len(meta.Models))
 	for _, id := range meta.Models {
-		if canRun(meta, model.Parse(id).Prefix, h) {
+		if access.CanRun(meta, model.Parse(id).Prefix, h) {
 			out = append(out, id)
 		}
 	}
@@ -387,90 +370,6 @@ func filter(candidates []string, prefix string) []string {
 	return out
 }
 
-// 脚本里一律用「用户实际输入的那个路径」回调，而不是写死 `tf`。
-// 否则 ./bin/tf 这种未入 PATH 的跑法会因找不到命令而静默无补全。
-var completionScripts = map[string]string{
-	"bash": `# tf bash completion. eval "$(tf completions bash)"
-_tf_complete() {
-    local IFS=$'\n'
-    COMPREPLY=($("${COMP_WORDS[0]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
-}
-# 同时注册裸命令名与常见的相对路径写法。
-complete -o default -F _tf_complete tf ./tf ./bin/tf bin/tf
-`,
-	"zsh": `# tf zsh completion. eval "$(tf completions zsh)"
-_tf_complete() {
-    local -a candidates
-    # (@) 加引号：不加的话 zsh 会丢掉末尾的空词，__complete 收到的是
-    # 「tf codex」而不是「tf codex ""」，于是以为你还在敲命令名，
-    # 把 codex 又补了一遍。
-    candidates=(${(f)"$(${words[1]} __complete "${(@)words[2,$CURRENT]}" 2>/dev/null)"})
-    compadd -a candidates
-}
-compdef _tf_complete tf
-# 模式注册：让 ./bin/tf、/usr/local/bin/tf 等写法也能补全。
-compdef _tf_complete -p '*/tf'
-`,
-	"fish": `# tf fish completion. tf completions fish --install
-function __tf_complete
-    set -l tokens (commandline -opc) (commandline -ct)
-    $tokens[1] __complete $tokens[2..-1] 2>/dev/null
-end
-complete -c tf -f -a '(__tf_complete)'
-`,
-}
-
-// zshSiteFunctionDirs 是 zsh 默认 fpath 里常见的可写候选，按优先级排。
-func zshSiteFunctionDirs() []string {
-	return []string{
-		// macOS 的 homebrew（ARM 与 Intel 两个前缀）
-		"/opt/homebrew/share/zsh/site-functions",
-		// Linux 发行版的标准位置；/usr/local 那个两边都可能有
-		"/usr/share/zsh/site-functions",
-		"/usr/local/share/zsh/site-functions",
-	}
-}
-
-// zshSiteFunctions 找一个已经在 zsh 默认 fpath 里、且可写的目录。
-//
-// 装到已在 fpath 里的目录，用户才不必自己动手改 .zshrc —— 而那行
-// fpath 还必须排在 compinit 之前，等于留了份作业给用户。
-//
-// 找不到就返回空，调用方退回到家目录下的写法。
-func zshSiteFunctions() string {
-	for _, d := range zshSiteFunctionDirs() {
-		info, err := os.Stat(d)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		// 可写才算数：只读目录写下去只会得到一个权限错误。
-		probe := filepath.Join(d, ".tf-write-probe")
-		if f, err := os.Create(probe); err == nil {
-			f.Close()
-			os.Remove(probe)
-			return d
-		}
-	}
-	return ""
-}
-
-// bashCompletionPresent 判断本机是否已经装了 bash-completion。
-//
-// 装好了就什么都不说 —— 提示一件已经成立的事只会让人怀疑是不是没装好。
-func bashCompletionPresent() bool {
-	for _, p := range []string{
-		"/usr/share/bash-completion/bash_completion",     // 多数 Linux 发行版
-		"/etc/bash_completion",                           // 较老的布局
-		"/opt/homebrew/etc/profile.d/bash_completion.sh", // macOS homebrew（ARM）
-		"/usr/local/etc/profile.d/bash_completion.sh",    // macOS homebrew（Intel）
-	} {
-		if _, err := os.Stat(p); err == nil {
-			return true
-		}
-	}
-	return false
-}
-
 // bashCompletionNote 说明还缺什么，并且只给本机真跑得动的命令。
 //
 // 原先写死的是 brew install bash-completion@2 —— 实测在 Ubuntu 上
@@ -493,50 +392,23 @@ func bashCompletionNote(c *Context) string {
 	return strings.TrimRight(base, "：: ")
 }
 
-// completionPath 给出该 shell 的补全文件位置。
-//
-// 安装和「是否已装」的判断必须共用这一处，否则两边会慢慢长歪。
-func completionPath(shell string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	switch shell {
-	case "fish":
-		return filepath.Join(home, ".config", "fish", "completions", "tf.fish"), nil
-	case "zsh":
-		// 优先装进已经在 fpath 里的目录，用户就不必再改 .zshrc。
-		//
-		// 装到 ~/.zsh/completions 是最常见的写法，但那个目录不在任何人的
-		// 默认 fpath 里 —— 于是「装好了却不生效」，还要用户自己去补一行，
-		// 而且那一行必须排在 compinit 之前，追加到文件末尾是没用的。
-		if dir := zshSiteFunctions(); dir != "" {
-			return filepath.Join(dir, "_tf"), nil
-		}
-		return filepath.Join(home, ".zsh", "completions", "_tf"), nil
-	case "bash":
-		return filepath.Join(home, ".local", "share", "bash-completion", "completions", "tf"), nil
-	}
-	return "", fmt.Errorf("unsupported shell %q", shell)
-}
-
 // installCompletion 把脚本写进该 shell 的补全目录。
 //
 // 只写专用的补全目录，绝不去改 .bashrc / .zshrc —— tf 不改用户的
 // 配置文件，补全也不例外。需要用户自己动手的部分直接告知。
 func installCompletion(c *Context, shell, script string) error {
-	path, err := completionPath(shell)
+	path, err := completions.Path(shell)
 	if err != nil {
 		return ui.Errf(ui.CodeConfigWrite, err.Error())
 	}
 
 	var note string
 	switch {
-	case shell == "zsh" && zshSiteFunctions() == "":
+	case shell == "zsh" && completions.ZshSiteDir() == "":
 		note = c.UI.T(
 			"还需在 .zshrc 的 compinit 之前加：fpath=(~/.zsh/completions $fpath)",
 			"also add this before compinit in .zshrc: fpath=(~/.zsh/completions $fpath)")
-	case shell == "bash" && !bashCompletionPresent():
+	case shell == "bash" && !completions.BashRuntimePresent():
 		note = bashCompletionNote(c)
 	}
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tokenflux/tkr/internal/completions"
 	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/ui"
 )
@@ -214,14 +215,14 @@ func TestCompletionHasNoDuplicates(t *testing.T) {
 //
 // bash 那份用的是 "${COMP_WORDS[@]:...}"，本来就带引号，所以只有 zsh 中招。
 func TestZshScriptQuotesWordArray(t *testing.T) {
-	zsh := completionScripts["zsh"]
+	zsh := completions.Scripts["zsh"]
 	if !strings.Contains(zsh, `"${(@)words[2,$CURRENT]}"`) {
 		t.Error("zsh script must quote the word array with (@), or the trailing empty word is dropped")
 	}
 	if strings.Contains(zsh, `__complete ${words[`) {
 		t.Error("unquoted array expansion found; zsh drops empty elements")
 	}
-	if !strings.Contains(completionScripts["bash"], `"${COMP_WORDS[@]:1:COMP_CWORD}"`) {
+	if !strings.Contains(completions.Scripts["bash"], `"${COMP_WORDS[@]:1:COMP_CWORD}"`) {
 		t.Error("bash script must quote COMP_WORDS too")
 	}
 }
@@ -493,7 +494,7 @@ func TestSuggestionsNameOnlyAvailableTools(t *testing.T) {
 	// zsh 的候选目录必须包含 Linux 的标准位置，否则 Linux 用户永远
 	// 落到家目录，还得自己去 .zshrc 加一行 fpath。
 	var found bool
-	for _, d := range zshSiteFunctionDirs() {
+	for _, d := range completions.ZshSiteDirs() {
 		if d == "/usr/share/zsh/site-functions" {
 			found = true
 		}
@@ -503,7 +504,7 @@ func TestSuggestionsNameOnlyAvailableTools(t *testing.T) {
 	}
 
 	// bash-completion 装好了就不该再提示。
-	if bashCompletionPresent() && bashCompletionNote(c) == "" {
+	if completions.BashRuntimePresent() && bashCompletionNote(c) == "" {
 		return // 本机已装，无从检验文案，跳过即可
 	}
 	note := bashCompletionNote(c)
