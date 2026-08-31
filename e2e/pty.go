@@ -58,13 +58,20 @@ func start(t *testing.T, env []string, args ...string) *pty {
 		t.Skipf("先 make build：%v", err)
 	}
 
+	// 两个平台的 script 调用写法不同，退出码语义也不同：
+	//
+	//   macOS（BSD）    script -q /dev/null cmd args      默认透传子进程退出码
+	//   Linux（util-linux）script -qec "cmd args" /dev/null  不加 -e 就恒返回 0
+	//
+	// 少那个 -e 的后果不是报错，是所有退出码断言在 Linux 上悄悄失效 ——
+	// 取消应该给 130，实测拿到 0，而测试会显示为「代码错了」。
 	var cmd *exec.Cmd
 	line := append([]string{bin}, args...)
 	switch runtime.GOOS {
 	case "darwin":
 		cmd = exec.Command("script", append([]string{"-q", "/dev/null"}, line...)...)
 	default:
-		cmd = exec.Command("script", "-q", "-c", strings.Join(line, " "), "/dev/null")
+		cmd = exec.Command("script", "-qec", strings.Join(line, " "), "/dev/null")
 	}
 	cmd.Env = append(os.Environ(), env...)
 
