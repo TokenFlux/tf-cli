@@ -605,3 +605,34 @@ func TestInstallURLMatchesReadme(t *testing.T) {
 		t.Errorf("两处不一致：\n  README: %s\n  发布说明: %s", a, b)
 	}
 }
+
+// 发布流水线必须取全历史与全部 tag。
+//
+// actions/checkout 默认只拉一个提交、不拉 tag。发布说明要按
+// 上一个tag..本tag 列贡献者 —— 浅克隆下这个区间算不出来，v0.5.0
+// 就因此把自己当成了首个版本，贡献者只剩最后一次提交的作者。
+func TestReleaseWorkflowFetchesFullHistory(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "release-notes.sh") {
+		t.Fatal("发布流水线没有用变更记录生成说明")
+	}
+	if !strings.Contains(text, "fetch-depth: 0") {
+		t.Error("发布说明依赖 tag 与历史，checkout 必须 fetch-depth: 0")
+	}
+	// 自动生成的说明在这个仓库里只会得到一行链接，不能退回去用。
+	//
+	// 只看非注释行：解释「为什么不用它」的那句注释里本来就有这个词，
+	// 整份文本做子串匹配会被自己的说明撞上。
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if strings.Contains(line, "--generate-notes") {
+			t.Error("不该再用 --generate-notes：这个仓库全是直推，它没东西可写")
+		}
+	}
+}
