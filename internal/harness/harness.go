@@ -1,4 +1,4 @@
-// Package harness 描述 tkr 能启动的 AI 编码工具，以及如何探测与安装它们。
+// Package harness 描述 tf 能启动的 AI 编码工具，以及如何探测与安装它们。
 //
 // 这里只放「是什么、在哪、怎么装」。环境注入配方属于 M3，另置。
 package harness
@@ -56,7 +56,7 @@ const (
 	EffortViaFlag
 )
 
-// Harness 是一个可被 tkr 启动的工具。
+// Harness 是一个可被 tf 启动的工具。
 type Harness struct {
 	Name    string
 	Aliases []string
@@ -70,7 +70,7 @@ type Harness struct {
 	// IsClaudeCode 表示这个 harness 就是 Anthropic 官方的 Claude Code。
 	//
 	// 只有它能通过 claude_code_only 分组的客户端指纹检查。
-	// tkr 绝不伪装成它 —— 见 docs/design/product-decisions.md 第 0 节。
+	// tf 绝不伪装成它 —— 见 docs/design/product-decisions.md 第 0 节。
 	IsClaudeCode bool
 	Slots        []Slot
 	Installs     []InstallOption

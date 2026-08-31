@@ -39,7 +39,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	}
 	cfg, creds := st.cfg, st.creds
 
-	// 一把 Key 都没有时当场问，而不是打发用户去跑 tkr login。
+	// 一把 Key 都没有时当场问，而不是打发用户去跑 tf login。
 	//
 	// harness 没装都会问「现在安装？」，而安装软件比粘一把 Key 重得多。
 	// 既然那件事值得问，这件事更值得。

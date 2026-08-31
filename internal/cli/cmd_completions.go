@@ -17,7 +17,7 @@ import (
 //
 //   - **零网络**。候选一律来自本地配置与缓存；缓存冷就少给候选，
 //     绝不为了补全去发 HTTP。
-//   - **透传边界之后停止补全**。tkr 不知道 harness 自己的 flag，
+//   - **透传边界之后停止补全**。tf 不知道 harness 自己的 flag，
 //     猜测只会给出错误候选；沉默比乱猜诚实。
 //   - 脚本本身是薄的，逻辑全在 `tf __complete` 里，这样升级 tf
 //     就等于升级补全，用户不必重新安装脚本。
@@ -36,22 +36,32 @@ func offerCompletions(c *Context, cfg *config.Config) {
 		return
 	}
 
-	// 无论答什么都记下来，免得每次 login 都问。
-	cfg.CompletionsAsked = true
-	defer func() { _ = cfg.Save() }()
-
 	idx, err := c.UI.Select(
 		fmt.Sprintf(c.UI.T("装 %s 的 Tab 补全？", "Install %s completions?"), shell),
 		[]ui.Item{
 			{Label: c.UI.T("装", "yes"), Detail: mustPath(shell)},
 			{Label: c.UI.T("不用", "no")},
 		})
+
+	// 只有“这件事已经有结果”才记下来。
+	//
+	// 答了不用 —— 记。答了装且装成了 —— 记。
+	// 答了装但写失败 —— 不记：用户明明要了，我没给成，
+	// 这时候记上“问过了”等于把一件没办成的事永久关掉。
+	remember := func() {
+		cfg.CompletionsAsked = true
+		_ = cfg.Save()
+	}
+
 	if err != nil || idx != 0 {
+		remember()
 		return
 	}
 	if err := installCompletion(c, shell, completionScripts[shell]); err != nil {
 		c.UI.Warnf("%s", err.Error())
+		return // 下次再问
 	}
+	remember()
 }
 
 // mustPath 给出补全文件位置，用于让用户看清将要写到哪里。
@@ -187,9 +197,9 @@ func complete(words []string) []string {
 	return filter(dedupe(globalFlagNames()), cur)
 }
 
-// completeLaunch 处理 `tkr claude ...`。
+// completeLaunch 处理 `tf claude ...`。
 //
-// 一旦越过透传边界就返回空：那之后的参数属于 harness，tkr 无从知晓。
+// 一旦越过透传边界就返回空：那之后的参数属于 harness，tf 无从知晓。
 func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
 	for i := 0; i < len(rest); i++ {
 		w := rest[i]
@@ -377,8 +387,8 @@ func filter(candidates []string, prefix string) []string {
 	return out
 }
 
-// 脚本里一律用「用户实际输入的那个路径」回调，而不是写死 `tkr`。
-// 否则 ./bin/tkr 这种未入 PATH 的跑法会因找不到命令而静默无补全。
+// 脚本里一律用「用户实际输入的那个路径」回调，而不是写死 `tf`。
+// 否则 ./bin/tf 这种未入 PATH 的跑法会因找不到命令而静默无补全。
 var completionScripts = map[string]string{
 	"bash": `# tf bash completion. eval "$(tf completions bash)"
 _tf_complete() {

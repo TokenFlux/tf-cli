@@ -1,6 +1,6 @@
 // Package model 收口模型 ID 的解析与变换。
 //
-// 模型 ID 在 tkr 里要经历多重变换（分组前缀、思考强度后缀、harness 自己的
+// 模型 ID 在 tf 里要经历多重变换（分组前缀、思考强度后缀、harness 自己的
 // provider 前缀），必须集中在一处，否则一定写乱。
 package model
 
@@ -11,7 +11,7 @@ import (
 
 // 思考强度档位，由弱到强。
 //
-// 这些不是 tkr 发明的：TokenFlux 的部分分组直接把强度编进模型 ID
+// 这些不是 tf 发明的：TokenFlux 的部分分组直接把强度编进模型 ID
 // （gemini-3.1-pro-high / -low），另一些分组则靠 harness 自己的旋钮。
 var efforts = []string{"minimal", "none", "low", "medium", "high", "xhigh"}
 

@@ -163,7 +163,7 @@ func TestBaseURLShapes(t *testing.T) {
 }
 
 // 模型名不在 Claude Code 的内置表里时，它会假定 200k 窗口并打一段长告警。
-// tkr 不猜真实窗口，而是让它以 API 返回为准。
+// tf 不猜真实窗口，而是让它以 API 返回为准。
 func TestClaudeDefersContextWindowToAPI(t *testing.T) {
 	h, _ := Lookup("claude")
 	plan, err := h.BuildPlan(Input{

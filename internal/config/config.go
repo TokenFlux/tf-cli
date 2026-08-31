@@ -1,4 +1,4 @@
-// Package config 管理 tkr 的配置与凭据。
+// Package config 管理 tf 的配置与凭据。
 //
 // 分两个文件：
 //   - config.json      0644，Key 的元数据与 harness 绑定，可以贴进 issue
@@ -51,7 +51,7 @@ type KeyMeta struct {
 	Protocols map[string][]string `json:"protocols,omitempty"`
 	// ClaudeCodeOnly 标记只接受 Claude Code 客户端的分组。
 	//
-	// 这类分组拦的是客户端指纹而不是协议，tkr 自己去问一定被拒，
+	// 这类分组拦的是客户端指纹而不是协议，tf 自己去问一定被拒，
 	// 所以它的协议集合永远是空的 —— 必须单独记，否则会被读成「什么都不支持」。
 	ClaudeCodeOnly map[string]bool `json:"claude_code_only,omitempty"`
 	Models         []string        `json:"models,omitempty"`
@@ -284,7 +284,7 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-// InstallRecord 记录某个 harness 是被 tkr 用什么方式装上的。
+// InstallRecord 记录某个 harness 是被 tf 用什么方式装上的。
 type InstallRecord struct {
 	Manager string    `json:"manager"`
 	Command string    `json:"command"`

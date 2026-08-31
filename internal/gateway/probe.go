@@ -32,16 +32,16 @@ var probeTargets = map[Protocol]string{
 //
 // 探测只关心「是否越过协议准入这一关」，模型不存在正是我们要的：
 // 请求会在调度前被拒，不产生任何 token 消耗。
-const probeModel = "__tkr_probe__"
+const probeModel = "__tf_probe__"
 
-// Admission 是一个分组对 tkr 的准入情况。
+// Admission 是一个分组对 tf 的准入情况。
 type Admission struct {
 	// Protocols 是探测下来准入的协议。
 	Protocols []Protocol
 	// ClaudeCodeOnly 表示该分组只接受 Claude Code 客户端。
 	//
-	// 这种分组连 /v1/messages 都会拒绝 tkr 的探测 —— 它拦的是客户端指纹，
-	// 不是协议。tkr 永远问不出它到底允许哪些协议，因为 tkr 不是
+	// 这种分组连 /v1/messages 都会拒绝 tf 的探测 —— 它拦的是客户端指纹，
+	// 不是协议。tf 永远问不出它到底允许哪些协议，因为 tf 不是
 	// Claude Code，而伪装成 Claude Code 是明确不做的事。
 	ClaudeCodeOnly bool
 }

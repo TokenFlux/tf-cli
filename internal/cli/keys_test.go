@@ -342,7 +342,7 @@ func TestAllDeniedIsTreatedAsUnknown(t *testing.T) {
 	}
 	claude, _ := harness.Lookup("claude")
 	if !canRun(meta, config.GroupScope, claude) {
-		t.Error("without evidence tkr must not filter the key out")
+		t.Error("without evidence tf must not filter the key out")
 	}
 }
 

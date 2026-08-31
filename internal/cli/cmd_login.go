@@ -371,7 +371,7 @@ func readKey(c *Context) (string, error) {
 
 // normalizeHost 归一化用户输入的 host。
 //
-// 用户会填 `gw.example.com`、带尾斜杠、或误带 `/v1`。协议前缀由 tkr
+// 用户会填 `gw.example.com`、带尾斜杠、或误带 `/v1`。协议前缀由 tf
 // 按需拼接（Anthropic 用根、OpenAI 用 /v1），这里必须还原成裸 base。
 func normalizeHost(h string) string {
 	h = strings.TrimSpace(h)

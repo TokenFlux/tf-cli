@@ -259,7 +259,7 @@ func TestClaudeCodeOnlyScope(t *testing.T) {
 // DefaultHost 必须是变量而不是常量，否则 -X 注入不进去。
 //
 // 自建 TokenRouter 的地址属于部署方的决定：部署方构建一次，
-// 团队里的人照常 tkr login。把它做成登录时的提问，等于向每个人
+// 团队里的人照常 tf login。把它做成登录时的提问，等于向每个人
 // 转嫁一个他们答不上来的部署问题。
 func TestDefaultHostIsBuildTimeInjectable(t *testing.T) {
 	orig := DefaultHost

@@ -12,7 +12,7 @@ import (
 	"github.com/tokenflux/tkr/internal/ui"
 )
 
-// 透传规则是 tkr 最容易写错的地方（见 docs/PLAN.md B 项），
+// 透传规则是 tf 最容易写错的地方（见 docs/PLAN.md B 项），
 // 这里逐条锁定行为。
 func TestParsePassthrough(t *testing.T) {
 	harness := &Command{
@@ -50,12 +50,12 @@ func TestParsePassthrough(t *testing.T) {
 			wantPassthr: []string{"写个测试"},
 		},
 		{
-			name:        "-- 之后无条件透传，即使与 tkr 同名",
+			name:        "-- 之后无条件透传，即使与 tf 同名",
 			args:        []string{"--", "-m", "claude-opus-4"},
 			wantPassthr: []string{"-m", "claude-opus-4"},
 		},
 		{
-			name:        "陌生 flag 之后的同名 flag 不再被 tkr 解析",
+			name:        "陌生 flag 之后的同名 flag 不再被 tf 解析",
 			args:        []string{"--resume", "-m", "opus"},
 			wantModel:   "",
 			wantPresent: false,
@@ -517,5 +517,36 @@ func TestSuggestionsNameOnlyAvailableTools(t *testing.T) {
 				t.Errorf("建议了本机没有的 %s：%s", bin, note)
 			}
 		}
+	}
+}
+
+// 装补全失败时不能记「已经问过」。
+//
+// 用户答了「装」，写盘失败了 —— 这时记上「问过了」等于把一件没办成
+// 的事永久关掉，而且再也不会提起。只有结果已经确定才记：答了不用是
+// 确定，装成了是确定，装失败不是。
+func TestCompletionsAskedOnlyWhenSettled(t *testing.T) {
+	src, err := os.ReadFile("cmd_completions.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	start := strings.Index(body, "func offerCompletions(")
+	if start < 0 {
+		t.Fatal("offerCompletions not found")
+	}
+	fn := body[start : start+strings.Index(body[start:], "\n}\n")]
+
+	// 赋值必须发生在 Select 之后：写在前面就等于「问了就算数」。
+	set := strings.Index(fn, "CompletionsAsked = true")
+	sel := strings.Index(fn, "c.UI.Select(")
+	if set < 0 || sel < 0 {
+		t.Fatal("expected both a Select call and the flag assignment")
+	}
+	if set < sel {
+		t.Error("CompletionsAsked 在提问之前就置位了，装失败也会被记成问过")
+	}
+	if !strings.Contains(fn, "return // 下次再问") {
+		t.Error("安装失败后必须直接返回，不记录")
 	}
 }

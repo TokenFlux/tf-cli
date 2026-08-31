@@ -1,7 +1,7 @@
 // Package gateway 是 TokenFlux / TokenRouter 的 HTTP 客户端。
 //
-// 只用于 tkr 自身的查询（模型目录、Key 校验）。harness 的流量绝不经过这里
-// —— tkr 不代理、不 MITM。
+// 只用于 tf 自身的查询（模型目录、Key 校验）。harness 的流量绝不经过这里
+// —— tf 不代理、不 MITM。
 package gateway
 
 import (
@@ -99,7 +99,7 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 	if err != nil {
 		return err
 	}
-	// 只有 tkr 自己的请求带这个 UA。注入给 harness 的环境绝不改 UA。
+	// 只有 tf 自己的请求带这个 UA。注入给 harness 的环境绝不改 UA。
 	req.Header.Set("User-Agent", buildinfo.UserAgent())
 	if c.Key != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Key)

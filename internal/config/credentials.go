@@ -24,7 +24,7 @@ type Credential struct {
 
 const (
 	SourcePaste  = "paste"  // tf login --with-key
-	SourceImport = "import" // 网页「导入 tkr」按钮
+	SourceImport = "import" // 网页「导入 tf」按钮
 	SourceEnv    = "env"    // 环境变量，不落盘
 )
 

@@ -1,6 +1,10 @@
 package ui
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 // 过滤是子串匹配且大小写不敏感，返回项要携带原始下标 ——
 // 下标一旦错位，用户就会选到另一个模型。
@@ -128,5 +132,33 @@ func TestFilterMatchesDetail(t *testing.T) {
 	// Label 命中的排在前面。
 	if got[0].Label != "ccmax-lookalike" {
 		t.Errorf("label match should sort first, got %q", got[0].Label)
+	}
+}
+
+// 兜底选择器必须读控制终端，不能读 stdin。
+//
+// stdin 常被管道占住（echo $KEY | tf login），而用户仍坐在终端前。
+// 此前这里读 os.Stdin，于是兜底路径在最需要它的场合直接拿到 EOF。
+func TestChooseReadsControllingTerminal(t *testing.T) {
+	src, err := os.ReadFile("prompt.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	start := strings.Index(body, "func (u *UI) Choose(")
+	if start < 0 {
+		t.Fatal("Choose not found")
+	}
+	fn := body[start : start+strings.Index(body[start:], "\n}\n")]
+
+	if strings.Contains(fn, "os.Stdin") {
+		t.Error("Choose 不能读 os.Stdin —— 管道会把它占掉")
+	}
+	if !strings.Contains(fn, `"/dev/tty"`) {
+		t.Error("Choose 应当读 /dev/tty")
+	}
+	// 输错要再问，不能一次就放弃。
+	if !strings.Contains(fn, "for attempt") {
+		t.Error("输入无效时应当重问，而不是直接报错退出")
 	}
 }

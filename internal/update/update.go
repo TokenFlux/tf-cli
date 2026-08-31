@@ -28,7 +28,7 @@ import (
 // Repo 是发布仓库。
 const Repo = "tokenflux/tkr"
 
-// Source 是 tkr 自身的安装来源。
+// Source 是 tf 自身的安装来源。
 type Source string
 
 const (
@@ -255,7 +255,7 @@ func verify(archive, sums []byte, name string) error {
 	return fmt.Errorf("no checksum recorded for %s", name)
 }
 
-// extract 从归档里取出 tkr 可执行文件。
+// extract 从归档里取出 tf 可执行文件。
 func extract(archive []byte) ([]byte, error) {
 	if runtime.GOOS == "windows" {
 		zr, err := zip.NewReader(newByteReader(archive), int64(len(archive)))

@@ -29,31 +29,46 @@ func (u *UI) Interactive(assumeYes bool) bool {
 // Choose 展示编号选项并读取选择，返回选中项的下标。
 //
 // 刻意用编号而非方向键：不需要 raw mode，也就没有把用户终端
-// 弄坏的风险；花哨的选择器留给 M4 的模型选择。
+// 弄坏的风险。这是方向键选择器用不了时的兜底路径。
+//
+// 读 /dev/tty 而不是 stdin，理由与 ReadLine 一样：stdin 可能已经
+// 被管道占住（echo $KEY | tf login），而用户仍然坐在终端前。
+// 此前这里读 os.Stdin，于是兜底路径在最需要它的场合直接拿到 EOF。
 func (u *UI) Choose(title string, options []string) (int, error) {
 	if len(options) == 0 {
 		return 0, Errf(CodeInternal, "no options to choose from")
 	}
 
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return 0, ErrNotInteractive
+	}
+	defer tty.Close()
+
 	fmt.Fprintf(u.Err, "%s\n\n", title)
 	for i, o := range options {
 		fmt.Fprintf(u.Err, "  %d) %s\n", i+1, o)
 	}
-	fmt.Fprintf(u.Err, "\n%s ", u.T(
-		fmt.Sprintf("选择 [1-%d]：", len(options)),
-		fmt.Sprintf("Choose [1-%d]:", len(options)),
-	))
 
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil {
-		return 0, ErrNotInteractive
-	}
+	// 输错就再问一遍，别把人踢回命令行重来一次。
+	// 给次数上限：管道喂进来的垃圾不该让 tf 无限循环。
+	r := bufio.NewReader(tty)
+	for attempt := 0; attempt < 3; attempt++ {
+		fmt.Fprintf(u.Err, "\n%s ", u.T(
+			fmt.Sprintf("选择 [1-%d]：", len(options)),
+			fmt.Sprintf("Choose [1-%d]:", len(options)),
+		))
 
-	n, err := strconv.Atoi(strings.TrimSpace(line))
-	if err != nil || n < 1 || n > len(options) {
-		return 0, Errf(CodeUsage, u.T("无效的选择", "invalid choice"))
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return 0, ErrNotInteractive
+		}
+		if n, err := strconv.Atoi(strings.TrimSpace(line)); err == nil && n >= 1 && n <= len(options) {
+			return n - 1, nil
+		}
+		u.Warnf(u.T("请输入 1 到 %d 之间的数字", "enter a number between 1 and %d"), len(options))
 	}
-	return n - 1, nil
+	return 0, Errf(CodeUsage, u.T("无效的选择", "invalid choice"))
 }
 
 // ReadLine 在控制终端上提问并读一行（回显可见）。

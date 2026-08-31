@@ -24,7 +24,7 @@ type Input struct {
 
 // Plan 是一次启动的完整描述。
 //
-// 刻意只包含「进程怎么起」，不含任何落盘动作：tkr 不改用户的配置文件。
+// 刻意只包含「进程怎么起」，不含任何落盘动作：tf 不改用户的配置文件。
 type Plan struct {
 	Bin  string
 	Args []string
@@ -107,7 +107,7 @@ func buildEnv(set map[string]string, drop []string) []string {
 // planClaude 走 Anthropic Messages 协议，base 为根路径。
 //
 // 注意：绝不设置任何会改变 User-Agent 的变量。claude_code_only 分组
-// 依赖 UA + TLS 指纹识别 Claude Code，而 tkr 只注入环境、不在请求路径上，
+// 依赖 UA + TLS 指纹识别 Claude Code，而 tf 只注入环境、不在请求路径上，
 // 识别因此天然成立。见 docs/design/product-decisions.md 第 0 节。
 func planClaude(in Input) (*Plan, error) {
 	set := map[string]string{
@@ -133,7 +133,7 @@ func planClaude(in Input) (*Plan, error) {
 	// 换行不回车，输出会错位）。
 	//
 	// 不去猜真实窗口大小：猜小了提前压缩上下文，猜大了直接溢出，
-	// 而 tkr 并不掌握这个数据。改为关掉这道强制检查，让 Claude Code
+	// 而 tf 并不掌握这个数据。改为关掉这道强制检查，让 Claude Code
 	// 回到「以 API 返回为准」—— 网关才是知道窗口大小的那一方。
 	//
 	// 用户已经自己设过任一相关变量时不覆盖：那是明确的选择。
