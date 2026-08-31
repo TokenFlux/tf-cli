@@ -23,6 +23,12 @@
 
 ## [未发布]
 
+（暂无）
+
+---
+
+## [0.5.0] — 2026-08-31
+
 ### 新增
 
 - `tf status`：一条命令看清当前状态 —— 哪几把 Key、各自还剩多少额度、
@@ -128,7 +134,8 @@
 - 方向键选择器，支持输入过滤。
 - 中英双语，跟随系统 locale，`TF_LANG` 可覆盖。
 
-[未发布]: https://github.com/TokenFlux/tkr/compare/v0.4.0...HEAD
+[未发布]: https://github.com/TokenFlux/tkr/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/TokenFlux/tkr/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TokenFlux/tkr/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/TokenFlux/tkr/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/TokenFlux/tkr/compare/v0.1.0...v0.2.0
