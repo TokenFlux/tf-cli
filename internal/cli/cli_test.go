@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -362,5 +364,55 @@ func TestNearestSuggestsCloseModels(t *testing.T) {
 	}
 	if n := nearest("zzz", cands); len(n) != 0 {
 		t.Errorf("nothing close should yield nothing, got %v", n)
+	}
+}
+
+// settings.json 的 env 段会赢过 tf 注入的环境变量。
+//
+// 实测过：把 ANTHROPIC_BASE_URL 设成死地址，tf claude 连的是那个死地址
+// 而不是网关。CC-Switch 这类工具正是往这里写东西的，所以必须报出来。
+func TestStatusFlagsSettingsEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".claude", "settings.json"),
+		[]byte(`{"env":{"ANTHROPIC_BASE_URL":"http://x"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := settingsEnvKeys(filepath.Join(dir, ".claude", "settings.json"))
+	if len(got) != 1 || got[0] != "ANTHROPIC_BASE_URL" {
+		t.Errorf("settingsEnvKeys = %v, want [ANTHROPIC_BASE_URL]", got)
+	}
+
+	// 没有 env 段、文件不存在、内容不是 JSON —— 都当没有，不能报假警。
+	for _, body := range []string{`{"theme":"dark"}`, `not json`} {
+		p := filepath.Join(dir, "x.json")
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := settingsEnvKeys(p); len(got) != 0 {
+			t.Errorf("settingsEnvKeys(%s) = %v, want none", body, got)
+		}
+	}
+	if got := settingsEnvKeys(filepath.Join(dir, "missing.json")); len(got) != 0 {
+		t.Errorf("missing file should yield nothing, got %v", got)
+	}
+}
+
+// 补全的命令名单必须与注册表一致。
+//
+// 之前补全里另有一份手写名单，加了 tf status 之后那份不知道 ——
+// 两份长得一样，看代码时不会觉得有问题，只有敲 Tab 才发现少一个。
+func TestCompletionNamesMatchRegistry(t *testing.T) {
+	var want []string
+	for _, c := range allCommands() {
+		if !c.Hidden {
+			want = append(want, c.Name)
+		}
+	}
+	if got := commandNames(); !reflect.DeepEqual(got, want) {
+		t.Errorf("commandNames() = %v\nwant %v", got, want)
 	}
 }

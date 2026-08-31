@@ -130,6 +130,26 @@ tf login work --host https://router.acme.com
 
 优先级：`--host` > Key 保存的 host > 编译期默认值。
 
+## 现在会用什么
+
+```console
+$ tf status
+~/.tf
+
+default  sk-d7d…a4fe  13 个模型
+
+  claude    default  claude-sonnet-5
+  codex     default  gpt-5.6-terra
+  opencode  —        claude-sonnet-5
+警告：~/.codex/auth.json 自己也存着凭据；直接跑 codex（不经 tf）用的是那一份
+```
+
+启动横幅写着这次用了哪把 Key、哪个模型，但 Claude Code 与 codex 一进备用屏那行就没了。
+`tf status` 不联网，随时可以敲。
+
+它还会指出会让注入落空的东西：`~/.claude/settings.json` 里的 `env` 段优先级高于
+tf 注入的环境变量，写在那里的 `ANTHROPIC_BASE_URL` 会让 tf 指定的网关不生效。
+
 ## 配置
 
 `tf config` 打印配置目录，默认 `~/.tf`，设了 `XDG_CONFIG_HOME` 时是 `$XDG_CONFIG_HOME/tf`。

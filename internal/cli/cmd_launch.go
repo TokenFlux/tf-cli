@@ -123,9 +123,18 @@ func runLaunch(c *Context, h *harness.Harness) error {
 			fmt.Sprintf(c.UI.T("启动 %s 失败", "failed to launch %s"), h.Name)).WithCause(err)
 	}
 
-	c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf(
-		c.UI.T("%s 结束，耗时 %s，退出码 %d", "%s finished in %s, exit %d"),
-		h.Name, res.Duration.Round(1e8), res.ExitCode)))
+	// 退出码非零时把用了什么也说一遍。
+	//
+	// 启动横幅写着 Key 与模型，但 harness 一进 alternate screen 那行就
+	// 没了 —— 而正是出错时用户最需要回头看它。正常退出不必重复，
+	// 那时这些信息没人要看；要查随时可以 tf status。
+	summary := fmt.Sprintf(c.UI.T("%s 结束，耗时 %s，退出码 %d", "%s finished in %s, exit %d"),
+		h.Name, res.Duration.Round(1e8), res.ExitCode)
+	if res.ExitCode != 0 {
+		summary += fmt.Sprintf(c.UI.T("（Key %s，模型 %s）", " (key %s, model %s)"),
+			keyName, model.Parse(slots[config.SlotDefault]).Display())
+	}
+	c.UI.Logf("%s", c.UI.Dim(summary))
 
 	if res.ExitCode != 0 {
 		return &exitCodeError{code: res.ExitCode}

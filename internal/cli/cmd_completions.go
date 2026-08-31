@@ -337,8 +337,14 @@ func storedKeys() []string {
 }
 
 func commandNames() []string {
-	names := []string{"version", "config", "login", "logout", "keys", "harness", "model", "update", "completions"}
-	return append(names, harnessNames()...)
+	cmds := allCommands()
+	out := make([]string, 0, len(cmds))
+	for _, c := range cmds {
+		if !c.Hidden {
+			out = append(out, c.Name)
+		}
+	}
+	return out
 }
 
 func harnessNames() []string {
