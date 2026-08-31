@@ -112,7 +112,14 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -eu
+          # 发布说明从 CHANGELOG.md 取，不用 --generate-notes：
+          # 后者按合并的 PR 生成，而这个仓库全是直推 main，
+          # v0.1.0 到 v0.4.0 四个版本的说明都只有一行链接。
+          #
+          # 取不到就失败，不退回自动生成：忘了写变更记录应当拦住发布，
+          # 而不是静默地发出一个没人看得懂的版本。
+          bash scripts/release-notes.sh "$TAG" > /tmp/notes.md
           gh release create "$TAG" staging/* \
             --title "$TAG" \
-            --generate-notes \
+            --notes-file /tmp/notes.md \
             --verify-tag

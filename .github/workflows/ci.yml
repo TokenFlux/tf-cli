@@ -18,6 +18,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # 打了 tag 就必须有对应的变更记录。放在 CI 而不是发布流水线里：
+      # 发布时才发现说明没写，那时 tag 已经推上去了。
+      - name: 变更记录
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: bash scripts/release-notes.sh "${GITHUB_REF_NAME}" > /dev/null
+
       # gofmt 不是建议，是硬门槛：格式漂移会让 diff 失去意义。
       - name: 格式
         run: |

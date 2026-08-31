@@ -172,3 +172,7 @@ tf 注入的环境变量，写在那里的 `ANTHROPIC_BASE_URL` 会让 tf 指定
 ## 许可
 
 Apache-2.0。Claude、Codex、opencode 是各自权利人的商标，tf 与它们无隶属关系。
+
+## 变更记录
+
+每个版本改了什么、为什么，见 [CHANGELOG.md](CHANGELOG.md)。

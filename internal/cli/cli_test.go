@@ -551,3 +551,30 @@ func TestCompletionsAskedOnlyWhenSettled(t *testing.T) {
 		t.Error("安装失败后必须直接返回，不记录")
 	}
 }
+
+// 每个已发布的版本都必须在 CHANGELOG.md 里有一节。
+//
+// 发布流水线从那里取说明，取不到就拒发。把同样的检查放进单元测试，
+// 是为了在本地就发现，而不是等 tag 推上去之后。
+func TestChangelogCoversEveryTag(t *testing.T) {
+	body, err := os.ReadFile("../../CHANGELOG.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+
+	out, err := exec.Command("git", "tag", "--list", "v*").Output()
+	if err != nil {
+		t.Skip("拿不到 tag 列表")
+	}
+	for _, tag := range strings.Fields(string(out)) {
+		want := "## [" + strings.TrimPrefix(tag, "v") + "]"
+		if !strings.Contains(text, want) {
+			t.Errorf("CHANGELOG.md 缺少 %s 那一节（找 %q）", tag, want)
+		}
+	}
+	// 未发布的改动要有地方落脚，否则下次发版时无从取起。
+	if !strings.Contains(text, "## [未发布]") {
+		t.Error("CHANGELOG.md 应保留「未发布」一节")
+	}
+}
