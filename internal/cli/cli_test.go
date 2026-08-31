@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -576,5 +577,31 @@ func TestChangelogCoversEveryTag(t *testing.T) {
 	// 未发布的改动要有地方落脚，否则下次发版时无从取起。
 	if !strings.Contains(text, "## [未发布]") {
 		t.Error("CHANGELOG.md 应保留「未发布」一节")
+	}
+}
+
+// 发布说明里给出的安装命令必须与 README 里的一致。
+//
+// 两处各写一份 URL，迟早会有一处指向不存在的路径 —— 而发布说明里的
+// 那条是新用户见到的第一条命令，错了就是 404 开局。
+func TestInstallURLMatchesReadme(t *testing.T) {
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes, err := os.ReadFile("../../scripts/release-notes.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`https://raw\.githubusercontent\.com/\S+install\.sh`)
+	a, b := re.Find(readme), re.Find(notes)
+	if a == nil {
+		t.Fatal("README 里找不到安装 URL")
+	}
+	if b == nil {
+		t.Fatal("发布说明脚本里找不到安装 URL")
+	}
+	if string(a) != string(b) {
+		t.Errorf("两处不一致：\n  README: %s\n  发布说明: %s", a, b)
 	}
 }
