@@ -17,7 +17,7 @@ func newUpdateCommand() *Command {
 		Name:  "update",
 		Usage: "tf update [--check]",
 		Summary: func(u *ui.UI) string {
-			return u.T("更新 tkr 自身", "Update tkr itself")
+			return u.T("更新 tf 自身", "Update tf itself")
 		},
 		Flags: []Flag{
 			{Name: "check", Kind: KindBool,

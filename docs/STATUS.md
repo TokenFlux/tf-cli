@@ -1,129 +1,152 @@
 # tf 现状
 
-更新于 2026-08-29。实施路线见 [`PLAN.md`](PLAN.md)。
+更新于 2026-08-31，对应 v0.4.0 之后的 main。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
 - `research/ori.md` — ori 逆向调研、整体设计、分发方案
-- `research/tokenflux-api-probe.md` — 生产环境实测记录
-- `design/import-from-web.md` — login 最终方案
-- `design/cli-auth-discussion.md` — 与后端沟通的事实与议题
+- `research/tokenflux-api-probe.md` — 网关实测记录
+- `research/harness-probe.md` — 三个 harness 的注入配方与实测
+- `design/` — 各项决策的来龙去脉
 
 ---
 
-## 一、进度
+## 一、当前形态
+
+命令：`version` `status` `config` `login` `logout` `keys` `update` `harness`
+`model` `completions` + `claude` `codex` `opencode`。
+
+全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。
+
+约 7100 行代码，2800 行测试，113 个测试，四个已发布版本，零第三方依赖。
+
+## 二、里程碑
 
 | 里程碑 | 状态 | 说明 |
 | --- | --- | --- |
-| M0 骨架 | 完成 | CLI 框架、config/credentials、权限自修复、错误码、双语文案、`--json` |
-| M1 目录 | 未开始 | `catalog` + `tf models` / `tf groups` |
-| M2 认证 | 大部完成 | `login`（stdin/隐藏输入、当场校验、冲突不静默覆盖、自订名）、`logout`、`keys`。缺 `tf status`（余额、限速窗口） |
-| M3 启动 | 机制完成 | fork+wait、信号转发、退出码穿透、注入配方。三项实测未做 |
-| M4 模型 | 完成 | ID 解析（分组前缀 + 强度后缀）、族折叠、方向键 TUI、按 harness 分开的模型槽、一屏确认 |
-| M5 预检 | 部分完成 | 协议探测（零 token）、按分组前缀的准入记录、Key 与模型两级筛选。缺 `doctor` |
-| M6 harness | 1/3 实测 | opencode 实测通过；claude/codex 配方已写但未验证 |
-| M7 分发 | 未开始 | goreleaser、npm 平台包、install.sh、Apache-2.0、SECURITY.md |
+| M0 骨架 | 完成 | CLI 框架、config/credentials、权限自修复、错误码、双语、`--json` |
+| M1 目录 | 放弃 | 见下 |
+| M2 认证 | 完成 | `login`、`logout`、`keys`、`status`（含额度） |
+| M3 启动 | 完成 | fork+wait、信号转发、退出码穿透、终端复位。三个 harness 均已实测 |
+| M4 模型 | 完成 | ID 解析、族折叠、方向键选择器、按 harness 分开的模型槽 |
+| M5 预检 | 完成 | 零 token 协议探测、按分组前缀的准入记录、隐藏原因说明 |
+| M6 harness | 完成 | claude 2.1.251、codex 0.151.0、opencode 1.18.20 均真实对话通过 |
+| M7 分发 | 大部完成 | GitHub Actions + install.sh + `tf update`，五平台产物。npm 包未做 |
 
-M1 走公开的 `/api/v1/marketplace/models`。倍率、定价、可用率、模态都在这份数据里，
-它同时是「同模型多分组该选哪个」和「过滤掉图像/专用模型」的唯一数据来源。
+**M1 目录（`tf models` / `tf groups`）已放弃。** 原计划走公开的
+`/api/v1/marketplace/models` 做未登录查询，`internal/catalog` 写了又删。
+理由是它回答的问题（「市面上有什么」）属于网页控制台，而 tf 是启动器 ——
+用户在终端里要的是「我这把 Key 现在能跑什么」，那个由 `tf keys` 与
+`tf status` 回答，数据来自 `/v1/models`，不需要匿名目录。
 
-M5 的 `doctor` 需覆盖：CC-Switch 残留、harness 自存凭据、代理风险、废弃端点。
+**M5 的 `doctor` 并入了 `tf status`。** 状态与问题是同一屏：正常时只显示状态，
+有问题时追加警告。单独一个 `doctor` 会让人不知道该敲哪个。
 
-### 阻塞项
+## 三、v0 之后发生的事
 
-claude 与 codex 未安装，M3 的三项实测（`claude_code_only` 指纹识别、`HTTPS_PROXY` 影响、
-`ENABLE_TOOL_SEARCH`）无法进行。这是全项目最高风险项：若 tf 的 exec 路径破坏 UA+TLS 指纹，
-Claude Max（倍率 20）这条主线就不成立。
+按时间：
 
-### 计划外的修正（已完成）
+- **v0.1.0** 首发。命令名 `tkr`
+- **v0.2.0** 改名 `tf`。二进制、配置目录（`~/.tf`）、环境变量（`TF_*`）、
+  错误码、产物名全部跟随。仓库与模块路径保持 `tokenflux/tkr`
+- **v0.3.0** 选择器按键修复、shell 补全能用了、全局 flag 可写在子命令前、
+  JSON 模式保留警告、`logout --all` 确认
+- **v0.4.0** 十二条界面缺陷修复，含两处破坏性变更（移除 `-y`、
+  `tf model` 需 `--edit` 才进编辑器）
+- **未发布**：`tf status`、启动前的注入冲突检查、pty 端到端测试
 
-- **废除全局 current profile**：绑定改为属于 harness，按能力自动选 Key。
-  见 `design/no-global-mode.md`。原 PLAN 中 v0.5 的「完整 profile 机制、`tf use`」作废。
-- **协议准入按分组前缀记录**：复合 Key 一把横跨多个分组，同一把 Key 的不同模型可调端点不同。
-- **模型列表合并为一处真相**（config.json），删掉会串味的独立缓存。
+## 四、实测得到的事实
 
----
+这些是靠发请求、跑进程得来的，不是推的。
 
-## 二、还缺什么
+### 网关应答形状
 
-### A. 待实测 / 待实现
+| 场景 | 形状 |
+|---|---|
+| 模型不在分组（chat/messages） | 403 `The current group does not support the requested model` |
+| 模型不在分组（responses） | 404 `model_not_found` |
+| 模型不在分组（responses，Kiro 分组） | 503 `No available accounts: ... requested model` |
+| `claude_code_only`（messages） | 403 `this group only allows Claude Code clients` |
+| `claude_code_only`（chat/completions） | 403 `This group is restricted to Claude Code clients` |
+| Key 无效 | 401 `INVALID_API_KEY` |
+| 额度用尽 | 429，`/v1/usage` 里 `status: quota_exhausted` |
 
-| 缺口 | 影响 | 优先级 |
-|---|---|---|
-| `claude_code_only` 分组靠什么识别 Claude Code（UA？header？），tf 注入的 header 会不会破坏识别 | Claude Max 倍率 20，是最有价值的分组，识别不过就用不了 | P0 |
-| 三个 harness 的端到端实测 | 适配表的正确性 | P0 |
-| opencode 的 AI SDK provider 实际走 responses 还是 chat | 候选列表顺序 | P1 |
-| `ENABLE_TOOL_SEARCH` 在 Anthropic 分组是否生效 | 省近一半系统提示词 token | P1 |
-| 复合 Key 的 `composite_groups` 实际结构与前缀形态 | 前缀自动补全 | P1 |
-| fast 通道（`fast_mode_policy` + `fast_*` 价格）怎么在 CLI 表达 | 功能完整性 | P2 |
+判据放文案不放状态码：同一件事出现过 403 / 404 / 503 三种码。
 
-### B. 要问后端的
+### `claude_code_only` 拦的是客户端指纹
 
-按优先级排列。第一条最值得先提：后端改动成本极低，而它能让预检从「探测」升级为「查表」，
-省掉整个零成本探测子系统。
+实测：真实模型 + 真实请求体，走 `/v1/messages` 仍然 403。它认的是
+UA 加 TLS 指纹，不是协议。tf 不伪装，所以这类分组在 tf 下确实用不了 ——
+但**能藏就必须能解释**，隐藏候选时会说明原因。
 
-| 问题 | 为什么重要 | 影响 |
-|---|---|---|
-| 能否在公开的 `/api/v1/marketplace/models` 里加上 `allowed_client_protocols` | 未登录即可做完整预检，不必依赖探测 | M5 |
-| `claude_code_only` 的判定依据 | 同 A 表第一行，一问可能就省掉一轮实测 | M3 |
-| 会话粘性/归因的确切 header 名与语义（是不是 `X-Session-Id`） | 决定能不能白捡账号粘性 + 用量归因 | M3 |
-| `max_reasoning_effort` / `reasoning_effort_mappings` 的语义（当前为空） | effort 是三层映射，要给分组层留位置 | M4 |
-| Key 要不要加 `source` 标记 | 让用户在 `/keys` 页认出并单独撤销 CLI 发的 Key | v0.5 |
-| fallback 分组链能否对客户端可见 | 影响预检措辞与 doctor 诊断 | M5 |
+这条曾是全项目最高风险项（Claude Max 倍率 20）。结论是这条路走不通，
+风险已经兑现，不再是未知。
 
-### C. 产品决策
+### settings.json 会赢过注入
 
-已全部拍板，见 `design/product-decisions.md`、`design/open-decisions.md`、
-`design/model-selection.md`：
+把 `~/.claude/settings.json` 的 `env.ANTHROPIC_BASE_URL` 设成
+`http://127.0.0.1:9`，`tf claude` 连的是那个死地址而不是网关。
 
-- host/profile：Profile 模型 + 项目级只存 profile 名；v0 先做单 profile + `--host`
-- 默认模型：必须注入；三层策略；模型槽按 harness 分开存
-- telemetry：默认关，版本信息只走 tf 自身请求的 UA
-- License：Apache-2.0 开源
-- 命令名 `tf`（npm 可用）
-- 进程模型 fork+wait、存储形态、文案语言、`--json` 触发、缓存 TTL、harness 未装的交互、
-  用量摘要详细显示、Windows 实验性，均已定
+这是 tf 唯一会说谎的场合：横幅写着模型名，请求发去了别处。
+启动前会检查并警告，只报与本次注入真正相撞的键。
 
----
+CC-Switch 这类工具正是往那里写东西的 —— 所以 README 里「与配置管理器
+共存」这句话是有条件的。
 
-## 三、已经定了的
+### opencode 的两个必备条件
 
-### 产品定位
+① 模型必须显式声明（`provider.<p>.models.<id> = {"name": <id>}`），
+否则报 `Model not found`。② 两个 provider 的 baseURL **都要带 `/v1`** ——
+与 Claude Code 相反，`@ai-sdk/anthropic` 只补 `/messages`。写成根地址会
+404 且被静默吞掉：退出码 0、无输出、无报错。
 
-1. **tf 是启动器，不是配置管理器。** 只做进程内注入（env + CLI flag + 进程私有临时文件），
-   退出不留痕，不改用户的 `~/.claude/settings.json`、`~/.codex/config.toml`。
-2. 与 CC-Switch 分工共存：它管持久化配置，tf 管临时启动。两者会在同一进程里冲突，
-   所以 `doctor` 是必需品。
-3. 不做：自己的聊天 REPL、自己的 agent loop、常驻守护进程。
+### 网关的 SSE 保活 bug
 
-### 技术选型
+`/v1/responses` 用伪造的 `response.output_text.delta` 做保活，`item_id`
+为 `SSE-Keep-Alive` 且从未经 `output_item.added` 宣告。AI SDK 抛
+`text part SSE-Keep-Alive not found`，opencode 约四分之一的请求整轮失败。
+应改用 SSE 注释行 `: keepalive`。
 
-4. Go 单二进制（复用 TokenRouter 的 goreleaser 链路），约 10–15MB。
-5. 分发：npm 主包（JS shim）+ 按 `os`/`cpu`/`libc` 切分的 optionalDependencies 平台包，
-   无 postinstall 下载；并行提供 install.sh / brew / scoop。`pnpx tf` 可用。
-6. npm 名字 `tf` 可用（`tokenflux` 也可用，`tokenrouter` 已被占）。
+tf 不在请求路径上，为此建代理会违背定位 —— 只能等后端改。
 
-### 认证
+## 五、还缺什么
 
-7. v0：`tf login --with-key`（粘贴/stdin），零后端改动，同时是 SSH/容器场景的永久兜底。
-8. v0.5：网页「导入 tf」按钮 → localhost 回环 HTTP，只动前端。不用 `tf://` scheme：
-   curl/npx 装的二进制注册不了，且 Key 会经 argv 泄露。
-9. 安全性集中在终端侧带 Origin 的预览确认，不做配对码。非交互用 `--yes`。
-10. PKCE / 授权服务器推迟到要开放给第三方工具时再谈。
+### A. 工程
 
-### 适配与预检
+| 缺口 | 影响 |
+|---|---|
+| `internal/cli` 3771 行占一半代码，逻辑与 I/O 缠在一起 | 覆盖率卡在 23.9%，每加一个功能更难分 |
+| `gateway` 覆盖 3%，而它承担最微妙的判断 | 手上有大量实测应答可做固件测试，没做 |
+| 终端四条防线只在 macOS 验证过 | CI 里没有 tty，Linux 上从未真正跑过 |
+| npm 平台包未做 | `pnpx tf` 不可用 |
+| 没有 CHANGELOG，没有英文 README | |
 
-11. harness 首批：claude / codex / opencode，其次 hermes。
-12. codex 是单协议 harness：官方已移除 `wire_api="chat"`，只剩 `responses`，没有降级路径。
-13. 协议是集合不是格式：`anthropic_messages` / `openai_responses` /
-    `openai_chat_completions` / `gemini_generate_content`，可任意组合，空集合也合法。
-14. 预检只能证伪不能证真（账号 endpoint capability 更窄，还有 fallback 分组链）。
-    通过时静默放行，不给正面承诺；预检自身失败时降级放行。
-15. 零成本协议探测已验证可行：协议准入发生在 body 解析之前，空 body 请求 → 400 表示准入通过，
-    403 + `does not allow ... requests` 表示不准入，不消耗 token。
-16. 错误按 message 分类，不能只看状态码：两种 403（协议不准入 / 模型不在分组，
-    后者响应里自带 available models 列表）、两种 401（`INVALID_API_KEY` / `INVALID_TOKEN`）。
-17. 模型 ID 变换收口成一个纯函数（复合 Key 前缀 → 服务端 model_mapping → harness provider 前缀）。
-18. 数据可见性分层已实测清楚：匿名可拿目录/价格/容量/可用率；Key 只能加读 `/v1/models`；
-    协议准入必须 JWT。
-19. `tf models` / `tf groups` 未登录即可用，`pnpx tf models` 开箱即用。
+### B. Windows
+
+只能非交互跑。交互栈整个建在 `/dev/tty` 与 `stty` 上，Windows 要走
+`CONIN$` 与 `SetConsoleMode` 重写。报错已经会说实话（「这个平台还没有
+交互界面」而不是「非交互」）。
+
+没有 Windows 机器验证之前不动手：交付没测过的交互实现比诚实的报错更糟。
+
+### C. 要后端做的三件事
+
+按价值排。第一条最实在，今天还在发作。
+
+| 诉求 | 为什么 |
+|---|---|
+| `/v1/responses` 保活帧改用 SSE 注释行 | opencode 四次挂一次，见上 |
+| `/v1/models` 返回分组信息 | 现在连 `owned_by` 都没有。客户端只能靠模型集合反推分组，而 Grok 三个档位的模型完全相同，推不出来 |
+| marketplace 补 `allowed_client_protocols` 与 `claude_code_only` | 补上之后可以删掉客户端整套探测逻辑，连带解决探测成本与「网关文案一改就失灵」的脆弱 |
+
+## 六、不会变的几条
+
+1. **tf 是启动器，不是配置管理器。** 只做进程内注入，退出不留痕，
+   不改用户的 `~/.claude/settings.json`、`~/.codex/config.toml`
+2. **不做本地代理、不做 MITM、不覆盖 harness 的 User-Agent**
+3. **没有隐藏的全局可变状态。** 绑定属于 harness，没有「当前 profile」
+4. **不在客户端建推断子系统去补上游数据缺口**
+5. **零第三方依赖**，CI 卡死这条线（`go.sum` 必须为空）
+6. **flag 管这一次，`tf model` 管以后。** `-m` / `-e` / `-k` 绝不写盘
+7. **非交互环境绝不静默安装、绝不静默覆盖凭据、不弹选择器**
+8. 不做：自己的聊天 REPL、自己的 agent loop、常驻守护进程

@@ -145,7 +145,7 @@ tf update / version
 
 ### 关键实现点
 
-1. **凭据存储**：`~/.tf/credentials.json`（多 profile：host + key + label），工作区 `.tf/credentials.json` 优先；env `TOKENFLUX_API_KEY` / `TKR_API_KEY` 最高。文件 0600。
+1. **凭据存储**：`~/.tf/credentials.json`（多 profile：host + key + label），工作区 `.tf/credentials.json` 优先；env `TOKENFLUX_API_KEY` / `TF_API_KEY` 最高。文件 0600。
 2. **harness 适配表**：一张 `harness × {协议格式, 环境变量, CLI flag, 配置文件写法, effort 映射}` 的数据表，逻辑与数据分离，新增 harness 只加一行。
    - claude → `ANTHROPIC_BASE_URL=<host>`、`ANTHROPIC_AUTH_TOKEN=<key>`、清空 `ANTHROPIC_API_KEY` 与全部 bedrock/vertex/gateway 变量、`--settings` 临时文件。
    - codex → 全 `-c` 覆盖 `model_providers.tokenflux.base_url='<host>/v1'`，`wire_api` 按分组能力选 `chat`/`responses`（TokenRouter 文档明确 `preserve_client_protocol` 下 Chat 只走 `/v1/chat/completions`）。

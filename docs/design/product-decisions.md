@@ -28,6 +28,11 @@ tf 要同时服务两类目标：TokenFlux（托管，单一权威 host）和 To
 **形态二：Profile（推荐）**
 命名 profile = `{host, key, 默认模型槽}`，存 `~/.tf/config.json`，一个 `current` 指针。
 
+> **这一节的方案已作废。** 下面的 profile 机制、`tf use`、`TKR_PROFILE`
+> 都没有落地：绑定改为属于 harness，不存在全局的「当前 profile」。
+> 原因见 [`no-global-mode.md`](no-global-mode.md)。保留原文是为了留下
+> 当初为什么会走到那一步的记录。
+
 ```
 tf login                                  → 写 default profile（指向 tokenflux.dev）
 tf login --profile work --host https://gw.corp.internal

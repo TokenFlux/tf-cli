@@ -79,7 +79,7 @@ settings:    写进程私有的 <cwd>/.tf/claude-<pid>.json 用 --settings 传�
   -c model_providers.tokenflux.wire_api='responses' | 'chat'
      ↑ 分组的 allowed_client_protocols 含 openai_responses 就用 responses，
        否则含 openai_chat_completions 就降级 chat，两者都没有则本地拦下
-  -c model_providers.tokenflux.env_http_headers.X-Session-Id='TKR_SESSION_ID'
+  -c model_providers.tokenflux.env_http_headers.X-Session-Id='TF_SESSION_ID'
   凭据两条路：env_key='TOKENFLUX_API_KEY'（简单）
             或 auth.command='sh' auth.args=['-c','echo $TOKENFLUX_API_KEY']（ori 的做法，更通用）
   [-m <model>] [-c model_reasoning_effort=<effort>]

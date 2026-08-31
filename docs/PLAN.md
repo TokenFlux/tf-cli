@@ -1,6 +1,7 @@
 # tf 实施计划
 
-所有设计决策的落地路线。设计依据见 `design/` 与 `research/`。
+M0–M7 已经走完，见 [`STATUS.md`](STATUS.md)。这份文档现在只管往后。
+设计依据在 `design/` 与 `research/`。
 
 ---
 
@@ -9,117 +10,95 @@
 | | 决定 |
 |---|---|
 | 定位 | 启动器，进程内注入，退出不留痕，不改用户配置文件 |
-| 语言 / 分发 | Go 单二进制；npm 平台包（optionalDeps + JS shim）+ install.sh + brew/scoop |
-| 进程模型 | fork + wait（信号转发自己写，换取确定性清理与用量摘要）|
-| 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA（会破坏 `claude_code_only` 的 UA+TLS 指纹识别）|
+| 语言 / 分发 | Go 单二进制；GitHub Actions 交叉编译 + install.sh；npm 平台包待做 |
+| 进程模型 | fork + wait（信号转发自己写，换取确定性清理与终端收尾）|
+| 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA |
 | 认证 | v0 `--with-key`；v0.5 网页「导入 tf」+ localhost 回环 + 带 Origin 的预览确认 |
-| 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；`--` 无条件透传；`--model` 由 tf 吃掉 |
-| 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；v0 不用钥匙串 |
-| 文案 | 跟随 locale + `TKR_LANG`；错误码保持英文常量 |
-| 输出 | 显式 `--json`；非 TTY 时日志转 stderr、去色，但不自动改格式 |
-| 缓存 | 目录 24h / 探测 1h；刷新超时 2s 用旧数据；离线放行并说明 |
-| 模型 | 必须注入；三层策略（默认直用 / 首次选择器 / 非交互启发式）；`-m` 空值进选择器；槽按 harness 分开存 |
-| harness 未装 | 交互式二选一（退出 / 由 tf 装），非交互默认拒绝，绝不 sudo |
-| 用量摘要 | 详细显示 |
-| Telemetry | 默认关，版本信息只走 tf 自身请求的 UA |
-| License | Apache-2.0，开源 |
-| Windows | v0 出二进制，标注实验性 |
+| 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；`--` 无条件透传 |
+| 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；不用钥匙串 |
+| 文案 | 跟随 locale + `TF_LANG`；错误码保持英文常量 |
+| 输出 | 显式 `--json`，不因管道自动切换 |
+| 模型 | 必须注入；`-m` 空值进选择器；槽按 harness 分开存；flag 绝不写盘 |
+| harness 未装 | 交互式二选一，非交互只打印命令，绝不 sudo |
+| Telemetry | 默认关 |
+| License | Apache-2.0 |
+| Windows | 出二进制，只能非交互跑 |
 
 ---
 
-## 代码结构
+## 实际代码结构
 
 ```
 cmd/tf/main.go
+e2e/                pty 端到端测试（build tag pty，make pty）
 internal/
-  cli/        命令定义、参数透传规则、locale
-  config/     profile、凭据、XDG、文件权限
-  catalog/    marketplace 目录 + /v1/models + 缓存
-  gateway/    HTTP 客户端、错误分类、tf 自身 UA
-  model/      模型 ID 解析（纯函数，收口三重变换）
-  harness/    适配表 + 各 harness 注入器
-  precheck/   协议准入判定 + 零成本探测
-  launch/     fork+wait、信号转发、临时文件、用量摘要
-  tui/        模型选择器（与 models 命令共用渲染）
-  doctor/     诊断规则
-  ui/         输出层、--json、错误码与文案
+  buildinfo/  版本与 User-Agent（-X 注入）
+  cli/        命令定义、参数解析、候选收集、补全、状态检查
+  config/     配置、凭据、XDG、文件权限
+  gateway/    HTTP 客户端、协议探测、用量
+  harness/    适配表 + 三个 harness 的注入配方 + 安装
+  launch/     fork+wait、信号转发、终端复位
+  model/      模型 ID 解析（纯函数）
+  ui/         输出层、选择器、终端原始模式、--json、错误码
+  update/     自更新与安装来源识别
 ```
 
----
-
-## 里程碑
-
-### M0 骨架
-CLI 框架、config/credentials 读写与权限、错误码与双语文案脚手架、`--json` 约定、非 TTY 行为。
-
-**验收**：`tf --help` / `tf version --json` 可用；配置文件权限正确。
-
-### M1 目录（第一个可发布的东西）
-`catalog` + `gateway` + `tf models` / `tf groups`，走公开的 `/api/v1/marketplace/models`。
-
-**验收**：**完全未登录**能列出分组与模型，含定价、倍率、可用率、并发；缓存与 `--refresh` 生效；离线用旧缓存并提示。
-**注意**：文案要区分「市场上有（12 个）」和「你能用」，marketplace 是上架子集。
-
-### M2 认证
-`tf login --with-key`（stdin / 隐藏输入）、`tf status`、host 归一化、用 `/api/v1/settings/public` 校验 host。
-
-**验收**：Key 落盘 0600；`status` 显示余额、限速窗口剩余、当前 profile/host/分组；错误的 host 当场报错。
-
-### M3 启动（核心）
-`harness` 适配表 + **先只做 claude** + `launch`（fork+wait、信号转发、临时 settings 文件、退出清理、详细用量摘要）。
-
-**验收**：`tf claude` 能起真实 Claude Code 并正常对话；Ctrl+C 语义正确；退出码透传；临时文件确定性清理；退出后打印详细用量。
-
-**本阶段必须完成的实测**：
-1. `claude_code_only` 分组（Claude Max）能否正常识别。最高优先级，验证 UA+TLS 指纹在 tf 启动路径下不受影响。
-2. 环境里存在 `HTTPS_PROXY` 时是否破坏识别 → 转化为 doctor 规则。
-3. `ENABLE_TOOL_SEARCH` 在 Anthropic 分组是否生效。
-
-### M4 模型解析与选择器
-`model` 纯函数（复合 Key 前缀 / model_mapping / harness provider 前缀）+ `tui` 选择器 + claude 三档一屏确认 + 模型槽持久化。
-
-**验收**：三层策略行为正确（默认直用 / 首次选择器 / 非交互启发式）；`-m` 空值进选择器；纯函数单测覆盖三重变换；档位不足时给出明确说明。
-
-### M5 预检与 doctor
-协议集合判定、`claude_code_only` 维度、零成本探测（无 JWT 时）、错误分类映射、`tf doctor`。
-
-**验收**：协议不匹配在本地拦下且给出可执行修复；预检失败时降级放行；两种 403 / 两种 401 分类正确；doctor 能查出 CC-Switch 残留、harness 自存凭据、废弃端点、代理风险。
-
-### M6 codex 与 opencode
-按适配表加两行 + 各自的冲突检测。
-
-**验收**：`tf codex` / `tf opencode` 正常启动且不写用户配置文件；codex 走 `-c` 覆盖 + `env_key`；opencode 必须同时注入 `model` 与 `small_model`（否则内置小模型撞 404 且静默失败，已实测）；检测到 harness 自存凭据时警告。
-
-> opencode 配方已实测通过，见 `research/harness-probe.md`。
-
-### M7 分发
-goreleaser 交叉编译、npm 主包 + 平台包、install.sh + SHA256SUMS、brew/scoop、Apache-2.0 与 README 商标声明、SECURITY.md。
-
-**验收**：`pnpx tf models` 可用（无 postinstall 下载）；`curl | bash` 可用；`npm publish --provenance` 通过；识别安装来源后 `tf update` 行为正确。
-
-### v0.5
-网页「导入 tf」按钮 + localhost 回环 + Origin 预览确认；项目级 `.tf/config.json`（只存 Key 标签）。
-
-> 原计划中的「完整 profile 机制 / `tf use`」已作废：绑定属于 harness，
-> 不存在全局当前 profile。见 `design/no-global-mode.md`。
-
-### v1（视情况）
-`tf run --`、hermes 及更多 harness、钥匙串后端、`--json` 全量覆盖。
+原计划里的 `catalog/`（匿名目录）、`precheck/`、`tui/`、`doctor/` 都没有单独成包：
+目录查询整个放弃了，其余三个的职责落在 `gateway`、`ui`、`cli` 里。
 
 ---
 
-## 并行推进：要问后端的事
+## 往后的路线
 
-不阻塞任何里程碑，但越早有答案越省事。清单见 [`STATUS.md` 二.B](STATUS.md#b-要问后端的)。
+排序依据是风险，不是工作量。逐条的展开见仓库根目录的 `todo-*.md`。
+
+### 近期：把已知的坑填上
+
+1. ~~启动时检查 settings.json 冲突~~ 已完成
+2. ~~pty 端到端测试~~ 已完成（`e2e/`，`make pty`）
+3. 用实测应答给 `gateway` 做固件测试。它只有 3% 覆盖，却承担最微妙的
+   判断（从错误文案反推分组准入），现在只有活体探针测过 —— 要联网、
+   要额度，今天还因为配额用尽失败过
+4. 在 Linux 上验证终端那四条防线。CI 里没有 tty，它们在 Linux 上
+   从未真正跑过，而 `stty` 的行为两个平台不完全一样
+
+### 中期：分发与可读性
+
+5. npm 平台包（optionalDependencies + JS shim，无 postinstall 下载），
+   目标是 `pnpx tf` 开箱可用
+6. 拆 `internal/cli`。3771 行占一半代码，候选收集与 Key 选择是纯逻辑，
+   也最该被测，先把它们拆出去
+7. `CHANGELOG.md` 与 `README.en.md`
+
+### v0.5：网页导入
+
+网页「导入 tf」按钮 + localhost 回环 + Origin 预览确认。只动前端，
+零后端改动。`cmd_login.go` 里已经留了分流点。
+
+不用 `tf://` scheme：curl / npx 装的二进制注册不了，且 Key 会经 argv 泄露。
+
+### 待定：Windows 交互
+
+交互栈整个建在 `/dev/tty` 与 `stty` 上，Windows 要走 `CONIN$` 与
+`SetConsoleMode` 重写。**没有 Windows 机器验证之前不动手** ——
+交付没测过的交互实现比诚实的报错更糟。
+
+---
+
+## 并行推进：要后端做的三件事
+
+不阻塞任何事，但第一条每天都在影响体验。清单见
+[`STATUS.md` 五.C](STATUS.md#c-要后端做的三件事)。
 
 ---
 
 ## 风险
 
-| 风险 | 应对 |
+| 风险 | 状态 |
 |---|---|
-| `claude_code_only` 识别在 tf 路径下失效 | M3 最先验证；一旦失效需重新设计注入方式 |
-| harness 迭代导致注入 flag 失效 | 记录已验证版本范围，不匹配只警告；不做版本嗅探分支 |
-| 分组配置被管理员改动导致缓存过期 | 探测结果 TTL 短（1h）；403 时自动失效缓存并重试一次 |
-| harness 内置的隐式模型槽撞分组限制 | 适配表必须穷举每个 harness 的全部模型槽；预检逐槽校验（opencode 的 `small_model` 已暴露此类问题）|
-| npm 平台包体积与发布复杂度 | 用 optionalDependencies，无 postinstall；CI 里一次性把六个平台包发完 |
+| `claude_code_only` 识别在 tf 路径下失效 | **已兑现**。它认 UA + TLS 指纹，tf 不伪装所以用不了。不再是未知，隐藏候选时会说明原因 |
+| 用户的配置文件盖掉 tf 的注入 | **已兑现**。`settings.json` 的 `env` 会赢。启动前检查并警告 |
+| harness 迭代导致注入 flag 失效 | 未发生。记录已验证版本，不做版本嗅探分支。tf 目前无法察觉这类失效 —— 这是结构性缺口 |
+| 分组配置改动导致探测结果过期 | 不设 TTL，走失败路径重探。启动失败后 `tf keys --refresh` 会自愈 |
+| harness 隐式模型槽撞分组限制 | 适配表穷举每个 harness 的全部槽。opencode 的 `small_model` 已暴露过这类问题 |
+| npm 平台包体积与发布复杂度 | 未开始 |

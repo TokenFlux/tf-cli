@@ -94,15 +94,24 @@ model=gpt-5.4-nano  small=true  agent=title
 
 ---
 
-## 待验证
+## 曾经的待验证项，现在的结论
 
-需要先安装对应 harness：
+- **`claude_code_only` 在 tf 路径下能否通过**（当时的最高风险项）：
+  **不能**。实测真实模型 + 真实请求体走 `/v1/messages` 仍然 403
+  `this group only allows Claude Code clients`。它认的是 UA 加 TLS 指纹，
+  不是协议，也不是请求内容。tf 不伪装 UA，所以这类分组在 tf 下用不了。
 
-- **claude**（最高风险项）：`claude_code_only` 分组（Claude Max，倍率 20）
-  在 tf 的 exec 路径下能否正常通过 UA + TLS 指纹识别；
-  以及 `HTTPS_PROXY` 存在时是否破坏识别。
-- **codex**：`-c` 覆盖 + `env_key` 是否足以完全避免落盘；
-  `wire_api` 只剩 `responses` 后与 `openai_responses` 准入的对应关系。
+  这条路走不通，但风险已经兑现、不再是未知。tf 的应对是隐藏这些候选
+  并说明原因 —— 能藏就必须能解释。
+
+- **codex 的 `-c` 覆盖是否足以避免落盘**：**足够**。用 mtime 验证过
+  `~/.codex/config.toml` 在启动前后未被修改。
+
+- **三个 harness 的端到端**：全部通过。claude 2.1.251、codex 0.151.0、
+  opencode 1.18.20，真实对话、退出码 0。
+
+仍未验证：`HTTPS_PROXY` 存在时对指纹识别的影响（`tf status` 会提示存在代理，
+但影响未测）；`ENABLE_TOOL_SEARCH` 在 Anthropic 分组是否生效。
 
 ## opencode 的必备条件
 
@@ -150,3 +159,38 @@ Kiro **不是** `claude_code_only`：`/v1/messages` 与 `/v1/chat/completions`
 model ...`。状态码是新形状，但文案里仍有 `requested model`，
 分类器按文案判定为「协议准入、模型不存在」，结论正确。
 这也说明判据放在文案上比放在状态码上更稳。
+
+## settings.json 会赢过注入的环境变量
+
+实测于 2026-08-31。
+
+在一个空目录里写 `.claude/settings.json`：
+
+```json
+{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:9"}}
+```
+
+然后 `tf claude -m=ccmax/claude-sonnet-5 -- -p hi`：
+
+```
+tf → claude   模型 ccmax/claude-sonnet-5
+API Error: Connection refused (ConnectionRefused)
+```
+
+连的是 `127.0.0.1:9`，不是网关。**Claude Code 把 settings.json 的 `env`
+应用在了继承来的进程环境之上。**
+
+后果不是失败，是误报：横幅写着模型名，请求发去了别处。失败至少还会停下来。
+
+用户级 `~/.claude/settings.json` 与项目级 `.claude/settings.json` 都会被读到，
+后者跟着仓库走，最容易被忘掉。
+
+CC-Switch 这类工具正是往这里写东西的 —— 所以「tf 与配置管理器共存」这句话
+是有条件的：对方只要写 `env`，就不是共存而是覆盖。
+
+tf 的应对：启动前检查，只报与本次注入真正相撞的键（靠 `Plan.Managed`
+拿到自己设了哪些变量），警告排在启动横幅之前。不改用户的文件。
+
+**codex 与 opencode 有没有同类机制尚未验证。** codex 走 `-c` 命令行覆盖、
+opencode 走 `OPENCODE_CONFIG_CONTENT` 环境变量，两者都可能有配置文件
+优先级问题。没验过的不猜，所以检查目前只对 claude 生效。
