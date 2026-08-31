@@ -168,29 +168,38 @@ func fetchUsage(cfg *config.Config, creds *config.Credentials) map[string]*gatew
 }
 
 // printUsage 只讲会影响下一次请求的两件事：还剩多少、今天用了多少。
+//
+// 用标签加数据的排法，不要把数值塞进句子。单位是网关给的字符串
+// （实测是「推理积分」），塞进英文句子会得到 "0/10 推理积分 left" ——
+// 服务端的原文没有语言可言，只能当数据摆着，不能当词用。
 func printUsage(c *Context, u *gateway.Usage) {
 	if u == nil {
 		return
 	}
-	unit := u.Quota.Unit
-	if unit == "" {
-		unit = c.UI.T("额度", "credits")
+
+	w := ui.Width(c.UI.T("额度", "quota"))
+	if t := ui.Width(c.UI.T("今天", "today")); t > w {
+		w = t
 	}
 
-	line := fmt.Sprintf(c.UI.T("  剩余 %s/%s %s", "  %s/%s %s left"),
-		trimNum(u.Quota.Remaining), trimNum(u.Quota.Limit), unit)
+	quota := fmt.Sprintf("%s/%s", trimNum(u.Quota.Remaining), trimNum(u.Quota.Limit))
+	if u.Quota.Unit != "" {
+		quota += " " + u.Quota.Unit
+	}
+	line := "  " + c.UI.Dim(ui.Pad(c.UI.T("额度", "quota"), w)) + "  " + quota
 	if u.Exhausted() {
 		// 额度用完时 harness 只报一个 429。这句话是那个 429 的翻译。
-		line += "  " + c.UI.T("已用完，请求会被拒", "exhausted; requests will be rejected")
-		c.UI.Printf("%s\n", line)
+		line += "  " + c.UI.T("已用完，请求会被拒", "exhausted, requests will fail")
 	} else {
-		c.UI.Printf("%s\n", c.UI.Dim(line))
+		line = c.UI.Dim(line)
 	}
+	c.UI.Printf("%s\n", line)
 
 	if t := u.Usage.Today; t.Requests > 0 {
-		c.UI.Printf("%s\n", c.UI.Dim(fmt.Sprintf(
-			c.UI.T("  今天 %d 次请求，%d tokens", "  today %d requests, %d tokens"),
-			t.Requests, t.TotalTokens)))
+		c.UI.Printf("%s\n", c.UI.Dim(fmt.Sprintf("  %s  %s",
+			ui.Pad(c.UI.T("今天", "today"), w),
+			fmt.Sprintf(c.UI.T("%d 次请求，%d tokens", "%d requests, %d tokens"),
+				t.Requests, t.TotalTokens))))
 	}
 }
 

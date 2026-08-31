@@ -416,3 +416,27 @@ func TestCompletionNamesMatchRegistry(t *testing.T) {
 		t.Errorf("commandNames() = %v\nwant %v", got, want)
 	}
 }
+
+// 服务端给的单位不能当词用，只能当数据摆着。
+//
+// 「推理积分」是网关返回的字符串，塞进英文句子会得到
+// "0/10 推理积分 left"。改成标签加数据的排法之后，两种语言都读得通。
+func TestUsageUnitIsNotInlinedIntoSentence(t *testing.T) {
+	src, err := os.ReadFile("cmd_status.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	start := strings.Index(body, "func printUsage(")
+	if start < 0 {
+		t.Fatal("printUsage not found")
+	}
+	fn := body[start : start+strings.Index(body[start:], "\n}\n")]
+
+	// 单位只该拼在数值后面，不该出现在带 left / 剩余 的格式串里。
+	for _, bad := range []string{"%s left", "剩余 %s"} {
+		if strings.Contains(fn, bad) {
+			t.Errorf("printUsage must not build a sentence around the server unit: %q", bad)
+		}
+	}
+}

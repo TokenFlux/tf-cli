@@ -137,8 +137,8 @@ $ tf status
 ~/.tf
 
 default  sk-d7d…a4fe  13 个模型
-  剩余 0/10 推理积分  已用完，请求会被拒
-  今天 8 次请求，170933 tokens
+  额度  0/10 推理积分  已用完，请求会被拒
+  今天  8 次请求，170933 tokens
 
   claude    default  claude-sonnet-5
   codex     default  gpt-5.6-terra
