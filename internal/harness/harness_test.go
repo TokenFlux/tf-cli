@@ -286,3 +286,34 @@ func TestOpencodeOpenAIRecipe(t *testing.T) {
 		t.Errorf("gateway model ids must be declared: %s", cfg)
 	}
 }
+
+// Plan 必须报出自己设了哪些环境变量。
+//
+// 启动前的冲突检查靠它判断「相撞」—— 拿不到这份名单就只能按前缀猜，
+// 猜宽了会对着不相干的键报警，猜窄了会漏掉真冲突。
+func TestPlanReportsManagedEnv(t *testing.T) {
+	for _, h := range All {
+		in := Input{Host: "https://x", Key: "k", Protocol: h.Protocols[0],
+			Slots: map[string]string{"default": "m", "small": "s", "review": "r"}}
+		p, err := h.BuildPlan(in)
+		if err != nil {
+			t.Fatalf("%s: %v", h.Name, err)
+		}
+		if len(p.Managed) == 0 {
+			t.Errorf("%s reported no managed env vars", h.Name)
+		}
+		// 名单里的每一个都必须真的出现在 Env 里。
+		for _, k := range p.Managed {
+			found := false
+			for _, kv := range p.Env {
+				if strings.HasPrefix(kv, k+"=") {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("%s claims to manage %s but it is not in Env", h.Name, k)
+			}
+		}
+	}
+}

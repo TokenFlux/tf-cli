@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -29,6 +30,13 @@ type Plan struct {
 	Args []string
 	Env  []string // 完整环境，已在父进程环境基础上增删
 	Note string   // 启动横幅里的补充说明
+
+	// Managed 是 tf 显式设定的环境变量名。
+	//
+	// 供启动前的冲突检查用：harness 自己的配置文件里若也设了同名变量，
+	// 谁赢要看 harness 怎么实现 —— 实测 Claude Code 的 settings.json
+	// 会赢过进程环境。要判断相撞，先得知道自己设了哪些。
+	Managed []string
 }
 
 // AnthropicBase 返回 Anthropic 协议的 base：根路径，不带 /v1。
@@ -63,6 +71,16 @@ func (h *Harness) BuildPlan(in Input) (*Plan, error) {
 //
 // 值为空字符串表示「显式置空」而非「删除」，用于压制 harness 对
 // 其它凭据来源的探测；真正要删除的用 drop。
+// keysOf 取出映射的键并排序，让输出稳定。
+func keysOf(set map[string]string) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func buildEnv(set map[string]string, drop []string) []string {
 	dropped := map[string]bool{}
 	for _, k := range drop {
@@ -131,7 +149,7 @@ func planClaude(in Input) (*Plan, error) {
 		"CLAUDE_CODE_OAUTH_TOKEN",
 	}
 
-	return &Plan{Bin: "claude", Args: in.Args, Env: buildEnv(set, drop)}, nil
+	return &Plan{Bin: "claude", Args: in.Args, Env: buildEnv(set, drop), Managed: keysOf(set)}, nil
 }
 
 // planCodex 全部用 -c 覆盖，不落盘。
@@ -161,7 +179,7 @@ func planCodex(in Input) (*Plan, error) {
 	args = append(args, in.Args...)
 
 	set := map[string]string{keyEnv: in.Key}
-	return &Plan{Bin: "codex", Args: args, Env: buildEnv(set, nil)}, nil
+	return &Plan{Bin: "codex", Args: args, Env: buildEnv(set, nil), Managed: keysOf(set)}, nil
 }
 
 // planOpencode 用 OPENCODE_CONFIG_CONTENT 覆盖内置 openai provider。
@@ -221,5 +239,5 @@ func planOpencode(in Input) (*Plan, error) {
 	}
 
 	set := map[string]string{"OPENCODE_CONFIG_CONTENT": string(blob)}
-	return &Plan{Bin: "opencode", Args: args, Env: buildEnv(set, nil)}, nil
+	return &Plan{Bin: "opencode", Args: args, Env: buildEnv(set, nil), Managed: keysOf(set)}, nil
 }

@@ -440,3 +440,44 @@ func TestUsageUnitIsNotInlinedIntoSentence(t *testing.T) {
 		}
 	}
 }
+
+// 启动前必须指出会盖掉本次注入的东西，而且只指出真正相撞的。
+//
+// 实测过：~/.claude/settings.json 的 env.ANTHROPIC_BASE_URL 会赢过
+// tf 注入的进程环境。那种情况下横幅写着「模型 claude-sonnet-5」而请求
+// 发去了别处 —— 误报比失败更坏，失败至少还会停下来。
+func TestWarnOverridesOnlyFlagsRealCollisions(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(body string) string {
+		p := filepath.Join(dir, ".claude", "settings.json")
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	managed := map[string]bool{"ANTHROPIC_BASE_URL": true, "ANTHROPIC_MODEL": true}
+	collide := func(path string) []string {
+		var hit []string
+		for _, k := range settingsEnvKeys(path) {
+			if managed[k] {
+				hit = append(hit, k)
+			}
+		}
+		return hit
+	}
+
+	if got := collide(write(`{"env":{"ANTHROPIC_BASE_URL":"http://x"}}`)); len(got) != 1 {
+		t.Errorf("a managed key must be flagged, got %v", got)
+	}
+	// 不相干的键不能报：harness 的配置文件里有别的 env 是它自己的事。
+	if got := collide(write(`{"env":{"EDITOR":"vim","FOO":"1"}}`)); len(got) != 0 {
+		t.Errorf("unrelated keys must stay quiet, got %v", got)
+	}
+	if got := collide(write(`{"theme":"dark"}`)); len(got) != 0 {
+		t.Errorf("no env section must stay quiet, got %v", got)
+	}
+}

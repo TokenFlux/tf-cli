@@ -152,6 +152,7 @@ default  sk-d7d…a4fe  13 个模型
 
 它还会指出会让注入落空的东西：`~/.claude/settings.json` 里的 `env` 段优先级高于
 tf 注入的环境变量，写在那里的 `ANTHROPIC_BASE_URL` 会让 tf 指定的网关不生效。
+启动 `tf claude` 时也会检查，撞上了会在横幅之前警告。
 
 ## 配置
 

@@ -96,6 +96,9 @@ func runLaunch(c *Context, h *harness.Harness) error {
 		return ui.Errf(ui.CodeUsage, err.Error())
 	}
 
+	// 横幅之前先说冲突：横幅之后用户的注意力就交给 harness 了。
+	warnOverrides(c, h, plan.Managed)
+
 	// 启动横幅：用户必须知道自己正在用什么，但只占一行。
 	//
 	// 有多把 Key 时必须写出用的是哪把：用错 Key 的表现是
@@ -346,6 +349,46 @@ func commonPrefix(a, b string) int {
 		n++
 	}
 	return n
+}
+
+// warnOverrides 在启动前指出会盖掉本次注入的东西。
+//
+// 这是 tf 唯一会说谎的场合：横幅写着「模型 claude-sonnet-5」，
+// 而请求其实发去了别处 —— 误报比失败更坏，失败至少还会停下来。
+//
+// 实测过：把 ~/.claude/settings.json 的 env.ANTHROPIC_BASE_URL 设成
+// http://127.0.0.1:9，tf claude 连的是那个死地址而不是网关。
+// settings.json 赢过进程环境。CC-Switch 这类工具正是往那里写东西的。
+//
+// 只报真正相撞的键。harness 的配置文件里有别的 env 是它自己的事，
+// 与本次注入无关的一律不提。
+func warnOverrides(c *Context, h *harness.Harness, managed []string) {
+	if h.Name != "claude" {
+		// 只有 Claude Code 的 settings.json 经过实测。
+		// codex 与 opencode 有没有同类机制还没验，没验过的不猜。
+		return
+	}
+
+	mine := make(map[string]bool, len(managed))
+	for _, k := range managed {
+		mine[k] = true
+	}
+
+	for _, path := range claudeSettingsFiles() {
+		var hit []string
+		for _, k := range settingsEnvKeys(path) {
+			if mine[k] {
+				hit = append(hit, k)
+			}
+		}
+		if len(hit) == 0 {
+			continue
+		}
+		sort.Strings(hit)
+		c.UI.Warnf(c.UI.T("%s 里的 %s 会盖掉本次注入，网关地址与模型可能不生效",
+			"%s sets %s, which overrides this launch; the gateway and models may not take effect"),
+			tildify(path), strings.Join(hit, " "))
+	}
 }
 
 // slotsComplete 报告必填槽是否都已填。
