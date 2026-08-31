@@ -1,0 +1,133 @@
+{
+ "billing": {
+  "available": true,
+  "mode": "auto",
+  "plan_id": 2,
+  "plan_name": "Lite",
+  "remaining": 62.612395,
+  "source": "subscription",
+  "unit": "推理积分"
+ },
+ "daily_usage": [
+  {
+   "date": "2026-08-30",
+   "requests": 11,
+   "input_tokens": 110717,
+   "output_tokens": 176,
+   "cache_read_tokens": 25856,
+   "cache_write_tokens": 76932,
+   "total_tokens": 213681,
+   "cost": 0.6393175,
+   "actual_cost": 6.038038
+  },
+  {
+   "date": "2026-08-31",
+   "requests": 8,
+   "input_tokens": 41804,
+   "output_tokens": 112,
+   "cache_read_tokens": 51726,
+   "cache_write_tokens": 77291,
+   "total_tokens": 170933,
+   "cost": 0.3175145,
+   "actual_cost": 4.839161
+  }
+ ],
+ "isValid": true,
+ "mode": "quota_limited",
+ "model_stats": [
+  {
+   "model": "claude-sonnet-5",
+   "requests": 6,
+   "input_tokens": 2352,
+   "output_tokens": 44,
+   "cache_creation_tokens": 154223,
+   "cache_read_tokens": 0,
+   "total_tokens": 156619,
+   "cost": 0.3907015,
+   "actual_cost": 8.595433,
+   "account_cost": 0.3907015
+  },
+  {
+   "model": "gpt-5.4",
+   "requests": 5,
+   "input_tokens": 68492,
+   "output_tokens": 108,
+   "cache_creation_tokens": 0,
+   "cache_read_tokens": 39694,
+   "total_tokens": 108294,
+   "cost": 0.1827735,
+   "actual_cost": 0.731094,
+   "account_cost": 0.1827735
+  },
+  {
+   "model": "gpt-5.6-sol",
+   "requests": 5,
+   "input_tokens": 68799,
+   "output_tokens": 30,
+   "cache_creation_tokens": 0,
+   "cache_read_tokens": 16128,
+   "total_tokens": 84957,
+   "cost": 0.352959,
+   "actual_cost": 1.411836,
+   "account_cost": 0.352959
+  },
+  {
+   "model": "gpt-5.6-terra",
+   "requests": 2,
+   "input_tokens": 11980,
+   "output_tokens": 94,
+   "cache_creation_tokens": 0,
+   "cache_read_tokens": 21760,
+   "total_tokens": 33834,
+   "cost": 0.02944,
+   "actual_cost": 0.11776,
+   "account_cost": 0.02944
+  },
+  {
+   "model": "claude-haiku-4-5-20251001",
+   "requests": 1,
+   "input_tokens": 898,
+   "output_tokens": 12,
+   "cache_creation_tokens": 0,
+   "cache_read_tokens": 0,
+   "total_tokens": 910,
+   "cost": 0.000958,
+   "actual_cost": 0.021076,
+   "account_cost": 0.000958
+  }
+ ],
+ "quota": {
+  "limit": 10,
+  "remaining": 0,
+  "unit": "推理积分",
+  "used": 10.877199
+ },
+ "remaining": 0,
+ "status": "quota_exhausted",
+ "unit": "推理积分",
+ "usage": {
+  "average_duration_ms": 3925.8947368421054,
+  "rpm": 0,
+  "today": {
+   "actual_cost": 4.839161,
+   "cache_creation_tokens": 77291,
+   "cache_read_tokens": 51726,
+   "cost": 0.3175145,
+   "input_tokens": 41804,
+   "output_tokens": 112,
+   "requests": 8,
+   "total_tokens": 170933
+  },
+  "total": {
+   "actual_cost": 10.877199,
+   "cache_creation_tokens": 154223,
+   "cache_read_tokens": 77582,
+   "cost": 0.956832,
+   "input_tokens": 152521,
+   "output_tokens": 288,
+   "requests": 19,
+   "total_tokens": 384614
+  },
+  "tpm": 0
+ }
+}

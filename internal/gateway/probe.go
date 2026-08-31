@@ -155,20 +155,42 @@ func (c *Client) probeOne(ctx context.Context, path, prefix string) verdict {
 	}
 	defer resp.Body.Close()
 
-	body := readBodySnippet(resp)
+	return verdictOf(resp.StatusCode, readBodySnippet(resp))
+}
+
+// verdictOf 由 (状态码, 文案) 断出准入结论。
+//
+// 拆成纯函数是为了能用实测应答做固件测试：这段判断是整个项目里最微妙的
+// 一处，而它此前只有活体探针测过 —— 要联网、要额度，额度用尽时还会
+// 连测试本身一起失败。
+//
+// 判据以文案为主、状态码为辅：同一件事实测出现过 403 / 404 / 503 三种码。
+//
+// 分不清时一律 verdictUnknown，绝不猜「通过」。猜通过的代价是用户在
+// harness 里撞一堵没有解释的墙；猜不通的代价只是少一个候选，
+// 而调用方对未知的处理是「保留上一次的结论」，不会误删已知信息。
+func verdictOf(status int, body string) verdict {
 	switch {
-	case resp.StatusCode == http.StatusUnauthorized:
+	case status == http.StatusUnauthorized:
 		return verdictUnknown // Key 的问题，与协议无关
 	case isClaudeCodeOnly(body):
 		return verdictClaudeCodeOnly
-	case isModelMiss(body), resp.StatusCode == http.StatusNotFound:
+	case isModelMiss(body), status == http.StatusNotFound:
 		return verdictAllowed
-	case resp.StatusCode == http.StatusForbidden:
+	case status == http.StatusForbidden:
 		return verdictDenied
-	case resp.StatusCode >= 500:
-		return verdictUnknown
+
+	// 400 是零成本探测的正例：探针只发 {"model":"X"}，没有 messages，
+	// 能走到参数校验就说明协议与分组都放行了。
+	case status == http.StatusBadRequest:
+		return verdictAllowed
 	}
-	return verdictAllowed
+
+	// 其余一律未知。429 是必须落在这里的那个：额度检查发生在准入检查
+	// 之前，配额用尽时每个入口都返回 429 API_KEY_QUOTA_EXHAUSTED。
+	// 这里原本兜底返回「通过」，于是额度一空，所有分组的所有协议都被
+	// 记成可用 —— 包括 claude_code_only 的分组。
+	return verdictUnknown
 }
 
 // isClaudeCodeOnly 识别「本分组只接受 Claude Code 客户端」。
