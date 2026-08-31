@@ -83,7 +83,12 @@ sha256sum -c SHA256SUMS --ignore-missing
 ```
 ARTIFACTS
 
-# 贡献者按提交作者列出。写清楚哪些提交出自 AI —— 仓库里绝大多数提交
+# 贡献者按提交作者列出。
+#
+# 与 GitHub 自动生成的那段互补而不重复：GitHub 那段只认合并的 PR，
+# 列不出直推 main 的提交；这里按 git 作者列，两种来源都覆盖到。
+# 代价是这里只有姓名没有 @ 账号 —— git 作者名与 GitHub 账号不是一回事，
+# 猜映射会张冠李戴。写清楚哪些提交出自 AI —— 仓库里绝大多数提交
 # 由 AI 代理写成，把它们记在一个人名下会误导读者。
 printf '\n## 贡献者\n\n'
 if [ -n "$PREV" ] && git rev-parse -q --verify "$PREV" >/dev/null 2>&1; then
@@ -98,8 +103,10 @@ git log --format='%an|%ae' "$RANGE" | sort -u | while IFS='|' read -r name email
   esac
 done
 
-if [ -n "$PREV" ]; then
-  printf '\n**完整变更**: https://github.com/%s/compare/%s...%s\n' "$REPO" "$PREV" "$TAG"
-else
-  printf '\n**完整变更**: https://github.com/%s/commits/%s\n' "$REPO" "$TAG"
-fi
+# 末尾留一个空行：GitHub 把自动生成的那段直接接在后面，
+# 不留的话「What's Changed」会贴着贡献者名单的最后一行。
+printf '\n'
+
+# 完整变更那行不自己打：发布时会同时传 --generate-notes，
+# GitHub 把「What'"'"'s Changed」和完整变更链接追加在这段后面。
+# 两边都打就会出现两行一模一样的链接。

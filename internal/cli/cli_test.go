@@ -606,33 +606,43 @@ func TestInstallURLMatchesReadme(t *testing.T) {
 	}
 }
 
-// 发布流水线必须取全历史与全部 tag。
+// 发布说明由手写与自动生成两段拼成，且必须能算出上一个 tag。
 //
-// actions/checkout 默认只拉一个提交、不拉 tag。发布说明要按
-// 上一个tag..本tag 列贡献者 —— 浅克隆下这个区间算不出来，v0.5.0
-// 就因此把自己当成了首个版本，贡献者只剩最后一次提交的作者。
-func TestReleaseWorkflowFetchesFullHistory(t *testing.T) {
+// 单靠自动生成不行：GitHub 按合并的 PR 组织，而这个仓库全是直推 main，
+// v0.1.0 到 v0.4.0 四个版本的说明都只得到一行链接。
+// 单靠手写也不行：@ 账号是真链接，手写那边给不出。
+//
+// 还必须 fetch-depth: 0 —— actions/checkout 默认只拉一个提交、不拉 tag，
+// v0.5.0 就因此把自己当成首个版本，贡献者只剩最后一次提交的作者。
+func TestReleaseWorkflowNotes(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(body)
-	if !strings.Contains(text, "release-notes.sh") {
-		t.Fatal("发布流水线没有用变更记录生成说明")
-	}
+
 	if !strings.Contains(text, "fetch-depth: 0") {
 		t.Error("发布说明依赖 tag 与历史，checkout 必须 fetch-depth: 0")
 	}
-	// 自动生成的说明在这个仓库里只会得到一行链接，不能退回去用。
-	//
-	// 只看非注释行：解释「为什么不用它」的那句注释里本来就有这个词，
+
+	// 只看非注释行：解释这些选项的注释里本来就有它们的名字，
 	// 整份文本做子串匹配会被自己的说明撞上。
+	var hand, gen bool
 	for _, line := range strings.Split(text, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
-		if strings.Contains(line, "--generate-notes") {
-			t.Error("不该再用 --generate-notes：这个仓库全是直推，它没东西可写")
+		if strings.Contains(line, "release-notes.sh") || strings.Contains(line, "--notes-file") {
+			hand = true
 		}
+		if strings.Contains(line, "--generate-notes") {
+			gen = true
+		}
+	}
+	if !hand {
+		t.Error("缺少手写那段：说明该从 CHANGELOG.md 取")
+	}
+	if !gen {
+		t.Error("缺少 --generate-notes：那一段带 @ 账号的真链接")
 	}
 }
