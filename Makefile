@@ -37,6 +37,14 @@ vet:
 check: fmt vet test
 	@echo "check ok"
 
+# pty 测试用真的伪终端驱动真的二进制。
+#
+# 不进 check：CI 里没有 tty，而这些测试要先 make build。
+# 它们抓的是单元测试抓不到的那一类 —— 按键、转义序列、进程边界。
+.PHONY: pty
+pty: build
+	go test -tags pty ./e2e/ -v
+
 install:
 	go install -ldflags "$(LDFLAGS)" ./cmd/tf
 
