@@ -72,15 +72,15 @@ func runLogin(c *Context) error {
 		var apiErr *gateway.APIError
 		if ok := asAPIError(err, &apiErr); ok && apiErr.InvalidKey() {
 			return ui.Errf(ui.CodeNotLoggedIn,
-				c.UI.T("这把 Key 不被网关接受", "the gateway rejected this key")).
+				c.UI.T("API Key 无效或未被网关接受", "the gateway rejected this key")).
 				WithHint(host + "/keys").WithCause(err)
 		}
 		// 连不上网关和 Key 被拒是两件事。都报 TF_NOT_LOGGED_IN 会把人
 		// 引向重新登录，而重新登录解决不了网络不通 —— 实测在一台需要
 		// 走代理的机器上，登录失败给出的正是这个误导性的码。
 		return ui.Errf(ui.CodeNetwork,
-			fmt.Sprintf(c.UI.T("连不上网关 %s", "cannot reach the gateway at %s"), host)).
-			WithHint(c.UI.T("检查网络，或用 --host 指定别的地址",
+			fmt.Sprintf(c.UI.T("无法连接网关 %s", "cannot reach the gateway at %s"), host)).
+			WithHint(c.UI.T("请检查网络连接，或使用 --host 指定其他网关地址",
 				"check your connection, or point --host elsewhere")).
 			WithCause(err)
 	}
@@ -351,20 +351,20 @@ func readKey(c *Context) (string, error) {
 	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		// 分平台说：Windows 上不是「现在不能交互」，是这条路还不存在。
 		// 说成前者会让人以为换个终端就好了。
-		msg := c.UI.T("非交互时用管道传 Key", "pipe the key in when non-interactive")
+		msg := c.UI.T("非交互模式请通过管道传入 Key", "pipe the key in when non-interactive")
 		if !ui.InteractiveSupported {
-			msg = c.UI.T("Windows 上还没有交互界面，请用管道传 Key",
-				"there is no interactive UI on Windows yet; pipe the key in")
+			msg = c.UI.T("Windows 暂未支持交互界面，请通过管道传入 Key",
+				"interactive UI is not supported on Windows yet; pipe the key in")
 		}
 		return "", ui.Errf(ui.CodeUsage, msg).WithHint("echo $KEY | tf login")
 	}
 
-	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（不回显）：", "Paste your API key (hidden):"))
+	key, err := c.UI.ReadSecret(c.UI.T("输入 API Key（不回显）：", "Paste your API key (hidden):"))
 	if err != nil {
 		// ui 层的哨兵错误只有英文，是底层措辞；本地化只在命令层做，
 		// 直接抛上去会让中文界面顶着一句英文。
 		return "", ui.Errf(ui.CodeUsage,
-			c.UI.T("隐藏输入需要终端", "hidden input needs a terminal")).
+			c.UI.T("隐藏输入需要终端支持", "hidden input needs a terminal")).
 			WithHint("echo $KEY | tf login")
 	}
 	return key, nil

@@ -95,7 +95,7 @@ func refreshModels(c *Context, cfg *config.Config, creds *config.Credentials, ke
 	// 这里最长会静默 8 秒，而用户刚敲完 tf claude，正等着 harness 起来。
 	// 终端一动不动时，人会以为是卡住了而不是在联网 —— reprobe 尚且打了
 	// 一行「重新检查各 Key…」，拉模型列表却什么都不说。
-	c.UI.Logf("%s", c.UI.Dim(c.UI.T("获取模型列表…", "fetching model list…")))
+	c.UI.Logf("%s", c.UI.Dim(c.UI.T("正在获取模型列表…", "fetching model list…")))
 
 	var (
 		wg      sync.WaitGroup
@@ -137,7 +137,7 @@ func refreshModels(c *Context, cfg *config.Config, creds *config.Credentials, ke
 	}
 	if len(stale) > 0 {
 		sort.Strings(stale)
-		c.UI.Warnf(c.UI.T("模型列表取不到，沿用上次的结果：%s",
+		c.UI.Warnf(c.UI.T("无法获取最新模型列表，沿用缓存数据：%s",
 			"could not refresh the model list, using the last known one: %s"), strings.Join(stale, " "))
 	}
 	return out
@@ -215,7 +215,7 @@ func bindKey(c *Context, cfg *config.Config, h *harness.Harness, name string) {
 // reprobe 重新探测所有 Key，报告是否有任何结果发生变化。
 func reprobe(c *Context, cfg *config.Config, creds *config.Credentials, names []string) bool {
 	before := fmt.Sprint(cfg.Keys)
-	c.UI.Logf("%s", c.UI.Dim(c.UI.T("重新检查各 Key…", "re-checking each key…")))
+	c.UI.Logf("%s", c.UI.Dim(c.UI.T("正在重新检查各 Key 可用性…", "re-checking each key…")))
 	for _, n := range names {
 		cred, ok := creds.Get(n)
 		if !ok {

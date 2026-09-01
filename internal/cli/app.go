@@ -215,7 +215,7 @@ func (a *App) printHelp(u *ui.UI) {
 	}
 	u.Printf("  %-22s %s\n", "--version, -v", u.T("显示版本", "Show version"))
 	u.Printf("\n%s\n", u.Dim(u.T(
-		"提示：harness 命令会把无法识别的参数原样透传；用 -- 强制透传。",
+		"提示：harness 命令会将未识别的参数透传给底层工具；可使用 -- 强制透传。",
 		"Tip: harness commands pass unrecognized args through; use -- to force it.",
 	)))
 }

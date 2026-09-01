@@ -39,10 +39,10 @@ func offerCompletions(c *Context, cfg *config.Config) {
 	}
 
 	idx, err := c.UI.Select(
-		fmt.Sprintf(c.UI.T("装 %s 的 Tab 补全？", "Install %s completions?"), shell),
+		fmt.Sprintf(c.UI.T("是否安装 %s 的自动补全？", "Install %s completions?"), shell),
 		[]ui.Item{
-			{Label: c.UI.T("装", "yes"), Detail: mustPath(shell)},
-			{Label: c.UI.T("不用", "no")},
+			{Label: c.UI.T("安装", "yes"), Detail: mustPath(shell)},
+			{Label: c.UI.T("跳过", "no")},
 		})
 
 	// 只有“这件事已经有结果”才记下来。
@@ -106,7 +106,7 @@ func newCompletionsCommand() *Command {
 			// 提示走 stderr，eval "$(tf completions zsh)" 照常工作。
 			if c.UI.Interactive(false) {
 				c.UI.Logf("%s", c.UI.Dim(
-					c.UI.T("这是给 eval 用的脚本。直接安装加 --install",
+					c.UI.T("该脚本用于 eval 加载。如需直接写入配置请添加 --install 参数",
 						"this script is meant for eval. add --install to install it")))
 			}
 			c.UI.Printf("%s", script)

@@ -189,7 +189,7 @@ func printUsage(c *Context, u *gateway.Usage) {
 	line := "  " + c.UI.Dim(ui.Pad(c.UI.T("额度", "quota"), w)) + "  " + quota
 	if u.Exhausted() {
 		// 额度用完时 harness 只报一个 429。这句话是那个 429 的翻译。
-		line += "  " + c.UI.T("已用完，请求会被拒", "exhausted, requests will fail")
+		line += "  " + c.UI.T("额度已耗尽，请求将被拒绝", "exhausted, requests will fail")
 	} else {
 		line = c.UI.Dim(line)
 	}
@@ -197,7 +197,7 @@ func printUsage(c *Context, u *gateway.Usage) {
 
 	if t := u.Usage.Today; t.Requests > 0 {
 		c.UI.Printf("%s\n", c.UI.Dim(fmt.Sprintf("  %s  %s",
-			ui.Pad(c.UI.T("今天", "today"), w),
+			ui.Pad(c.UI.T("今日", "today"), w),
 			fmt.Sprintf(c.UI.T("%d 次请求，%d tokens", "%d requests, %d tokens"),
 				t.Requests, t.TotalTokens))))
 	}
@@ -224,7 +224,7 @@ func checkEnvironment(c *Context, paths config.Paths) []string {
 		for _, k := range settingsEnvKeys(p) {
 			if strings.HasPrefix(k, "ANTHROPIC_") {
 				out = append(out, fmt.Sprintf(c.UI.T(
-					"%s 设了 env.%s，它会盖掉 tf 注入的值",
+					"%s 已配置 env.%s，将覆盖 tf 注入的环境变量",
 					"%s sets env.%s, which overrides what tf injects"), tildify(p), k))
 			}
 		}
@@ -237,7 +237,7 @@ func checkEnvironment(c *Context, paths config.Paths) []string {
 	} {
 		if _, err := os.Stat(f.path); err == nil {
 			out = append(out, fmt.Sprintf(c.UI.T(
-				"%s 自己也存着凭据；直接跑 %s（不经 tf）用的是那一份",
+				"%s 本地已存在凭据；直接运行 %s（不经由 tf）将使用该凭据",
 				"%s has its own stored credentials; running %s directly uses those"),
 				tildify(f.path), f.note))
 		}
@@ -247,7 +247,7 @@ func checkEnvironment(c *Context, paths config.Paths) []string {
 	for _, v := range []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY"} {
 		if p := os.Getenv(v); p != "" {
 			out = append(out, fmt.Sprintf(c.UI.T(
-				"%s=%s，Key 与请求都会经过它", "%s=%s; keys and requests go through it"), v, p))
+				"%s=%s，网络请求与凭据将经由该代理传输", "%s=%s; keys and requests go through it"), v, p))
 			break
 		}
 	}

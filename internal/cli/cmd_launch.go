@@ -224,7 +224,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	// 留着旧槽会让新旧两把 Key 的模型混在一起。
 	if m := slots[config.SlotDefault]; m != "" {
 		if _, ok := ownerOf(cands, m); !ok {
-			c.UI.Warnf(c.UI.T("存着的模型 %s 现在没有 Key 能提供，请重新选一个",
+			c.UI.Warnf(c.UI.T("已配置的主模型 %s 在当前 Key 下不可用，请重新选择",
 				"the saved model %s is no longer offered by any key; pick another"), m)
 			slots = config.ModelSlots{}
 		}
@@ -386,7 +386,7 @@ func warnOverrides(c *Context, h *harness.Harness, managed []string) {
 			continue
 		}
 		sort.Strings(hit)
-		c.UI.Warnf(c.UI.T("%s 里的 %s 会盖掉本次注入，网关地址与模型可能不生效",
+		c.UI.Warnf(c.UI.T("%s 中的 %s 将覆盖本次注入，网关地址与模型可能无法生效",
 			"%s sets %s, which overrides this launch; the gateway and models may not take effect"),
 			tildify(path), strings.Join(hit, " "))
 	}
@@ -433,10 +433,10 @@ func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []str
 			}
 		}
 
-		title := fmt.Sprintf(c.UI.T("%s.%s 用哪个模型？（%s）", "Which model for %s.%s? (%s)"),
+		title := fmt.Sprintf(c.UI.T("配置 %s 的 %s 模型槽（用途：%s）：", "Which model for %s.%s? (%s)"),
 			h.Name, s.Name, s.Purpose(c.UI.Lang == ui.LangZH))
 		pick, err := c.UI.SelectWith(title, items, ui.SelectOpt{
-			CancelHint: c.UI.T("用推荐值补齐", "take the suggestions"),
+			CancelHint: c.UI.T("使用默认推荐值", "take the suggestions"),
 		})
 		if err != nil {
 			// esc 只该退掉这一屏，不该炸掉上游已完成的工作。

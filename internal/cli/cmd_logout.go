@@ -40,7 +40,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 
 	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return "", ui.Errf(ui.CodeUsage,
-			c.UI.T("存了多把 Key，指定删哪一把", "several keys are stored; name the one to remove")).
+			c.UI.T("已存储多个 Key，请指定要删除的 Key 名称", "several keys are stored; name the one to remove")).
 			WithHint("tf logout " + strings.Join(stored, " | "))
 	}
 
@@ -49,7 +49,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 		cred, _ := creds.Get(name)
 		items = append(items, ui.Item{Label: name, Detail: config.Mask(cred.Key)})
 	}
-	idx, err := c.UI.Select(c.UI.T("删除哪一把 Key？", "Which key should be removed?"), items)
+	idx, err := c.UI.Select(c.UI.T("选择要删除的 Key：", "Which key should be removed?"), items)
 	if err != nil {
 		return "", err
 	}
@@ -67,22 +67,22 @@ func confirm(c *Context, names []string) error {
 	if c.Flags.Bool("force") {
 		return nil
 	}
-	summary := fmt.Sprintf(c.UI.T("删除 %d 把 Key：%s", "remove %d keys: %s"),
+	summary := fmt.Sprintf(c.UI.T("确认删除 %d 个 Key：%s", "remove %d keys: %s"),
 		len(names), strings.Join(names, " "))
 	if len(names) == 1 {
-		summary = fmt.Sprintf(c.UI.T("删除 Key %q", "remove key %q"), names[0])
+		summary = fmt.Sprintf(c.UI.T("确认删除 Key %q", "remove key %q"), names[0])
 	}
 	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 		return ui.Errf(ui.CodeUsage,
-			c.UI.T("不能提问，不会静默删除", "cannot ask for confirmation, refusing to remove silently")).
+			c.UI.T("非交互环境下拒绝静默删除，请添加 --force 确认", "cannot ask for confirmation, refusing to remove silently")).
 			WithHint(strings.TrimSpace("tf logout " + strings.Join(names, " ") + " --force"))
 	}
 
 	// 光标停在第一项，回车等于不删。
 	idx, err := c.UI.Select(summary, []ui.Item{
 		{Label: c.UI.T("取消", "cancel")},
-		{Label: c.UI.T("删除", "remove"),
-			Detail: c.UI.T("删了只能回网页重新拿", "you will have to fetch it from the web again")},
+		{Label: c.UI.T("确认删除", "remove"),
+			Detail: c.UI.T("删除后需重新从控制台获取", "you will have to fetch it from the web again")},
 	})
 	if err != nil {
 		return err
@@ -103,7 +103,7 @@ func runLogout(c *Context) error {
 	stored := creds.Names()
 	if len(stored) == 0 {
 		return ui.Errf(ui.CodeNotLoggedIn,
-			c.UI.T("本机没有保存任何 Key", "no keys are stored on this machine")).
+			c.UI.T("本地未保存任何 Key", "no keys are stored on this machine")).
 			WithHint("tf login")
 	}
 
@@ -123,8 +123,8 @@ func runLogout(c *Context) error {
 		cred, ok := creds.Get(name)
 		if !ok {
 			return ui.Errf(ui.CodeNotLoggedIn,
-				fmt.Sprintf(c.UI.T("%q 下没有 Key", "%q has no stored key"), name)).
-				WithHint(c.UI.T("已保存的：", "stored: ") + strings.Join(stored, " "))
+				fmt.Sprintf(c.UI.T("%q 下未找到有效 Key", "%q has no stored key"), name)).
+				WithHint(c.UI.T("已保存列表：", "stored: ") + strings.Join(stored, " "))
 		}
 		c.UI.Logf("%s", c.UI.Dim(fmt.Sprintf("%s  %s", name, config.Mask(cred.Key))))
 		if err := confirm(c, []string{name}); err != nil {
@@ -135,7 +135,7 @@ func runLogout(c *Context) error {
 	}
 
 	if err := creds.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据文件无法写入", "cannot write the credentials file")).WithCause(err)
+		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据文件写入失败", "cannot write the credentials file")).WithCause(err)
 	}
 
 	// 模型列表是由这把 Key 推导出来的，退出登录时一并清掉，
@@ -158,11 +158,11 @@ func runLogout(c *Context) error {
 
 	c.UI.Emit("logout", map[string]any{"removed": removed}, func() {
 		c.UI.Printf("✓ %s\n", fmt.Sprintf(
-			c.UI.T("已删除本机的 Key：%s", "removed local keys: %s"),
+			c.UI.T("已删除本地 Key：%s", "removed local keys: %s"),
 			strings.Join(removed, ", ")))
 		// 必须说清楚：删本地文件不等于吊销 Key。
 		c.UI.Printf("  %s\n", c.UI.Dim(c.UI.T(
-			"服务端的 Key 仍然有效，吊销请到：",
+			"服务端 Key 仍然有效，吊销请前往：",
 			"the key still works server-side; revoke it at:")))
 		c.UI.Printf("  %s\n", c.UI.Dim(host+"/keys"))
 	})
