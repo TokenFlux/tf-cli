@@ -1,6 +1,6 @@
 # tf 实施计划
 
-M0–M7 已经走完，见 [`STATUS.md`](STATUS.md)。这份文档现在只管往后。
+M0–M6 已完成，M7 分发仍缺 npm 平台包，见 [`STATUS.md`](STATUS.md)。这份文档现在只管往后。
 设计依据在 `design/` 与 `research/`。
 
 ---
@@ -13,7 +13,7 @@ M0–M7 已经走完，见 [`STATUS.md`](STATUS.md)。这份文档现在只管�
 | 语言 / 分发 | Go 单二进制；GitHub Actions 交叉编译 + install.sh；npm 平台包待做 |
 | 进程模型 | fork + wait（信号转发自己写，换取确定性清理与终端收尾）|
 | 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA |
-| 认证 | v0 `--with-key`；v0.5 网页「导入 tf」+ localhost 回环 + 带 Origin 的预览确认 |
+| 认证 | 当前粘贴或管道传入 Key；过渡版计划做网页「导入 tf」+ localhost 回环 + Origin 预览确认 |
 | 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；`--` 无条件透传 |
 | 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；不用钥匙串 |
 | 文案 | 跟随 locale + `TF_LANG`；错误码保持英文常量 |
@@ -32,8 +32,10 @@ M0–M7 已经走完，见 [`STATUS.md`](STATUS.md)。这份文档现在只管�
 cmd/tf/main.go
 e2e/                pty 端到端测试（build tag pty，make pty）
 internal/
+  access/     Key / 分组 / harness 的准入判断（纯函数）
   buildinfo/  版本与 User-Agent（-X 注入）
-  cli/        命令定义、参数解析、候选收集、补全、状态检查
+  cli/        命令定义、参数解析、候选收集、状态检查
+  completions/ shell 补全脚本与落盘位置
   config/     配置、凭据、XDG、文件权限
   gateway/    HTTP 客户端、协议探测、用量
   harness/    适配表 + 三个 harness 的注入配方 + 安装
@@ -65,9 +67,9 @@ internal/
 6. ~~拆出 Key 与协议准入、shell 补全逻辑~~ 已完成（`internal/access`、`internal/completions`）；继续拆分仍与命令 I/O 耦合的部分。
 7. ~~完善 `CHANGELOG.md`~~ 已完成；`README.en.md` 待补。
 
-### v0.5：网页导入
+### 过渡版：网页导入
 
-网页「导入 tf」支持：localhost 回环 + Origin 预览确认。仅调整前端交互，无需后端改造。
+这里的“过渡版”是阶段名，不对应 SemVer 的 `v0.5.0`。方案为 localhost 回环 + Origin 预览确认，需要 CLI 与网页前端配合，但不改 TokenRouter 后端。
 
 ### 待定：Windows 交互支持
 

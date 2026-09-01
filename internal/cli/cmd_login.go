@@ -325,7 +325,7 @@ func noteComingSoon(c *Context) {
 		return
 	}
 	c.UI.Logf("%s", c.UI.Dim(c.UI.T(
-		"从网页导入将在 v0.5 支持", "importing from the web lands in v0.5")))
+		"网页导入计划在后续过渡版提供", "web import is planned for a later transitional release")))
 }
 
 // isTerminal 报告文件是否是终端。

@@ -606,14 +606,10 @@ func TestInstallURLMatchesReadme(t *testing.T) {
 	}
 }
 
-// 发布说明由手写与自动生成两段拼成，且必须能算出上一个 tag。
+// 发布说明由手写与自动生成两段拼成，所有 job 必须构建同一个 tag。
 //
-// 单靠自动生成不行：GitHub 按合并的 PR 组织，而这个仓库全是直推 main，
-// v0.1.0 到 v0.4.0 四个版本的说明都只得到一行链接。
-// 单靠手写也不行：@ 账号是真链接，手写那边给不出。
-//
-// 还必须 fetch-depth: 0 —— actions/checkout 默认只拉一个提交、不拉 tag，
-// v0.5.0 就因此把自己当成首个版本，贡献者只剩最后一次提交的作者。
+// workflow_dispatch 的 github.ref 是用户选择的分支，不是输入框里的 tag；
+// checkout 若不显式指定输入 tag，就会把 main HEAD 装进旧 tag 的产物里。
 func TestReleaseWorkflowNotes(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
@@ -621,8 +617,18 @@ func TestReleaseWorkflowNotes(t *testing.T) {
 	}
 	text := string(body)
 
-	if !strings.Contains(text, "fetch-depth: 0") {
-		t.Error("发布说明依赖 tag 与历史，checkout 必须 fetch-depth: 0")
+	const checkoutRef = "ref: ${{ inputs.tag || github.ref }}"
+	if got := strings.Count(text, checkoutRef); got != 3 {
+		t.Errorf("check/build/release 都必须检出输入 tag：找到 %d 处，期望 3", got)
+	}
+	if !strings.Contains(text, "buildinfo.Commit=${{ steps.v.outputs.commit }}") {
+		t.Error("构建提交必须来自实际 checkout，不能用 workflow_dispatch 的 GITHUB_SHA")
+	}
+	if !strings.Contains(text, "  build:\n    needs: check\n") {
+		t.Error("构建矩阵必须等发版前检查通过")
+	}
+	if got := strings.Count(text, "bash scripts/release-notes.sh"); got != 2 {
+		t.Errorf("变更记录应在前置检查和发布时各生成一次：找到 %d 处，期望 2", got)
 	}
 
 	// 只看非注释行：解释这些选项的注释里本来就有它们的名字，
@@ -643,6 +649,6 @@ func TestReleaseWorkflowNotes(t *testing.T) {
 		t.Error("缺少手写那段：说明该从 CHANGELOG.md 取")
 	}
 	if !gen {
-		t.Error("缺少 --generate-notes：那一段带 @ 账号的真链接")
+		t.Error("缺少 --generate-notes：GitHub 应追加 PR 列表与完整变更链接")
 	}
 }

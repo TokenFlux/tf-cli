@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 # 从 CHANGELOG.md 取出某个版本那一节，拼成发布说明。
 #
-# 为什么不用 gh --generate-notes：它是按合并的 PR 生成的，而这个仓库
-# 全是直推 main，生成出来只有一行「Full Changelog」。v0.1.0 到 v0.4.0
-# 四个版本的发布说明都是那一行，等于没有。
-#
-# 变更记录是手写的，因为「这次改动对用户意味着什么」这句话，
-# 从提交标题里自动提取不出来。
+# 工作流会在这段手写说明后追加 GitHub 自动生成的比较链接与 PR 列表。
+# 手写部分负责回答「这次改动对用户意味着什么」—— 这句话无法从提交
+# 标题里可靠提取。
 set -euo pipefail
 
-TAG="${1:?用法: release-notes.sh <tag> [changelog] [repo]}"
+TAG="${1:?用法: release-notes.sh <tag> [changelog]}"
 FILE="${2:-CHANGELOG.md}"
-REPO="${3:-TokenFlux/tkr}"
 VER="${TAG#v}"
 
 # 取 "## [x.y.z]" 到下一个 "## " 之间的内容。
@@ -34,11 +30,6 @@ if [ -z "$BODY" ]; then
   echo "CHANGELOG.md 里没有 $VER 这一节" >&2
   exit 1
 fi
-
-# 上一个 tag。注意 grep -A1 在列表末尾只会回显自身 —— 那说明这是
-# 首个版本，范围要取整个历史而不是 TAG..TAG（空区间）。
-PREV=$(git tag --sort=-v:refname | grep -A1 -x "$TAG" | tail -1 || true)
-[ "$PREV" = "$TAG" ] && PREV=""
 
 # 标题头：发布页上方那行 v0.5.0 是 GitHub 画的，正文里再点一次名，
 # 从别处引用这段内容时才知道说的是哪个版本。
@@ -93,19 +84,5 @@ SHA=$(git rev-parse --short "$TAG^{commit}" 2>/dev/null || echo "?")
 GOV=$(awk '/^go /{print $2}' go.mod 2>/dev/null || echo "?")
 printf '\n引用版本：提交 `%s` / Go `%s`\n' "$SHA" "$GOV"
 
-# 贡献者不在这里写。
-#
-# GitHub 会在正文下面渲染一块带头像的 Contributors，但它的数据源是
-# mentions_count，而那个数只从「What's Changed」里的 PR 作者算出来。
-# 这个仓库全是直推 main，PR 数为 0 —— 所以那块本来就不会出现，
-# 调格式补不出来，只能靠改协作方式（走 PR 合入）。
-#
-# 手写一份也不行：git 作者名不是 GitHub 账号，给不出头像和链接，
-# 还会把 dev@tkr 这种早期的合成提交身份列成一个不存在的用户。
-#
-# 末尾留一个空行：自动生成的那段直接接在后面。
+# 末尾留一个空行，避免 GitHub 自动生成的部分贴住上一行。
 printf '\n'
-
-# 完整变更那行不自己打：发布时会同时传 --generate-notes，
-# GitHub 把「What'"'"'s Changed」和完整变更链接追加在这段后面。
-# 两边都打就会出现两行一模一样的链接。

@@ -14,7 +14,39 @@ permissions:
   contents: write
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      # 手动触发时 github.ref 是用户选择的分支，不是输入框里的 tag。
+      # 所有 job 都必须显式检出同一个 tag，避免旧 tag 装进 main HEAD 的二进制。
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: 发版前检查
+        run: |
+          set -eu
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "以下文件未格式化："
+            echo "$out"
+            exit 1
+          fi
+          go vet ./...
+          go test ./...
+          if [ -s go.sum ]; then
+            echo "go.sum 非空，引入了第三方依赖"
+            exit 1
+          fi
+          bash scripts/release-notes.sh "$TAG" > /dev/null
+
   build:
+    needs: check
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -28,24 +60,21 @@ jobs:
           - { goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      # 发布必须先过自检。
-      #
-      # 之前 release 与 ci 是两条独立流水线：一个编译不过的提交打上 tag
-      # 就直接发了产物出去，而 ci 那边正红着。产物本身能跑 —— 坏的是测试，
-      # 不是代码 —— 但这条路同样能放过真正坏掉的代码。
-      - name: 自检
-        run: go vet ./... && go test ./...
 
       - name: 确定版本号
         id: v
         run: |
           tag="${{ inputs.tag || github.ref_name }}"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+            echo "commit=$(git rev-parse --short HEAD)"
+          } >> "$GITHUB_OUTPUT"
 
       # 交叉编译不需要 cgo，也不需要第三方 action —— 项目本身零依赖。
       - name: 编译
@@ -61,7 +90,7 @@ jobs:
           go build -trimpath \
             -ldflags "-s -w \
               -X github.com/tokenflux/tkr/internal/buildinfo.Version=${{ steps.v.outputs.version }} \
-              -X github.com/tokenflux/tkr/internal/buildinfo.Commit=${GITHUB_SHA::7}" \
+              -X github.com/tokenflux/tkr/internal/buildinfo.Commit=${{ steps.v.outputs.commit }}" \
             -o "dist/$name" ./cmd/tf
 
       # 归档名要与 internal/update 里的推导规则严格一致，否则自更新会找不到文件。
@@ -92,12 +121,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # 必须取全历史与全部 tag：发布说明要按 上一个tag..本tag 列贡献者，
-      # 而 checkout 默认只拉一个提交、不拉 tag —— v0.5.0 就因此把自己
-      # 当成了首个版本，贡献者只剩最后一次提交的作者。
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           path: staging
@@ -119,15 +145,11 @@ jobs:
           set -eu
           # 说明由两段拼成：
           #
-          #   --notes-file     手写部分（变更记录 + 下载指引 + 校验 + 贡献者）
-          #   --generate-notes GitHub 追加「What'"'"'s Changed」与完整变更链接
+          #   --notes-file     手写部分（变更记录 + 下载指引 + 校验）
+          #   --generate-notes GitHub 追加「What's Changed」与完整变更链接
           #
-          # 单靠自动生成不行：它按合并的 PR 组织，而这个仓库全是直推 main，
-          # v0.1.0 到 v0.4.0 四个版本的说明都只得到一行链接。
-          # 单靠手写也不行：@ 账号是真链接，手写这边给不出。
-          #
-          # 手写那段取不到就失败，不退回纯自动：忘了写变更记录应当拦住发布。
-          # 实测过 gh 同时收下两者时是追加而不是覆盖。
+          # 自动部分按合并的 PR 组织，直推 main 时通常只有比较链接；
+          # 手写部分负责解释用户能看到的变化。两段缺一不可。
           bash scripts/release-notes.sh "$TAG" > /tmp/notes.md
           gh release create "$TAG" staging/* \
             --title "$TAG" \

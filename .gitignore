@@ -1,6 +1,7 @@
 bin/
 dist/
 *.test
+.DS_Store
 .playwright-mcp/
 
 # 绝不提交任何凭据

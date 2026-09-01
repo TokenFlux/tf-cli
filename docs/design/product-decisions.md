@@ -61,7 +61,7 @@ TKR_PROFILE=work tf claude                → 环境变量覆盖
 
 ### 建议
 
-方向定 Profile，但 **v0 只实现 `default` 单 profile + `--host` 覆盖**，完整 profile 机制放 v0.5。避免在还没有真实多实例用户时过早复杂化。
+方向定 Profile，但 **v0 只实现 `default` 单 profile + `--host` 覆盖**，完整 profile 机制放过渡版（当时记作 v0.5）。避免在还没有真实多实例用户时过早复杂化。
 
 ---
 

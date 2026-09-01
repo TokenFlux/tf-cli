@@ -1,6 +1,6 @@
 # tf 现状
 
-更新于 2026-08-31，对应 v0.4.0 之后的 main。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 v0.5.1 之后的 main。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
@@ -18,7 +18,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。
 
-约 7100 行代码，2800 行测试，113 个测试，四个已发布版本，零第三方依赖。
+约 7500 行生产代码、3400 行测试，132 个测试，六个已发布版本，零第三方依赖。
 
 ## 二、里程碑
 
@@ -31,7 +31,7 @@
 | M4 模型 | 完成 | ID 解析、族折叠、方向键选择器、按 harness 分开的模型槽 |
 | M5 预检 | 完成 | 零 token 协议探测、按分组前缀的准入记录、隐藏原因说明 |
 | M6 harness | 完成 | claude 2.1.251、codex 0.151.0、opencode 1.18.20 均真实对话通过 |
-| M7 分发 | 大部完成 | GitHub Actions + install.sh + `tf update`，五平台产物。npm 包未做 |
+| M7 分发 | 大部完成 | GitHub Actions + install.sh + `tf update`，五组平台/架构产物。npm 包未做 |
 
 **M1 目录（`tf models` / `tf groups`）已放弃。** 原计划走公开的
 `/api/v1/marketplace/models` 做未登录查询，`internal/catalog` 模块已移除。
@@ -52,7 +52,8 @@
   JSON 模式保留警告、`logout --all` 确认
 - **v0.4.0** 十二条界面缺陷修复，含两处破坏性变更（移除 `-y`、
   `tf model` 需 `--edit` 才进编辑器）
-- **未发布**：`tf status`、启动前的注入冲突检查、pty 端到端测试
+- **v0.5.0** 新增 `tf status`、额度显示和启动前冲突检查；补上 PTY、网关固件与 Linux 实机测试
+- **v0.5.1** 重写 README，统一中文 CLI 文案，规范发布说明
 
 ## 四、实测得到的事实
 
