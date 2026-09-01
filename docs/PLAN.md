@@ -52,37 +52,26 @@ internal/
 
 排序依据是风险，不是工作量。逐条的展开见仓库根目录的 `todo-*.md`。
 
-### 近期：把已知的坑填上
+### 近期：完善测试与验证
 
 1. ~~启动时检查 settings.json 冲突~~ 已完成
 2. ~~pty 端到端测试~~ 已完成（`e2e/`，`make pty`）
-3. 用实测应答给 `gateway` 做固件测试。它只有 3% 覆盖，却承担最微妙的
-   判断（从错误文案反推分组准入），现在只有活体探针测过 —— 要联网、
-   要额度，今天还因为配额用尽失败过
-4. ~~在 Linux 上验证终端那四条防线~~ 已完成（`scripts/linux-check.sh`）。
-   抓到一个真问题：util-linux 的 `script` 不加 `-e` 恒返回 0，
-   所有退出码断言在 Linux 上原本悄悄失效
+3. ~~补充 `gateway` 基于实测应答的固件测试~~ 已完成，覆盖率从 3% 提升至 38.3%。
+4. ~~在 Linux 上验证终端防线~~ 已完成（`scripts/linux-check.sh`）。
 
-### 中期：分发与可读性
+### 中期：分发与代码结构
 
-5. npm 平台包（optionalDependencies + JS shim，无 postinstall 下载），
-   目标是 `pnpx tf` 开箱可用
-6. 拆 `internal/cli`。3771 行占一半代码，候选收集与 Key 选择是纯逻辑，
-   也最该被测，先把它们拆出去
-7. `CHANGELOG.md` 与 `README.en.md`
+5. npm 平台包（optionalDependencies + JS shim，无 postinstall 下载），目标是 `pnpx tf` 开箱可用。
+6. ~~拆出 Key 与协议准入、shell 补全逻辑~~ 已完成（`internal/access`、`internal/completions`）；继续拆分仍与命令 I/O 耦合的部分。
+7. ~~完善 `CHANGELOG.md`~~ 已完成；`README.en.md` 待补。
 
 ### v0.5：网页导入
 
-网页「导入 tf」按钮 + localhost 回环 + Origin 预览确认。只动前端，
-零后端改动。`cmd_login.go` 里已经留了分流点。
+网页「导入 tf」支持：localhost 回环 + Origin 预览确认。仅调整前端交互，无需后端改造。
 
-不用 `tf://` scheme：curl / npx 装的二进制注册不了，且 Key 会经 argv 泄露。
+### 待定：Windows 交互支持
 
-### 待定：Windows 交互
-
-交互栈整个建在 `/dev/tty` 与 `stty` 上，Windows 要走 `CONIN$` 与
-`SetConsoleMode` 重写。**没有 Windows 机器验证之前不动手** ——
-交付没测过的交互实现比诚实的报错更糟。
+Windows 交互需基于 `CONIN$` 与 `SetConsoleMode` 重写。待具备实际测试环境后再行支持。
 
 ---
 
@@ -93,13 +82,13 @@ internal/
 
 ---
 
-## 风险
+## 风险与应对
 
-| 风险 | 状态 |
-|---|---|
-| `claude_code_only` 识别在 tf 路径下失效 | **已兑现**。它认 UA + TLS 指纹，tf 不伪装所以用不了。不再是未知，隐藏候选时会说明原因 |
-| 用户的配置文件盖掉 tf 的注入 | **已兑现**。`settings.json` 的 `env` 会赢。启动前检查并警告 |
-| harness 迭代导致注入 flag 失效 | 未发生。记录已验证版本，不做版本嗅探分支。tf 目前无法察觉这类失效 —— 这是结构性缺口 |
-| 分组配置改动导致探测结果过期 | 不设 TTL，走失败路径重探。启动失败后 `tf keys --refresh` 会自愈 |
-| harness 隐式模型槽撞分组限制 | 适配表穷举每个 harness 的全部槽。opencode 的 `small_model` 已暴露过这类问题 |
-| npm 平台包体积与发布复杂度 | 未开始 |
+| 风险 | 状态 | 说明 |
+|---|---|---|
+| `claude_code_only` 识别在 tf 路径下失效 | **已处理** | 服务端基于客户端指纹校验，tf 保持真实客户端行为，不可用时在候选列表中明确提示原因 |
+| 用户配置文件覆盖 tf 注入参数 | **已处理** | `settings.json` 的 `env` 优先级更高，启动前执行检查并告警 |
+| harness 迭代导致注入 flag 失效 | 持续跟进 | 记录已验证版本，保持架构轻量与直接透传 |
+| 分组配置改动导致探测结果过期 | **已处理** | 启动失败后触发重探，支持 `tf keys --refresh` 刷新缓存 |
+| harness 隐式模型槽位引发异常 | **已处理** | 适配表穷举各 harness 槽位并做补齐约束 |
+| npm 平台包体积与发布复杂度 | 待规划 | 方案待设计验证 |

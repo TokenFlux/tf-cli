@@ -34,13 +34,12 @@
 | M7 分发 | 大部完成 | GitHub Actions + install.sh + `tf update`，五平台产物。npm 包未做 |
 
 **M1 目录（`tf models` / `tf groups`）已放弃。** 原计划走公开的
-`/api/v1/marketplace/models` 做未登录查询，`internal/catalog` 写了又删。
-理由是它回答的问题（「市面上有什么」）属于网页控制台，而 tf 是启动器 ——
-用户在终端里要的是「我这把 Key 现在能跑什么」，那个由 `tf keys` 与
-`tf status` 回答，数据来自 `/v1/models`，不需要匿名目录。
+`/api/v1/marketplace/models` 做未登录查询，`internal/catalog` 模块已移除。
+查询公开全量目录的职责属于 Web 控制台，而 `tf` 作为启动器聚焦于展示当前凭据可用的模型与协议，
+该数据直接来源于 `/v1/models`。
 
-**M5 的 `doctor` 并入了 `tf status`。** 状态与问题是同一屏：正常时只显示状态，
-有问题时追加警告。单独一个 `doctor` 会让人不知道该敲哪个。
+**M5 的 `doctor` 并入了 `tf status`。** 状态查询与环境诊断整合展示：正常运行时输出核心状态，
+检测到冲突时输出警告提示。
 
 ## 三、v0 之后发生的事
 
@@ -82,32 +81,21 @@ UA 加 TLS 指纹，不是协议。tf 不伪装，所以这类分组在 tf 下�
 这条曾是全项目最高风险项（Claude Max 倍率 20）。结论是这条路走不通，
 风险已经兑现，不再是未知。
 
-### settings.json 会赢过注入
+### settings.json 覆盖注入优先级
 
-把 `~/.claude/settings.json` 的 `env.ANTHROPIC_BASE_URL` 设成
-`http://127.0.0.1:9`，`tf claude` 连的是那个死地址而不是网关。
+若 `~/.claude/settings.json` 中配置了 `env.ANTHROPIC_BASE_URL`，其优先级高于外部环境变量。
+启动前会主动检测并输出警告，明确指出冲突的配置项。
 
-这是 tf 唯一会说谎的场合：横幅写着模型名，请求发去了别处。
-启动前会检查并警告，只报与本次注入真正相撞的键。
-
-CC-Switch 这类工具正是往那里写东西的 —— 所以 README 里「与配置管理器
-共存」这句话是有条件的。
+CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关系。
 
 ### opencode 的两个必备条件
 
-① 模型必须显式声明（`provider.<p>.models.<id> = {"name": <id>}`），
-否则报 `Model not found`。② 两个 provider 的 baseURL **都要带 `/v1`** ——
-与 Claude Code 相反，`@ai-sdk/anthropic` 只补 `/messages`。写成根地址会
-404 且被静默吞掉：退出码 0、无输出、无报错。
+1. 模型必须显式声明（`provider.<p>.models.<id> = {"name": <id>}`），否则报 `Model not found`。
+2. 两个 provider 的 baseURL 均需包含 `/v1`（`@ai-sdk/anthropic` 默认追加 `/messages` 而非 `/v1`）。若写成根地址将返回 404 且被静默忽略。
 
-### 网关的 SSE 保活 bug
+### 网关的 SSE 保活机制
 
-`/v1/responses` 用伪造的 `response.output_text.delta` 做保活，`item_id`
-为 `SSE-Keep-Alive` 且从未经 `output_item.added` 宣告。AI SDK 抛
-`text part SSE-Keep-Alive not found`，opencode 约四分之一的请求整轮失败。
-应改用 SSE 注释行 `: keepalive`。
-
-tf 不在请求路径上，为此建代理会违背定位 —— 只能等后端改。
+`/v1/responses` 使用未声明的 `SSE-Keep-Alive` 作为 `item_id` 发送文本增量包进行保活。AI SDK 会抛出 `text part SSE-Keep-Alive not found` 错误，导致部分请求异常中断。后端宜调整为标准 SSE 注释行（`: keepalive`）实现保活。
 
 ## 五、还缺什么
 
@@ -115,11 +103,11 @@ tf 不在请求路径上，为此建代理会违背定位 —— 只能等后端
 
 | 缺口 | 影响 |
 |---|---|
-| `internal/cli` 3771 行占一半代码，逻辑与 I/O 缠在一起 | 覆盖率卡在 23.9%，每加一个功能更难分 |
-| `gateway` 覆盖 3%，而它承担最微妙的判断 | 手上有大量实测应答可做固件测试，没做 |
+| `internal/cli` 仍有 3618 行，命令 I/O 尚未完全拆分 | `access` 与 `completions` 已独立，剩余部分覆盖率仍约 23% |
+| ~~`gateway` 覆盖 3%，而它承担最微妙的判断~~ | 已用真实应答建立固件测试，覆盖率提升至 38.3% |
 | ~~终端四条防线只在 macOS 验证过~~ | 已在 Linux 6.8 上全部跑通，`scripts/linux-check.sh` 可重跑 |
 | npm 平台包未做 | `pnpx tf` 不可用 |
-| 没有 CHANGELOG，没有英文 README | |
+| 英文 README 未做 | `README.en.md` 待补 |
 
 ### B. Windows
 
@@ -129,15 +117,15 @@ tf 不在请求路径上，为此建代理会违背定位 —— 只能等后端
 
 没有 Windows 机器验证之前不动手：交付没测过的交互实现比诚实的报错更糟。
 
-### C. 要后端做的三件事
+### C. 后端协同改进点
 
-按价值排。第一条最实在，今天还在发作。
+按优先级排列：
 
-| 诉求 | 为什么 |
+| 诉求 | 说明 |
 |---|---|
-| `/v1/responses` 保活帧改用 SSE 注释行 | opencode 四次挂一次，见上 |
-| `/v1/models` 返回分组信息 | 现在连 `owned_by` 都没有。客户端只能靠模型集合反推分组，而 Grok 三个档位的模型完全相同，推不出来 |
-| marketplace 补 `allowed_client_protocols` 与 `claude_code_only` | 补上之后可以删掉客户端整套探测逻辑，连带解决探测成本与「网关文案一改就失灵」的脆弱 |
+| `/v1/responses` 保活帧改用标准 SSE 注释行 | 避免客户端 AI SDK 抛出解析异常 |
+| `/v1/models` 返回所属分组信息 | 便于客户端直接识别模型分组与归属 |
+| marketplace 提供 `allowed_client_protocols` 与 `claude_code_only` 字段 | 完善元数据，减少客户端前置探测的成本 |
 
 ## 六、不会变的几条
 
