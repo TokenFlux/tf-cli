@@ -52,7 +52,7 @@ printf '%s\n' "$BODY"
 # 从终端跑照样成功（Go 会给 macOS 二进制打临时签名，spctl 虽然判
 # rejected，但那条路是 Finder 双击，命令行工具没人那样用）。
 # 复现不出来的问题不写进说明，而且教人反射性敲 xattr -d 是坏习惯。
-cat <<'ARTIFACTS'
+sed "s/<版本>/$VER/g" <<'ARTIFACTS'
 
 ## 下载
 

@@ -27,6 +27,19 @@
 
 ---
 
+## [0.5.1] — 2026-08-31
+
+### 改进
+
+- 重写 README：安装、快速上手、模型槽、多 Key、状态诊断和注入机制现在按
+  实际使用顺序组织，并明确 Linux、macOS 与 Windows 的支持边界。
+- 统一登录、退出、补全、模型选择、状态检查及环境冲突提示的中文措辞；
+  英文文案、命令参数和运行行为不变。
+- 发布页现在同时包含手写变更记录和 GitHub 自动生成的完整变更链接，
+  并列出各平台产物、校验方法、构建提交与 Go 版本。
+
+---
+
 ## [0.5.0] — 2026-08-31
 
 ### 新增
@@ -134,7 +147,8 @@
 - 方向键选择器，支持输入过滤。
 - 中英双语，跟随系统 locale，`TF_LANG` 可覆盖。
 
-[未发布]: https://github.com/TokenFlux/tkr/compare/v0.5.0...HEAD
+[未发布]: https://github.com/TokenFlux/tkr/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/TokenFlux/tkr/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/TokenFlux/tkr/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TokenFlux/tkr/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/TokenFlux/tkr/compare/v0.2.0...v0.3.0
