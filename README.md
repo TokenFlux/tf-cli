@@ -66,6 +66,15 @@ $ tf login
 tf login work --host https://router.example.com
 ```
 
+如果接入该协议的 TokenFlux 网页已经提供“导入到 tf”按钮，也可以先启动本地导入等待，再从 Keys 页面发送 Key：
+
+```sh
+tf login work --from-web
+# 私有网关：tf login work --from-web --host https://router.example.com
+```
+
+CLI 会在 `127.0.0.1:43110-43119` 中绑定一个端口。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会校验并写入 `credentials.json`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
+
 ### 2. 启动客户端
 
 直接指定目标 harness 启动。首次运行若未配置模型，将启动交互式选择器；配置后将自动持久化偏好：

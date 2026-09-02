@@ -3,12 +3,18 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeGateway 只提供 /v1/models。
@@ -173,5 +179,105 @@ func TestControlKeysStillNavigate(t *testing.T) {
 	p.waitFor("FAKE-claude")
 	if code := p.waitExit(); code != 0 {
 		t.Errorf("退出码 = %d，want 0", code)
+	}
+}
+
+// 网页导入必须走完整的真实边界：HTTP 回环通道 → 终端确认 → 网关校验
+// → 0600 凭据写盘。只测 handler 会漏掉控制终端和主登录流程之间的接线。
+func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
+	models := []string{"gpt-5.4", "gpt-5.5"}
+	srv := fakeGateway(t, models)
+	f := writeConfig(t, srv.URL, models)
+	env := append(f.env(), "SHELL=/bin/sh") // 不在登录成功后追问 shell 补全
+
+	p := start(t, env, "login", "web", "--from-web", "--host", srv.URL)
+	p.waitFor("等待网页导入")
+	match := regexp.MustCompile(`http://127\.0\.0\.1:4311[0-9]`).FindString(p.screen())
+	if match == "" {
+		t.Fatalf("没有从输出找到导入地址\n--- 屏幕 ---\n%s", p.tail())
+	}
+
+	payload := []byte(fmt.Sprintf(`{
+		"version": 1,
+		"key": "sk-web-import-test",
+		"host": %q,
+		"key_name": "browser-key",
+		"group_id": 7,
+		"group_name": "GPT"
+	}`, srv.URL))
+	type result struct {
+		status int
+		body   string
+		err    error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		req, err := http.NewRequest(http.MethodPost, match+"/import", bytes.NewReader(payload))
+		if err != nil {
+			resultCh <- result{err: err}
+			return
+		}
+		req.Header.Set("Origin", srv.URL)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+		if err != nil {
+			resultCh <- result{err: err}
+			return
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		resultCh <- result{status: resp.StatusCode, body: string(body), err: err}
+	}()
+
+	p.waitFor("收到网页导入请求")
+	p.waitFor("写入")
+	p.send(keyEnter)
+
+	select {
+	case got := <-resultCh:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		if got.status != http.StatusAccepted || !strings.Contains(got.body, `"accepted"`) {
+			t.Errorf("浏览器响应 = %d %s", got.status, got.body)
+		}
+	case <-time.After(12 * time.Second):
+		t.Fatal("浏览器没有收到导入响应")
+	}
+
+	p.waitFor(`已保存为 Key "web"`)
+	if code := p.waitExit(); code != 0 {
+		t.Fatalf("退出码 = %d，want 0\n--- 屏幕 ---\n%s", code, p.tail())
+	}
+
+	path := filepath.Join(f.dir, "cfg", "tf", "credentials.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored struct {
+		Items map[string]struct {
+			Key       string `json:"key"`
+			Source    string `json:"source"`
+			Origin    string `json:"origin"`
+			KeyName   string `json:"key_name"`
+			GroupID   int64  `json:"group_id"`
+			GroupName string `json:"group_name"`
+		} `json:"credentials"`
+	}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		t.Fatal(err)
+	}
+	got := stored.Items["web"]
+	if got.Key != "sk-web-import-test" || got.Source != "import" || got.Origin != srv.URL ||
+		got.KeyName != "browser-key" || got.GroupID != 7 || got.GroupName != "GPT" {
+		t.Errorf("落盘元数据不完整：%+v", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("凭据权限 = %v; want 0600", info.Mode().Perm())
 	}
 }

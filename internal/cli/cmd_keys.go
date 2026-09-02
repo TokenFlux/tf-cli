@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/tokenflux/tkr/internal/access"
@@ -45,18 +46,27 @@ func runKeys(c *Context) error {
 		Harnesses []string `json:"harnesses"`
 	}
 	type row struct {
-		Name   string  `json:"name"`
-		Host   string  `json:"host"`
-		Key    string  `json:"key"`
-		Scopes []scope `json:"scopes"`
-		Probed bool    `json:"probed"`
+		Name      string  `json:"name"`
+		Host      string  `json:"host"`
+		Key       string  `json:"key"`
+		Source    string  `json:"source,omitempty"`
+		Origin    string  `json:"origin,omitempty"`
+		KeyName   string  `json:"key_name,omitempty"`
+		GroupID   int64   `json:"group_id,omitempty"`
+		GroupName string  `json:"group_name,omitempty"`
+		Scopes    []scope `json:"scopes"`
+		Probed    bool    `json:"probed"`
 	}
 
 	rows := make([]row, 0, len(names))
 	for _, name := range names {
 		cred, _ := creds.Get(name)
 		meta := cfg.Keys[name]
-		r := row{Name: name, Host: cfg.HostOf(name), Key: config.Mask(cred.Key), Probed: meta.Probed()}
+		r := row{
+			Name: name, Host: cfg.HostOf(name), Key: config.Mask(cred.Key), Probed: meta.Probed(),
+			Source: cred.Source, Origin: cred.Origin, KeyName: cred.KeyName,
+			GroupID: cred.GroupID, GroupName: cred.GroupName,
+		}
 
 		// 复合 Key 一把横跨多个分组，各分组能跑的 harness 不同。
 		// 笼统地说这把 Key「能跑 claude codex」是谎报。
@@ -75,6 +85,29 @@ func runKeys(c *Context) error {
 	c.UI.Emit("keys", rows, func() {
 		for _, r := range rows {
 			c.UI.Printf("%s  %s\n", c.UI.Bold(r.Name), c.UI.Dim(r.Key))
+			if r.Source == config.SourceImport {
+				var parts []string
+				if r.Origin != "" {
+					parts = append(parts, r.Origin)
+				}
+				group := r.GroupName
+				if r.GroupID != 0 {
+					if group != "" {
+						group += " "
+					}
+					group += fmt.Sprintf("#%d", r.GroupID)
+				}
+				if group != "" {
+					parts = append(parts, group)
+				}
+				if r.KeyName != "" {
+					parts = append(parts, fmt.Sprintf("%q", r.KeyName))
+				}
+				if len(parts) == 0 {
+					parts = append(parts, c.UI.T("网页", "web"))
+				}
+				c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("导入自", "imported"), 10), strings.Join(parts, " · "))
+			}
 			for _, sc := range r.Scopes {
 				label := sc.Prefix
 				if label == "" {

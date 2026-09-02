@@ -477,3 +477,53 @@ func TestModelOrderIsNotResorted(t *testing.T) {
 		t.Error("fetchModels must not reorder what the gateway returned")
 	}
 }
+
+func TestKeysShowsWebImportProvenance(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	paths, err := config.DefaultPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := cfg.KeyMetaOf("web")
+	meta.Host = "https://tokenflux.dev"
+	meta.Protocols = map[string][]string{config.GroupScope: {"openai_responses"}}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	creds, _, err := config.LoadCredentials(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds.Set("web", &config.Credential{
+		Key: "sk-web-import", Source: config.SourceImport,
+		Origin: "https://tokenflux.dev", KeyName: "browser-key",
+		GroupID: 7, GroupName: "GPT",
+	})
+	if err := creds.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, jsonMode := range []bool{false, true} {
+		var out, errOut bytes.Buffer
+		ctx := &Context{
+			UI:    &ui.UI{Out: &out, Err: &errOut, Lang: ui.LangEN, JSON: jsonMode},
+			Flags: newValues(),
+		}
+		if err := runKeys(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"https://tokenflux.dev", "browser-key", "GPT"} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("json=%v: output missing %q:\n%s", jsonMode, want, out.String())
+			}
+		}
+		if jsonMode && !strings.Contains(out.String(), `"source": "import"`) {
+			t.Errorf("JSON output missing import source:\n%s", out.String())
+		}
+	}
+}

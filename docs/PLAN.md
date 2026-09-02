@@ -13,7 +13,7 @@ M0–M6 已完成，M7 分发仍缺 npm 平台包，见 [`STATUS.md`](STATUS.md)
 | 语言 / 分发 | Go 单二进制；GitHub Actions 交叉编译 + install.sh；npm 平台包待做 |
 | 进程模型 | fork + wait（信号转发自己写，换取确定性清理与终端收尾）|
 | 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA |
-| 认证 | 当前粘贴或管道传入 Key；过渡版计划做网页「导入 tf」+ localhost 回环 + Origin 预览确认 |
+| 认证 | 支持粘贴/管道传入 Key；网页「导入 tf」已落地为 localhost 回环 + Origin 预览确认，接入契约见 [`integrations/web-import.md`](integrations/web-import.md) |
 | 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；`--` 无条件透传 |
 | 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；不用钥匙串 |
 | 文案 | 跟随 locale + `TF_LANG`；错误码保持英文常量 |
@@ -67,9 +67,11 @@ internal/
 6. ~~拆出 Key 与协议准入、shell 补全逻辑~~ 已完成（`internal/access`、`internal/completions`）；继续拆分仍与命令 I/O 耦合的部分。
 7. ~~完善 `CHANGELOG.md`~~ 已完成；`README.en.md` 待补。
 
-### 过渡版：网页导入
+### 过渡版：网页导入（已落地）
 
-这里的“过渡版”是阶段名，不对应 SemVer 的 `v0.5.0`。方案为 localhost 回环 + Origin 预览确认，需要 CLI 与网页前端配合，但不改 TokenRouter 后端。
+这里的“过渡版”是阶段名，不对应 SemVer 的 `v0.5.0`。CLI 侧已实现 localhost 回环 + Origin 预览确认，不改 TokenRouter 后端；TokenFlux 网页前端仍需按接入文档接线并联调。
+
+CLI 入口为 `tf login [名字] --from-web [--host <网关>]`，完整字段与浏览器示例见 [`integrations/web-import.md`](integrations/web-import.md)。
 
 ### 待定：Windows 交互支持
 

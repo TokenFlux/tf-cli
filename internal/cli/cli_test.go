@@ -193,6 +193,10 @@ func TestCompletionNeverReturnsNothing(t *testing.T) {
 	if got := complete([]string{"codex", "exec", ""}); len(got) != 0 {
 		t.Errorf("past the passthrough boundary should yield nothing, got %v", got)
 	}
+
+	if got := complete([]string{"login", "--f"}); !contains(got, "--from-web") {
+		t.Errorf("login completion must include --from-web, got %v", got)
+	}
 }
 
 // 候选里不能有重复项：--key 在启动命令和全局 flag 里各有一份，

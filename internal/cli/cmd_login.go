@@ -25,7 +25,8 @@ func newLoginCommand() *Command {
 		Flags: []Flag{
 			// 保留作为显式写法；管道输入本来就会自动识别，不必写。
 			{Name: "with-key", Kind: KindBool, Desc: "从 stdin 或隐藏输入读取 Key||Read the key from stdin or a hidden prompt"},
-			{Name: "force", Kind: KindBool, Desc: "覆盖已有凭据，不询问||Overwrite the existing credential without asking"},
+			{Name: "from-web", Kind: KindBool, Desc: "等待网页通过本机回环地址导入 Key||Wait for a web page to import a key over loopback"},
+			{Name: "force", Kind: KindBool, Desc: "名称冲突时直接覆盖；网页导入仍需确认||Overwrite on name conflicts; web import still requires confirmation"},
 		},
 		Run: runLogin,
 	}
@@ -56,13 +57,33 @@ func runLogin(c *Context) error {
 		host = normalizeHost(h)
 	}
 
-	key, err := readKey(c)
-	if err != nil {
-		return err
-	}
-	if key == "" {
-		return ui.Errf(ui.CodeUsage, c.UI.T("没有读到 Key", "no key was provided")).
-			WithHint("echo $KEY | tf login")
+	var key string
+	var imported *webImportRequest
+	if c.Flags.Bool("from-web") {
+		if c.Flags.Bool("with-key") {
+			return ui.Errf(ui.CodeUsage,
+				c.UI.T("--from-web 不能和 --with-key 一起使用", "--from-web cannot be used with --with-key"))
+		}
+		if !c.UI.Interactive(c.Flags.Bool("no-input")) {
+			return ui.Errf(ui.CodeUsage,
+				c.UI.T("网页导入需要交互式终端确认", "web import requires an interactive terminal for confirmation")).
+				WithHint("echo $KEY | tf login")
+		}
+		req, err := waitForWebImport(c, host, st.paths.CredentialsFile(), keyName,
+			creds.Items[keyName], explicit || c.Flags.Bool("force"))
+		if err != nil {
+			return err
+		}
+		key, imported = req.Key, &req
+	} else {
+		key, err = readKey(c)
+		if err != nil {
+			return err
+		}
+		if key == "" {
+			return ui.Errf(ui.CodeUsage, c.UI.T("没有读到 Key", "no key was provided")).
+				WithHint("echo $KEY | tf login")
+		}
 	}
 
 	// 当场校验：/v1/models 是唯一能用 API Key 读到的目录接口。
@@ -102,7 +123,15 @@ func runLogin(c *Context) error {
 	// 会不会出现在各 harness 的候选里。
 	probeAndStore(cfg, keyName, host, key)
 
-	creds.Set(keyName, &config.Credential{Key: key, Source: config.SourcePaste})
+	cred := &config.Credential{Key: key, Source: config.SourcePaste}
+	if imported != nil {
+		cred.Source = config.SourceImport
+		cred.Origin = imported.Origin
+		cred.KeyName = imported.KeyName
+		cred.GroupID = imported.GroupID
+		cred.GroupName = imported.GroupName
+	}
+	creds.Set(keyName, cred)
 	if err := creds.Save(); err != nil {
 		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据文件无法写入", "cannot write the credentials file")).WithCause(err)
 	}
@@ -126,7 +155,6 @@ func runLogin(c *Context) error {
 
 	// 放在结果之后：先让用户看见登录成功，再问补全。
 	// 顺序反了会像是「还没成功就又要我做事」。
-	noteComingSoon(c)
 	offerCompletions(c, cfg)
 	return nil
 }
@@ -313,19 +341,6 @@ func leadingWord(id string) string {
 		}
 	}
 	return id
-}
-
-// noteComingSoon 在登录成功后提一句还没做的登录方式。
-//
-// 之前这里是一个选择器：列出「粘贴 API Key」和灰掉的「从网页导入」，
-// 让人按一次回车去确认一个没有分支的选择。露出未来能力不该拦在必经
-// 路径上 —— 说一句就够了。
-func noteComingSoon(c *Context) {
-	if c.UI.JSON || !c.UI.Interactive(c.Flags.Bool("no-input")) {
-		return
-	}
-	c.UI.Logf("%s", c.UI.Dim(c.UI.T(
-		"网页导入计划在后续过渡版提供", "web import is planned for a later transitional release")))
 }
 
 // isTerminal 报告文件是否是终端。

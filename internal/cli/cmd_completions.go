@@ -168,7 +168,7 @@ func complete(words []string) []string {
 	case "completions":
 		return filter([]string{"bash", "zsh", "fish"}, cur)
 	case "login":
-		return filter(append(storedKeys(), "--with-key", "--host", "--force"), cur)
+		return filter(append(storedKeys(), "--with-key", "--from-web", "--host", "--force"), cur)
 	case "update":
 		return filter([]string{"--check"}, cur)
 	case "logout":

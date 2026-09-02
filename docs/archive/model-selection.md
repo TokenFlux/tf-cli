@@ -1,5 +1,9 @@
 # 模型选择：不指定 `--model` 时怎么办
 
+> **归档。** 本文保留早期 profile、`tf models` 与 `tf config set` 方案的
+> 推演过程；这些接口没有成为现行设计。当前模型槽属于 harness，由
+> `tf model <harness>` 管理，绑定规则见 [`../PLAN.md`](../PLAN.md)。
+
 ## 前提
 
 **「不注入模型」不是选项。** harness 自带的默认是官方模型 id（`claude-sonnet-4-5`），网关分组里的 id 通常不同名，不注入必然撞 403。所以每次启动都必须解析出一个具体模型。

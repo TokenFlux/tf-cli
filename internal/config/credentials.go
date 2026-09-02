@@ -11,7 +11,7 @@ import (
 // Credential 是一把 Key 及其来源信息。
 //
 // Source 记录它是怎么进来的（粘贴 / 网页导入），
-// 便于 doctor 解释「这把 Key 是哪来的」。
+// 便于 tf keys 解释「这把 Key 是哪来的」。
 type Credential struct {
 	Key       string    `json:"key"`
 	Source    string    `json:"source,omitempty"`

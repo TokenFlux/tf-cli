@@ -29,7 +29,7 @@
 
 - `tf models` / `tf groups` **完全未登录就能工作**，`pnpx tf models` 开箱即用。
 - 但**协议准入仍只能靠 JWT 或主动探测**（§3）。
-- 过渡版（早期记作 v0.5）的「导入 tf」按钮价值因此被大幅抬高：页面持有 JWT，能把 Key **连同完整分组元数据（含协议集合）**一起推给 CLI。它不再只是「省一次粘贴」，而是**唯一能一次性拿齐预检数据的路径**。
+- 过渡版（早期记作 v0.5）的「导入 tf」按钮已经在 CLI 侧落地：页面持有 JWT，可把 Key 连同 `group_id` / `group_name` 等展示元数据推给 CLI。协议集合不从网页导入，仍由 CLI 对网关做零 token 探测，避免把页面传来的元数据当成准入事实。
 
 ### 公开 marketplace 端点的内容
 
@@ -173,6 +173,6 @@ current_concurrency, expires_at, fallback_to_default_group_when_unavailable,
 data_sharing_confirmed_group_id, data_sharing_notice_version, ip_whitelist, ip_blacklist
 ```
 
-**关键**：Key 对象里**嵌套了完整的 group 对象**。因此「导入 tf」按钮只要推送这一个对象，CLI 就拿到了预检所需的全部信息，不需要再拼第二个接口。
+**当前取舍**：Key 对象虽嵌套完整 group，网页导入协议 v1 仍只接受明确列出的 `key_name`、`group_id`、`group_name` 展示字段，额外字段会被拒绝。协议准入由 CLI 自己探测，不能把 JWT 接口返回对象直接透传为 `/import` body。
 
-`usage_{5h,1d,7d}` + `window_*_start` + `current_concurrency` 让 `tf status` 能显示「限速窗口还剩多少、什么时候重置」，这是网页上也不容易一眼看到的信息。
+`tf status` 的额度数据来自 API Key 可访问的 `/v1/usage`，不依赖网页 JWT DTO；`usage_{5h,1d,7d}` 等字段目前不导入本地。

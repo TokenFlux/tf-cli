@@ -7,18 +7,20 @@
 - `research/ori.md` — ori 逆向调研、整体设计、分发方案
 - `research/tokenflux-api-probe.md` — 网关实测记录
 - `research/harness-probe.md` — 三个 harness 的注入配方与实测
-- `design/` — 各项决策的来龙去脉
+- `design/` — 当前设计决策及其依据
+- `archive/` — 已放弃或被替代的早期方案，仅供追溯
+- `integrations/web-import.md` — 网页前端接入 `tf login --from-web` 的协议契约
 
 ---
 
 ## 一、当前形态
 
 命令：`version` `status` `config` `login` `logout` `keys` `update` `harness`
-`model` `completions` + `claude` `codex` `opencode`。
+`model` `completions` + `claude` `codex` `opencode`。`tf login --from-web` 提供网页 Key 导入。
 
-全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。
+全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 7500 行生产代码、3400 行测试，132 个测试，六个已发布版本，零第三方依赖。
+约 7900 行生产代码、3900 行测试，145 个测试函数，六个已发布版本，零第三方依赖。
 
 ## 二、里程碑
 
@@ -26,7 +28,7 @@
 | --- | --- | --- |
 | M0 骨架 | 完成 | CLI 框架、config/credentials、权限自修复、错误码、双语、`--json` |
 | M1 目录 | 放弃 | 见下 |
-| M2 认证 | 完成 | `login`、`logout`、`keys`、`status`（含额度） |
+| M2 认证 | 完成 | `login`、`login --from-web`、`logout`、`keys`、`status`（含额度） |
 | M3 启动 | 完成 | fork+wait、信号转发、退出码穿透、终端复位。三个 harness 均已实测 |
 | M4 模型 | 完成 | ID 解析、族折叠、方向键选择器、按 harness 分开的模型槽 |
 | M5 预检 | 完成 | 零 token 协议探测、按分组前缀的准入记录、隐藏原因说明 |
@@ -54,6 +56,7 @@
   `tf model` 需 `--edit` 才进编辑器）
 - **v0.5.0** 新增 `tf status`、额度显示和启动前冲突检查；补上 PTY、网关固件与 Linux 实机测试
 - **v0.5.1** 重写 README，统一中文 CLI 文案，规范发布说明
+- **main（待发布）** 落地网页 Key 导入、归档早期设计稿，并新增前端接入文档
 
 ## 四、实测得到的事实
 
@@ -104,7 +107,7 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 | 缺口 | 影响 |
 |---|---|
-| `internal/cli` 仍有 3618 行，命令 I/O 尚未完全拆分 | `access` 与 `completions` 已独立，剩余部分覆盖率仍约 23% |
+| `internal/cli` 仍有约 4000 行，命令 I/O 尚未完全拆分 | `access`、`completions` 与网页导入已接入，剩余部分覆盖率仍需继续提升 |
 | ~~`gateway` 覆盖 3%，而它承担最微妙的判断~~ | 已用真实应答建立固件测试，覆盖率提升至 38.3% |
 | ~~终端四条防线只在 macOS 验证过~~ | 已在 Linux 6.8 上全部跑通，`scripts/linux-check.sh` 可重跑 |
 | npm 平台包未做 | `pnpx tf` 不可用 |
