@@ -1,9 +1,9 @@
-# tf
+# tf-cli
 
-[![Release](https://img.shields.io/github/v/release/tokenflux/tkr)](https://github.com/tokenflux/tkr/releases)
+[![Release](https://img.shields.io/github/v/release/tokenflux/tf-cli)](https://github.com/tokenflux/tf-cli/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-`tf` 是一个针对 AI 编程客户端（Claude Code、Codex、opencode）的轻量级启动器与凭据管理工具。它将 [TokenFlux](https://tokenflux.dev) 或自建 TokenRouter 网关的密钥、模型路由及槽位配置以纯进程级方式注入各客户端，不读写各工具的全局配置文件，支持多 Key 隔离与多模型槽协同。
+`tf-cli` 项目提供命令 `tf`，用于启动和管理 AI 编程客户端（Claude Code、Codex、opencode）的网关凭据。它将 [TokenFlux](https://tokenflux.dev) 或自建 TokenRouter 网关的密钥、模型路由及槽位配置以纯进程级方式注入各客户端，不读写各工具的全局配置文件，支持多 Key 隔离与多模型槽协同。
 
 ## 特性
 
@@ -18,7 +18,7 @@
 ### 预编译二进制（推荐）
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh
 ```
 
 默认安装至 `~/.local/bin/tf`（可通过环境变量 `TF_INSTALL_DIR` 自定义安装路径），无需管理员权限。
@@ -26,8 +26,8 @@ curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
 ### 源码编译
 
 ```sh
-git clone https://github.com/tokenflux/tkr.git
-cd tkr
+git clone https://github.com/tokenflux/tf-cli.git
+cd tf-cli
 make build
 ```
 
@@ -189,7 +189,7 @@ default  sk-d7d…a4fe  13 个模型
 
 ## 问题反馈
 
-- 遇到问题或功能建议，请提交 [GitHub Issue](https://github.com/tokenflux/tkr/issues)。
+- 遇到问题或功能建议，请提交 [GitHub Issue](https://github.com/tokenflux/tf-cli/issues)。
 - 涉及安全漏洞请参阅 [SECURITY.md](SECURITY.md) 的披露流程进行反馈。
 
 ## 许可协议

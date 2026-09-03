@@ -23,6 +23,10 @@
 
 ## [未发布]
 
+### 破坏性变更
+
+- 项目仓库与 Go module 从 `github.com/tokenflux/tkr` 改为 `github.com/tokenflux/tf-cli`。源码安装请改用 `go install github.com/tokenflux/tf-cli/cmd/tf@latest`；命令名、二进制名、配置目录和 `TF_*` 环境变量保持不变。
+
 ### 新增
 
 - `tf login --from-web` 现在支持 TokenFlux 网页通过本机回环地址导入 Key，并在终端确认后复用现有网关校验和凭据保存流程。
@@ -166,10 +170,10 @@
 - 方向键选择器，支持输入过滤。
 - 中英双语，跟随系统 locale，`TKR_LANG` 可覆盖。
 
-[未发布]: https://github.com/TokenFlux/tkr/compare/v0.5.1...HEAD
-[0.5.1]: https://github.com/TokenFlux/tkr/compare/v0.5.0...v0.5.1
-[0.5.0]: https://github.com/TokenFlux/tkr/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/TokenFlux/tkr/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/TokenFlux/tkr/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/TokenFlux/tkr/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/TokenFlux/tkr/releases/tag/v0.1.0
+[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/TokenFlux/tf-cli/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/TokenFlux/tf-cli/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/TokenFlux/tf-cli/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/TokenFlux/tf-cli/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/TokenFlux/tf-cli/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/TokenFlux/tf-cli/releases/tag/v0.1.0

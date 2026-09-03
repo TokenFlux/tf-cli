@@ -1,12 +1,12 @@
 #!/bin/sh
 # tf 安装脚本。
 #
-#   curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh
 #
 # 装到 ~/.local/bin（不需要 sudo）。用 TF_INSTALL_DIR 可以改。
 set -eu
 
-REPO="tokenflux/tkr"
+REPO="tokenflux/tf-cli"
 DIR="${TF_INSTALL_DIR:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*"; }

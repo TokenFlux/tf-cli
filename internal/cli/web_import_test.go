@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 const testWebOrigin = "https://tokenflux.dev"

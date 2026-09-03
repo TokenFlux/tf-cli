@@ -227,12 +227,12 @@ tf login
 tf                          (主包，~5KB)
 ├─ bin/tf.js                shim：resolve 平台包里的二进制并 exec，透传 argv/stdio/退出码
 └─ optionalDependencies:
-   @tokenflux/tkr-darwin-arm64   { "os": ["darwin"], "cpu": ["arm64"] }
-   @tokenflux/tkr-darwin-x64
-   @tokenflux/tkr-linux-x64      { "os": ["linux"], "cpu": ["x64"], "libc": ["glibc"] }
-   @tokenflux/tkr-linux-x64-musl { ..., "libc": ["musl"] }
-   @tokenflux/tkr-linux-arm64
-   @tokenflux/tkr-win32-x64
+   @tokenflux/tf-cli-darwin-arm64   { "os": ["darwin"], "cpu": ["arm64"] }
+   @tokenflux/tf-cli-darwin-x64
+   @tokenflux/tf-cli-linux-x64      { "os": ["linux"], "cpu": ["x64"], "libc": ["glibc"] }
+   @tokenflux/tf-cli-linux-x64-musl { ..., "libc": ["musl"] }
+   @tokenflux/tf-cli-linux-arm64
+   @tokenflux/tf-cli-win32-x64
 ```
 
 包管理器按 `os`/`cpu`/`libc` 字段只装匹配的那一个，于是：

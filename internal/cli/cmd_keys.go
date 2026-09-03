@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tokenflux/tkr/internal/access"
-	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/access"
+	"github.com/tokenflux/tf-cli/internal/config"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 func newKeysCommand() *Command {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tokenflux/tkr/internal/harness"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/harness"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 func newHarnessCommand() *Command {

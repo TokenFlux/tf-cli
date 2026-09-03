@@ -91,8 +91,8 @@ jobs:
           mkdir -p dist
           go build -trimpath \
             -ldflags "-s -w \
-              -X github.com/tokenflux/tkr/internal/buildinfo.Version=${{ steps.v.outputs.version }} \
-              -X github.com/tokenflux/tkr/internal/buildinfo.Commit=${{ steps.v.outputs.commit }}" \
+              -X github.com/tokenflux/tf-cli/internal/buildinfo.Version=${{ steps.v.outputs.version }} \
+              -X github.com/tokenflux/tf-cli/internal/buildinfo.Commit=${{ steps.v.outputs.commit }}" \
             -o "dist/$name" ./cmd/tf
 
       # 归档名要与 internal/update 里的推导规则严格一致，否则自更新会找不到文件。

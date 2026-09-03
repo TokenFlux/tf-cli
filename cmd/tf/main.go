@@ -8,7 +8,7 @@ package main
 import (
 	"os"
 
-	"github.com/tokenflux/tkr/internal/cli"
+	"github.com/tokenflux/tf-cli/internal/cli"
 )
 
 func main() {

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tokenflux/tkr/internal/completions"
-	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/completions"
+	"github.com/tokenflux/tf-cli/internal/config"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 // 透传规则是 tf 最容易写错的地方（见 docs/PLAN.md B 项），

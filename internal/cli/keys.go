@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tokenflux/tkr/internal/access"
-	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/gateway"
-	"github.com/tokenflux/tkr/internal/harness"
-	"github.com/tokenflux/tkr/internal/model"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/access"
+	"github.com/tokenflux/tf-cli/internal/config"
+	"github.com/tokenflux/tf-cli/internal/gateway"
+	"github.com/tokenflux/tf-cli/internal/harness"
+	"github.com/tokenflux/tf-cli/internal/model"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 // candidate 是「某把 Key 提供的某个模型」。

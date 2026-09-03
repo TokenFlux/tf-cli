@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tokenflux/tkr/internal/buildinfo"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/buildinfo"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 // App 是命令注册表与调度器。

@@ -1,8 +1,8 @@
 package cli
 
 import (
-	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/config"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 // state 是几乎每个命令都要的三样东西。

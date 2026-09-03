@@ -26,7 +26,7 @@ import (
 )
 
 // Repo 是发布仓库。
-const Repo = "tokenflux/tkr"
+const Repo = "tokenflux/tf-cli"
 
 // Source 是 tf 自身的安装来源。
 type Source string
@@ -52,7 +52,7 @@ func (s Source) UpgradeCommand() string {
 	case SourceHomebrew:
 		return "brew upgrade tf"
 	case SourceGoInstall:
-		return "go install github.com/tokenflux/tkr/cmd/tf@latest"
+		return "go install github.com/tokenflux/tf-cli/cmd/tf@latest"
 	case SourceDevel:
 		return "git pull && make build"
 	}

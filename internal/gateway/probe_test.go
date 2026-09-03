@@ -24,12 +24,12 @@ func TestProbeVerdicts(t *testing.T) {
 		},
 		{
 			name: "模型不在分组：协议其实是通的",
-			body: `{"error":{"message":"The current group does not support the requested model \"__tkr_probe__\". Available models: gpt-5.4"}}`,
+			body: `{"error":{"message":"The current group does not support the requested model \"__tf_probe__\". Available models: gpt-5.4"}}`,
 			miss: true,
 		},
 		{
 			name: "responses 入口的模型缺失形状不同",
-			body: `{"error":{"message":"Model \"__tkr_probe__\" is not supported by any configured account in this group","type":"model_not_found"}}`,
+			body: `{"error":{"message":"Model \"__tf_probe__\" is not supported by any configured account in this group","type":"model_not_found"}}`,
 			miss: true,
 		},
 		{

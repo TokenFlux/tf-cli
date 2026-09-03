@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tokenflux/tkr/internal/buildinfo"
+	"github.com/tokenflux/tf-cli/internal/buildinfo"
 )
 
 // Client 是一个网关客户端。

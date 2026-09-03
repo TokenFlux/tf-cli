@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tokenflux/tkr/internal/access"
-	"github.com/tokenflux/tkr/internal/completions"
-	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/harness"
-	"github.com/tokenflux/tkr/internal/model"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/access"
+	"github.com/tokenflux/tf-cli/internal/completions"
+	"github.com/tokenflux/tf-cli/internal/config"
+	"github.com/tokenflux/tf-cli/internal/harness"
+	"github.com/tokenflux/tf-cli/internal/model"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 // 补全的设计约束（按 Tab 是高频、低容忍度的交互）：

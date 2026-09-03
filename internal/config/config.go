@@ -20,7 +20,7 @@ import (
 
 // DefaultHost 是默认网关，可在编译期覆盖：
 //
-//	go build -ldflags "-X github.com/tokenflux/tkr/internal/config.DefaultHost=https://router.acme.com"
+//	go build -ldflags "-X github.com/tokenflux/tf-cli/internal/config.DefaultHost=https://router.acme.com"
 //
 // 自建 TokenRouter 的地址属于部署方的决定，不该问每一个登录的人 ——
 // 部署方构建一次，团队里的人照常 tf login 就好。

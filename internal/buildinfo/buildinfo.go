@@ -2,7 +2,7 @@
 //
 // 通过 -ldflags 注入：
 //
-//	go build -ldflags "-X github.com/tokenflux/tkr/internal/buildinfo.Version=0.1.0"
+//	go build -ldflags "-X github.com/tokenflux/tf-cli/internal/buildinfo.Version=0.1.0"
 package buildinfo
 
 var (

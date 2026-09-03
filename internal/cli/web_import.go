@@ -19,9 +19,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/tokenflux/tkr/internal/buildinfo"
-	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/buildinfo"
+	"github.com/tokenflux/tf-cli/internal/config"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 const (

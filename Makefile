@@ -1,5 +1,5 @@
 BINARY := tf
-PKG    := github.com/tokenflux/tkr
+PKG    := github.com/tokenflux/tf-cli
 VERSION ?= dev
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 

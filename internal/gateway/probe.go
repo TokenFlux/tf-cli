@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tokenflux/tkr/internal/buildinfo"
+	"github.com/tokenflux/tf-cli/internal/buildinfo"
 )
 
 // Protocol 是网关的客户端文本协议，取值与 TokenRouter 的

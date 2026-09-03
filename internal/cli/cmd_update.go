@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/tokenflux/tkr/internal/buildinfo"
-	"github.com/tokenflux/tkr/internal/ui"
-	"github.com/tokenflux/tkr/internal/update"
+	"github.com/tokenflux/tf-cli/internal/buildinfo"
+	"github.com/tokenflux/tf-cli/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/update"
 )
 
 func newUpdateCommand() *Command {
@@ -92,7 +92,7 @@ func runUpdate(c *Context) error {
 		// 不建议 sudo：装 harness 时代码硬拒提权命令，自更新却把 sudo
 		// 推给用户，同一个产品不能有两套安全观。而且真正的问题是这份
 		// 二进制装在了需要 root 才能写的地方 —— 重装到用户目录才是解法。
-		hint := "curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh"
+		hint := "curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh"
 		if os.IsPermission(err) {
 			return ui.Errf(ui.CodeInstallFailed,
 				c.UI.T("没有写入权限", "no permission to replace the binary")).

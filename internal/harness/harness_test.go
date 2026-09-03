@@ -88,7 +88,7 @@ func TestInstallOptionsAreSane(t *testing.T) {
 
 // 探测不到的二进制不能报告为已安装。
 func TestDetectMissingBinary(t *testing.T) {
-	h := &Harness{Name: "ghost", Bin: "tkr-definitely-not-a-real-binary"}
+	h := &Harness{Name: "ghost", Bin: "tf-definitely-not-a-real-binary"}
 	if st := h.Detect(); st.Installed {
 		t.Errorf("phantom binary reported as installed: %+v", st)
 	}

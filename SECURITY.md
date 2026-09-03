@@ -2,7 +2,7 @@
 
 ## 漏洞报告
 
-请通过仓库的 [Security Advisories](https://github.com/TokenFlux/tkr/security/advisories/new) 提交安全问题，切勿公开发布 Issue。
+请通过仓库的 [Security Advisories](https://github.com/TokenFlux/tf-cli/security/advisories/new) 提交安全问题，切勿公开发布 Issue。
 
 提交的报告仅维护人员可见，相关漏洞修复并发布更新后会统一公开。
 

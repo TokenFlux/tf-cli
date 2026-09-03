@@ -3,8 +3,8 @@ package access
 import (
 	"testing"
 
-	"github.com/tokenflux/tkr/internal/config"
-	"github.com/tokenflux/tkr/internal/harness"
+	"github.com/tokenflux/tf-cli/internal/config"
+	"github.com/tokenflux/tf-cli/internal/harness"
 )
 
 // claude_code_only 分组拦的是客户端指纹而不是协议：

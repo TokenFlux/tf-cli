@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tokenflux/tkr/internal/ui"
+	"github.com/tokenflux/tf-cli/internal/ui"
 )
 
 // Kind 是 flag 的取值形态。

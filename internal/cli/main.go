@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/tokenflux/tkr/internal/harness"
+import "github.com/tokenflux/tf-cli/internal/harness"
 
 // allCommands 是唯一的命令名单。
 //

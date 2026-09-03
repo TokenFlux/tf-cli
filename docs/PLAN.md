@@ -1,4 +1,4 @@
-# tf 实施计划
+# tf-cli 实施计划
 
 M0–M6 已完成，M7 分发仍缺 npm 平台包，见 [`STATUS.md`](STATUS.md)。这份文档现在只管往后。
 设计依据在 `design/` 与 `research/`。

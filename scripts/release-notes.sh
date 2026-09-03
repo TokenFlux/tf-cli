@@ -50,7 +50,7 @@ sed "s/<版本>/$VER/g" <<'ARTIFACTS'
 一行装（自动挑架构，装到 `~/.local/bin`，不需要 sudo）：
 
 ```
-curl -fsSL https://raw.githubusercontent.com/tokenflux/tkr/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh
 ```
 
 已经装过的话直接 `tf update`。
