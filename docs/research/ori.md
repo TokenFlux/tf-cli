@@ -175,7 +175,7 @@ tf update / version
 > **已决策（2026-08-29）**：本节的 PKCE 浏览器授权流**不采用**。
 > 结论见 [`../design/import-from-web.md`](../design/import-from-web.md)：
 > - **v0** 只做 `tf login --with-key`（粘贴 Key，零后端改动，同时是 SSH/容器场景的永久兜底）
-> - **过渡版（早期记作 v0.5）** CLI 侧已实现 `tf login --from-web`：在 127.0.0.1 固定端口段接收网页 Key，安全性靠严格 Origin 与终端预览确认；网页 keys 页仍需接入，不改后端
+> - **过渡版（早期记作 v0.5）** CLI 侧已实现 `tf login --from-web`：在 127.0.0.1 固定端口段接收网页 Key，通过可选 challenge/HMAC 与导入证明验证本次 CLI 会话，并用严格 Origin 与终端预览确认保护写入；未验证扫描只告警、不阻断。网页 Keys 页仍需接入，不改后端
 > - PKCE / 授权服务器留到「要开放给第三方工具」时再谈，届时价值是开放能力而非省事
 >
 > 下面的内容保留，作为 ori 做法的调研记录与将来做授权服务器时的参考。

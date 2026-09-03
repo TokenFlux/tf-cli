@@ -1,7 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,11 +25,15 @@ import (
 )
 
 const (
-	webImportProtocol  = 1
-	webImportPortFirst = 43110
-	webImportPortLast  = 43119
-	webImportMaxBody   = 32 << 10
-	webImportTimeout   = 10 * time.Minute
+	webImportProtocol     = 1
+	webImportPortFirst    = 43110
+	webImportPortLast     = 43119
+	webImportMaxBody      = 32 << 10
+	webImportSessionBytes = 16
+	webImportChallengeMin = 16
+	webImportChallengeMax = 128
+	webImportProofHeader  = "X-TF-Session-Proof"
+	webImportTimeout      = 10 * time.Minute
 )
 
 type webImportRequest struct {
@@ -35,6 +44,7 @@ type webImportRequest struct {
 	GroupID   int64  `json:"group_id,omitempty"`
 	GroupName string `json:"group_name,omitempty"`
 	Origin    string `json:"-"`
+	Verified  bool   `json:"-"`
 }
 
 type webImportDecision struct {
@@ -49,10 +59,12 @@ type webImportEvent struct {
 }
 
 type webImportHandler struct {
-	host   string
-	origin string
-	events chan<- webImportEvent
-	busy   atomic.Bool
+	host          string
+	origin        string
+	port          int
+	sessionSecret []byte
+	events        chan<- webImportEvent
+	busy          atomic.Bool
 }
 
 // waitForWebImport opens a short-lived loopback server and waits for one
@@ -73,9 +85,23 @@ func waitForWebImport(c *Context, host, credentialsPath, targetName string,
 			c.UI.T("本机网页导入端口都被占用", "all local web-import ports are in use")).WithCause(err)
 	}
 
+	sessionSecret := make([]byte, webImportSessionBytes)
+	if _, err := rand.Read(sessionSecret); err != nil {
+		_ = listener.Close()
+		return webImportRequest{}, ui.Errf(ui.CodeInternal,
+			c.UI.T("无法建立网页导入会话", "cannot create a web-import session")).WithCause(err)
+	}
+	defer func() {
+		for i := range sessionSecret {
+			sessionSecret[i] = 0
+		}
+	}()
+
 	events := make(chan webImportEvent)
 	server := &http.Server{
-		Handler: &webImportHandler{host: host, origin: origin, events: events},
+		Handler: &webImportHandler{
+			host: host, origin: origin, port: port, sessionSecret: sessionSecret, events: events,
+		},
 		// Do not set ReadTimeout: the request remains open while the user
 		// reviews the origin and confirms it in the terminal.
 		ReadHeaderTimeout: 3 * time.Second,
@@ -96,7 +122,7 @@ func waitForWebImport(c *Context, host, credentialsPath, targetName string,
 	c.UI.Logf("%s", c.UI.Bold(c.UI.T("等待网页导入", "Waiting for web import")))
 	c.UI.Logf("  %s http://127.0.0.1:%d", ui.Pad(c.UI.T("监听", "listen"), 8), port)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("来源", "origin"), 8), origin)
-	c.UI.Logf("  %s %s/keys", ui.Pad(c.UI.T("打开", "open"), 8), strings.TrimRight(host, "/"))
+	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("打开", "open"), 8), webImportSessionURL(host, port, sessionSecret))
 	c.UI.Logf("  %s", c.UI.Dim(c.UI.T("10 分钟内没有请求会自动退出", "exits after 10 minutes without a request")))
 
 	timer := time.NewTimer(webImportTimeout)
@@ -149,6 +175,37 @@ func listenWebImport() (net.Listener, int, error) {
 	return nil, 0, last
 }
 
+func webImportSessionURL(host string, port int, secret []byte) string {
+	encoded := base64.RawURLEncoding.EncodeToString(secret)
+	return fmt.Sprintf("%s/keys#tf=1.%d.%s", strings.TrimRight(host, "/"), port, encoded)
+}
+
+func webImportProof(secret []byte, port int, challenge string) string {
+	mac := hmac.New(sha256.New, secret)
+	fmt.Fprintf(mac, "tf-web-import-v1\n%d\n%s", port, challenge)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func webImportBodyProof(secret []byte, port int, body []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	fmt.Fprintf(mac, "tf-web-import-v1\n%d\nimport\n", port)
+	_, _ = mac.Write(body)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func validWebImportChallenge(challenge string) bool {
+	if len(challenge) < webImportChallengeMin || len(challenge) > webImportChallengeMax {
+		return false
+	}
+	for _, r := range challenge {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
 func confirmWebImport(c *Context, req webImportRequest, credentialsPath, targetName string,
 	existing *config.Credential, fixedTarget bool) (bool, error) {
 	group := req.GroupName
@@ -176,6 +233,13 @@ func confirmWebImport(c *Context, req webImportRequest, credentialsPath, targetN
 	}
 
 	c.UI.Logf("%s", c.UI.Bold(c.UI.T("收到网页导入请求", "Web import received")))
+	if req.Verified {
+		c.UI.Logf("  %s %s", ui.Pad(c.UI.T("验证", "verification"), 8),
+			c.UI.T("已验证当前 tf 会话", "current tf session verified"))
+	} else {
+		c.UI.Warnf("%s", c.UI.T("未验证本机 tf 会话；确认后仍可继续",
+			"local tf session is unverified; you may still confirm"))
+	}
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("来源", "origin"), 8), req.Origin)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("网关", "gateway"), 8), req.Host)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("分组", "group"), 8), group)
@@ -227,9 +291,17 @@ func (h *webImportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeWebJSON(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method_not_allowed"})
 			return
 		}
-		writeWebJSON(w, http.StatusOK, map[string]any{
+		data := map[string]any{
 			"ok": true, "service": "tf", "protocol": webImportProtocol, "version": buildinfo.Version,
-		})
+		}
+		if challenge := r.URL.Query().Get("challenge"); challenge != "" {
+			if !validWebImportChallenge(challenge) || len(h.sessionSecret) == 0 || h.port == 0 {
+				writeWebJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_challenge"})
+				return
+			}
+			data["proof"] = webImportProof(h.sessionSecret, h.port, challenge)
+		}
+		writeWebJSON(w, http.StatusOK, data)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -246,7 +318,7 @@ func (h *webImportHandler) setCORS(w http.ResponseWriter, r *http.Request) bool 
 	head := w.Header()
 	head.Set("Access-Control-Allow-Origin", h.origin)
 	head.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	head.Set("Access-Control-Allow-Headers", "Content-Type")
+	head.Set("Access-Control-Allow-Headers", "Content-Type, "+webImportProofHeader)
 	head.Set("Access-Control-Allow-Private-Network", "true")
 	head.Set("Access-Control-Max-Age", "600")
 	head.Set("Cache-Control", "no-store")
@@ -261,7 +333,12 @@ func (h *webImportHandler) handleImport(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, webImportMaxBody))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, webImportMaxBody))
+	if err != nil {
+		writeWebJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_json"})
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	var req webImportRequest
 	if err := dec.Decode(&req); err != nil {
@@ -276,6 +353,10 @@ func (h *webImportHandler) handleImport(w http.ResponseWriter, r *http.Request) 
 		writeWebJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	expectedProof := webImportBodyProof(h.sessionSecret, h.port, body)
+	providedProof := r.Header.Get(webImportProofHeader)
+	req.Verified = len(h.sessionSecret) > 0 && h.port != 0 &&
+		hmac.Equal([]byte(providedProof), []byte(expectedProof))
 	if !h.busy.CompareAndSwap(false, true) {
 		writeWebJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "busy"})
 		return

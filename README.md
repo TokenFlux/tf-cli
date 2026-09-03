@@ -76,7 +76,7 @@ tf login work --from-web
 # 私有网关：tf login work --from-web --host https://router.example.com
 ```
 
-CLI 会在 `127.0.0.1:43110-43119` 中绑定一个端口。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会校验并写入 `credentials.json`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
+CLI 会在 `127.0.0.1:43110-43119` 中绑定一个端口，并打印带本次监听会话信息的 Keys 页链接。支持该扩展的网页和终端确认页会显示“已验证当前 tf 会话”；直接打开页面仍可导入，但网页与终端都会显示未验证会话警告。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会校验并写入 `credentials.json`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
 
 ### 2. 启动客户端
 

@@ -37,44 +37,50 @@
 ```
 用户在终端跑：tf login → 选择「从网页导入」
   （也可用 tf login --from-web 直接进入）
-  CLI 按顺序绑定 127.0.0.1:43110-43119 中首个可用端口
+  CLI 绑定 127.0.0.1:43110-43119 中首个可用端口
+  并打印带实际端口和本次监听 session secret 的 Keys 页链接
 
-用户在浏览器打开 tokenflux.dev/keys
-  页面探测 http://127.0.0.1:4311x/ping  → 探到就把「导入 tf」按钮点亮
+用户通过终端链接打开 Keys 页
+  页面只访问指定端口，通过 challenge/HMAC 验证本次 tf 会话
   用户选择分组 / 勾数据共享 / 建 Key（走现有 POST /api/v1/keys）
   页面 POST http://127.0.0.1:4311x/import  { version, key, host, group_id, ... }
+  并可附加绑定原始 JSON body 的 X-TF-Session-Proof
 
-CLI 收到 → 终端预览并确认 → 回应 202 → 用 /v1/models 校验 → 写 ~/.tf/credentials.json (0600)
-  → 关闭监听
+用户直接打开 Keys 页或前端未实现验证扩展
+  页面仍可扫描固定端口，但必须标记「未验证」并警告；不强制阻断
+
+CLI 收到 → 终端预览并确认 → 回应 202 → 关闭监听
+  → 用 /v1/models 校验 → 写 ~/.tf/credentials.json (0600)
 ```
 
 优点：
 
 - **后端零改动**，只需前端在 keys 页加一个按钮 + 一段探测逻辑。
-- **Key 不进 argv、不进 shell history**，只在回环 POST body 里。
+- **Key 不进 argv、不进 shell history**，只在回环 POST body 里；通过终端链接完成会话验证时，页面能在发送 Key 前排除固定端口上的伪装服务。
 - **不需要注册 scheme**，`pnpx tf` / curl 安装的二进制原样可用。
 - CLI 不处理网页登录或 Cloudflare 质询；确认后只用导入的 Key 请求配置的网关 `/v1/models` 做现有登录校验。
 
 需要处理的细节：
 
 1. **浏览器本地网络权限**：Chrome 142+ 从 HTTPS 页面访问 `http://127.0.0.1` 会请求 Local Network Access 权限；旧 Chromium 还可能发送带 `Access-Control-Request-Private-Network: true` 的 PNA 预检。本地服务同时返回严格的 `Access-Control-Allow-Origin` 和兼容旧 PNA 的 `Access-Control-Allow-Private-Network: true`。前端应在用户点击后发起探测，并放行 CSP `connect-src`；细节见接入文档。
-2. **固定端口段**：页面无法预先知道 CLI 选中的端口，所以约定一个小范围（43110–43119）依次探测；被占用就往后顺延。
-3. **终端侧预览确认**（取代配对码）：CLI 收到导入请求后**不直接落盘**，先在终端打印一份预览并等一个 y/n：
+2. **固定端口段与可选会话验证**：CLI 仍在 43110–43119 中顺序选择端口，兼容旧前端扫描。CLI 打印的 Keys 页链接通过 URL fragment 携带实际端口和本次监听会话 secret；实现扩展的前端用 challenge/HMAC 验证该端口，成功时标记“已验证当前 tf 会话”，并用 `X-TF-Session-Proof` 让终端确认页显示相同状态。直接打开页面仍可扫描和导入，但页面与终端都只能标记“未验证”并显示警告。
+3. **终端侧预览确认**：CLI 收到导入请求后**不直接落盘**，先在终端打印一份预览并等一个 y/n：
 
    ```
-   收到导入请求
-     来源  https://tokenflux.dev        ← 请求的 Origin，最关键的一行
-     主机  https://tokenflux.dev
+   收到网页导入请求
+     验证  已验证当前 tf 会话
+     来源  https://tokenflux.dev
+     网关  https://tokenflux.dev
      分组  Claude（Anthropic 格式）
      Key   tk-a1b2…3f2c  「macbook」
    写入 ~/.tf/credentials.json？[写入 / 拒绝]（方向键选择，回车确认）
    ```
 
-   预览里写出 **Origin** 是重点：用户能一眼看出这把 Key 是不是从自家站推过来的，比对一串无意义的配对码有信息量得多。非交互环境不能使用网页导入；`--json` 与 `--no-input` 都会拒绝需要终端确认的流程。
-4. **只在用户选择网页导入或显式传入 `--from-web` 后监听**，收到确认并完成当前登录流程后关闭；不做常驻守护进程。
-5. **威胁模型**：监听只绑 `127.0.0.1`，恶意的**本地**进程本来就能读凭据文件，不是新增攻击面。真正要防的只有一件事：恶意网页往你的 CLI 里塞一把**攻击者的 Key**，让你的流量（连同 prompt）跑在对方账号上。带 Origin 的预览确认直接堵住这条，再加 CORS origin 白名单（一个 header）和「只在 login 期间开窗」。
+   预览里的 **Origin** 帮助用户识别预期网页，但不是本机进程的身份凭证；本机进程可以伪造该 Header，网页侧会话证明负责补足这个方向。非交互环境不能使用网页导入；`--json` 与 `--no-input` 都会拒绝需要终端确认的流程。
+4. **只在用户选择网页导入或显式传入 `--from-web` 后监听**，用户确认后先返回 HTTP 响应并关闭监听，再继续网关校验和写盘；不做常驻守护进程。
+5. **威胁模型**：CORS、LNA 和 Origin 预览限制网页请求并保护真实 CLI 的写入流程，但不能认证网页连接到的本机服务。另一个本机用户虽然不能读取当前用户的 `0600` 凭据文件，却能预占固定高位端口并伪装 `/ping`；终端确认发生在 POST 之后，来不及保护未验证路径上的 Key 机密性。
 
-   不做配对码的理由：它只多解决一个边缘情形，即同时开着多个 `tf login`，页面连上了不是你盯着的那个。而有了预览确认，这种情形的后果也只是「另一个窗口在等确认、这个窗口没反应」，用户扫一眼就知道，不值得为它给所有人加一道核对手续。
+   终端链接提供可选的双向会话证明：secret 只放在 fragment 中，页面先验证绑定实际端口和随机 challenge 的 HMAC，再为 `/import` 原始 body 生成 `X-TF-Session-Proof`，让 CLI 确认请求持有同一 secret。为了兼容旧前端，普通扫描与无证明导入仍保留；页面应提示“未验证本机 CLI”，终端则提示“未验证本机 tf 会话；确认后仍可继续”，但按当前产品决策不强制阻断。
 
 ---
 
@@ -84,16 +90,16 @@ CLI 收到 → 终端预览并确认 → 回应 202 → 用 /v1/models 校验 �
 |---|---|---|---|---|---|
 | PKCE 浏览器授权（原方案） | 2 个接口 + Cloudflare 豁免 | 新授权页 | ✅ | 小 | 打印 URL 可用 |
 | `tf://` scheme 导入 | 无 | 一个按钮 | ❌ 需 install-handler + 签名 | **argv 可见** | ❌ |
-| **localhost 导入（推荐）** | **无** | 一个按钮 + 探测 | ✅ | 小 | ❌（用 `--with-key` 兜底）|
+| **localhost 导入（推荐）** | **无** | 一个按钮 + 可选会话验证 | ✅ | 已验证路径小；未验证扫描有本机伪装风险 | ❌（用 `--with-key` 兜底）|
 
-安全兵力全部压在**终端侧带 Origin 的预览确认**一处：不管请求来自哪个 Origin、连的哪个端口，写盘前都要用户确认；Origin 与 CORS 只是第一层筛选，不是用户身份认证。它同时盖住了「导错终端」和「恶意页面推 Key」，因此不再需要额外的配对机制。
+安全边界分成两个方向：终端侧 Origin 预览确认负责授权“是否写入本地凭据”；终端链接中的可选 challenge/HMAC 与导入证明让网页和 CLI 验证双方持有同一会话 secret。未实现后者时只提供兼容路径，并明确显示未验证警告。
 
 ---
 
 ## 落地顺序（修订）
 
 1. **v0**：`tf login --with-key`，页面上「复制 Key」，终端隐藏输入粘贴。零改动，所有场景可用，也是 SSH 场景的永久兜底。
-2. **过渡版（已落地）**：keys 页加「导入 tf」按钮 + localhost 通道。CLI 与前端配合，不改 TokenRouter 后端；接入字段和响应见 [`../integrations/web-import.md`](../integrations/web-import.md)。
+2. **过渡版（CLI 侧已落地）**：CLI 已实现 localhost 通道和可选会话证明；Keys 页按钮、状态展示与联调仍待前端接入，不改 TokenRouter 后端。接入字段和响应见 [`../integrations/web-import.md`](../integrations/web-import.md)。
 3. **v1（可选）**：如果哪天真出了带 GUI 的桌面端，再顺手注册 `tf://`；单独为 CLI 做 scheme 不划算。
 4. PKCE 那套授权服务器，留到「要让第三方工具也能接入」时再谈，那时它的价值不再是省事，而是开放能力。
 

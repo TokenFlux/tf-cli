@@ -6,15 +6,18 @@
 
 ## 一、一次导入的顺序
 
-网页只能发现 CLI 并发送请求；是否写入 Key 始终由终端里的用户决定。先记住：`202 Accepted` 只表示用户已在终端选择“写入”，不表示 Key 已通过网关校验或已经写入本地文件。
+网页负责发现 CLI 并发送请求；是否写入 Key 始终由终端里的用户决定。CLI 提供可选的本次监听会话验证：从终端给出的链接进入页面时，页面可以验证当前端口确实属于这次 `tf login`，并显示“已验证当前 tf 会话”。没有实现验证或直接打开 Keys 页时仍可导入，但页面必须标记“未验证”并显示警告，不强制阻断。
+
+`202 Accepted` 只表示用户已在终端选择“写入”，不表示 Key 已通过网关校验或已经写入本地文件。
 
 ```
 运行 tf login
     |
     v
-CLI 等待网页请求
+CLI 等待网页请求并给出本次会话链接
     |
-    +-- GET /ping -> 网页找到 CLI；CLI 继续等待
+    +-- 链接进入 -> 验证指定端口 -> 标记“已验证”
+    +-- 直接打开 -> 扫描端口 -> 标记“未验证”并警告
     |
     +-- POST /import
           |
@@ -28,11 +31,13 @@ CLI 等待网页请求
 
 ### 1. 启动 CLI
 
-用户运行 `tf login [名字]` 并选择“从网页导入”，或运行 `tf login [名字] --from-web [--host <网关>]`。CLI 会在 `127.0.0.1:43110` 到 `127.0.0.1:43119` 中顺序绑定第一个可用端口，并在终端显示监听地址、允许的网页 Origin、打开 Keys 页的地址和 10 分钟超时提示。
+用户运行 `tf login [名字]` 并选择“从网页导入”，或运行 `tf login [名字] --from-web [--host <网关>]`。CLI 会在 `127.0.0.1:43110` 到 `127.0.0.1:43119` 中顺序绑定第一个可用端口，生成本次监听会话的 secret，并在终端显示监听地址、允许的网页 Origin、带验证信息的 Keys 页链接和 10 分钟超时提示。secret 只放在 URL fragment 中，不会随页面请求发送到 TokenFlux 后端。
 
 ### 2. 网页发现 CLI
 
-用户主动触发“导入到 tf”一类操作后，网页探测这 10 个端口的 `GET /ping`。收到 `200 OK` 且 `service` 为 `tf`、`protocol` 为 `1` 的端口即可用于导入。这个请求只用于发现服务，CLI 会继续等待。
+通过终端链接打开页面时，网页从 fragment 读取端口和本次会话 secret，只访问指定端口，并通过 challenge/HMAC 验证会话。验证成功后显示“已验证当前 tf 会话”。
+
+直接打开 Keys 页或前端尚未实现验证扩展时，网页仍可探测这 10 个端口的 `GET /ping`；匹配 `service: "tf"` 和 `protocol: 1` 只表示服务自报为 tf，不能认证本机服务。页面应显示“未验证本机 CLI”的警告，但按当前产品决策不强制阻断。两种请求都只用于发现，CLI 会继续等待。
 
 ### 3. 网页发送请求
 
@@ -40,11 +45,11 @@ CLI 等待网页请求
 
 ### 4. 用户在终端确认
 
-终端展示来源 Origin、网关、分组、脱敏 Key 和目标 Key 名称。用户选择“写入”时，CLI 返回 `202 Accepted`；选择“拒绝”时，CLI 返回 `409 rejected` 并继续等待下一次请求；取消或输入中断时，CLI 返回 `409 cancelled` 并结束流程。
+终端先显示“已验证当前 tf 会话”状态，或对缺失/错误的导入证明显示“未验证本机 tf 会话；确认后仍可继续”警告，再展示来源 Origin、网关、分组、脱敏 Key 和目标 Key 名称。验证状态不改变可选项：用户选择“写入”时，CLI 返回 `202 Accepted`；选择“拒绝”时，CLI 返回 `409 rejected` 并继续等待下一次请求；取消或输入中断时，CLI 返回 `409 cancelled` 并结束流程。
 
 ### 5. CLI 完成后续工作
 
-收到 `202` 后，页面最多只能提示“终端已确认，CLI 正在完成校验”，不能显示“导入成功”。CLI 会在 HTTP 响应后请求网关 `/v1/models`、探测协议并写入本地凭据；任何校验或写盘错误只在终端报告，随后关闭监听。
+收到 `202` 后，页面最多只能提示“终端已确认，CLI 正在完成校验”，不能显示“导入成功”。CLI 返回 HTTP 响应后会先关闭本地监听，再请求网关 `/v1/models`、探测协议并写入本地凭据；任何校验或写盘错误只在终端报告。
 
 ---
 
@@ -69,7 +74,15 @@ tf login [名字] --from-web [--host <网关地址>]
 - `[名字]`（可选）：指定保存的 Key 名称。如不传，默认目标为 `default`。
 - `--from-web`（可选直达）：跳过方式选择器，直接开启本地回环 HTTP 导入监听。不能与 `--with-key` 同时使用。
 - `--with-key`（可选直达）：跳过方式选择器，直接从管道或终端隐藏输入读取 Key。
-- `--host <网关地址>`（可选）：指定网关 Base URL（默认使用 `https://tokenflux.dev` 或配置中已有的 host）。CLI 会将其归一化并提取出允许的 `Origin`。
+- `--host <网关地址>`（可选）：覆盖本次登录使用的网关 Base URL。未指定时，CLI 优先沿用同名 Key 已保存的 host，否则使用二进制的编译时默认值；官方二进制默认为 `https://tokenflux.dev`。CLI 会将最终生效的地址归一化并提取出允许的 `Origin`。
+
+终端中的会话链接使用以下 fragment；示例中的 secret 已省略：
+
+```text
+https://tokenflux.dev/keys#tf=1.43110.<base64url-secret>
+```
+
+fragment 不会进入发往 TokenFlux Web 服务器的 HTTP 请求。页面脚本读取后应从地址栏移除它，且不得写入日志、分析事件或持久化存储。
 
 ### 2. 监听地址与端口范围
 - **地址**：严格绑定在 IPv4 回环地址 `127.0.0.1`（不监听 `0.0.0.0`，也不监听公网 IP）。
@@ -102,17 +115,42 @@ iframe 场景：
 <iframe src="https://tokenflux.dev/keys" allow="loopback-network; local-network-access"></iframe>
 ```
 
-### 2. 严格 Origin 校验
-CLI 在启动时由 `--host`（如 `https://tokenflux.dev`）严格计算出期望的 `Origin`。
-- 每个进来的请求，CLI 都会对比 HTTP 请求头中的 `Origin` 字段。
-- 若 `Origin` 不匹配，CLI 直接返回 `403 Forbidden`（响应体 `{"ok": false, "error": "origin_not_allowed"}`），且**不附带**任何 CORS 允许头。
+### 2. 可选的监听会话验证
 
-### 3. CORS 响应头与旧版 Chrome PNA 兼容
+CLI 每次启动网页导入时生成 16 字节（128 位）随机 secret，并把扩展版本、实际监听端口和 secret 放进 Keys 页 URL fragment：`#tf=1.<port>.<base64url-secret>`。页面通过该链接启动时：
+
+1. 生成一个 16 至 128 字符、无 `=` padding 的 base64url challenge。
+2. 请求指定端口的 `GET /ping?challenge=<challenge>`。
+3. 读取响应中的 `proof`，并计算以下 HMAC：
+
+```text
+base64url-no-padding(
+  HMAC-SHA256(session-secret, "tf-web-import-v1\n<port>\n<challenge>")
+)
+```
+
+只有 proof 完全一致时，页面才能显示“已验证当前 tf 会话”。发送 `/import` 时，页面还可以用同一个 secret 对实际发送的原始 JSON 字节生成以下 Header：
+
+```text
+X-TF-Session-Proof: base64url-no-padding(
+  HMAC-SHA256(session-secret, "tf-web-import-v1\n<port>\nimport\n<raw-json-body>")
+)
+```
+
+CLI 验证该 Header 后在终端显示“已验证当前 tf 会话”。Header 缺失或错误只触发“未验证”警告，不拒绝导入。普通 `/ping` 不返回 proof；旧前端可以继续使用普通端口发现并完成导入，但应显示“未验证”警告。验证只确认当前回环端口和导入请求属于终端链接对应的这次 CLI 会话，不代表 Key、网关或网页内容本身可信。
+
+### 3. 严格 Origin 校验
+
+CLI 从本次登录最终生效的网关地址（已保存的同名 Key host、编译时默认值或 `--host` 覆盖）计算期望的 `Origin`。
+- 对 `/ping`、`/import` 及其预检请求，CLI 都会对比 HTTP 请求头中的 `Origin` 字段。
+- 若 `Origin` 不匹配，CLI 返回 `403 Forbidden`（响应体 `{"ok": false, "error": "origin_not_allowed"}`），且**不附带**任何 CORS 允许头。因此浏览器页面无法读取这个 403 的状态码或响应体，只会得到网络错误；响应内容仅供原始 HTTP 调试。
+
+### 4. CORS 响应头与旧版 Chrome PNA 兼容
 当 `Origin` 校验通过时，CLI 会在所有有效响应及 `OPTIONS` 预检中设置以下 Header：
 ```http
 Access-Control-Allow-Origin: <当前页面Origin>
 Access-Control-Allow-Methods: GET, POST, OPTIONS
-Access-Control-Allow-Headers: Content-Type
+Access-Control-Allow-Headers: Content-Type, X-TF-Session-Proof
 Access-Control-Allow-Private-Network: true
 Access-Control-Max-Age: 600
 Cache-Control: no-store
@@ -124,7 +162,7 @@ Vary: Origin
 OPTIONS /import HTTP/1.1
 Origin: https://tokenflux.dev
 Access-Control-Request-Method: POST
-Access-Control-Request-Headers: content-type
+Access-Control-Request-Headers: content-type, x-tf-session-proof
 Access-Control-Request-Private-Network: true
 ```
 CLI 将响应 `204 No Content`，并带上上述 CORS 与 `Access-Control-Allow-Private-Network: true`。Chrome 142+ 的 LNA 权限提示由浏览器负责，不能用这个响应头绕过。
@@ -137,13 +175,14 @@ CLI 仅提供两个 endpoint：`GET /ping` 和 `POST /import`。不支持任何�
 
 ### 1. 服务发现：`GET /ping`
 
-用于网页前端扫描本地是否有正在等待导入的 `tf` 实例。
+用于网页前端发现本地是否有正在等待导入的 `tf` 实例，也可验证终端链接对应的本次监听会话。
 
 - **Method**: `GET`
 - **Path**: `/ping`
+- **Query**: `challenge`（可选）。启用会话验证时传入 16 至 128 字符、无 `=` padding 的 base64url 字符串；其它字符或长度会返回 `invalid_challenge`。
 - **Request Headers**:
   - `Origin: <当前网页Origin>`
-- **成功响应** (`200 OK`):
+- **普通发现响应** (`200 OK`):
   ```json
   {
     "ok": true,
@@ -152,8 +191,19 @@ CLI 仅提供两个 endpoint：`GET /ping` 和 `POST /import`。不支持任何�
     "version": "<tf-version>"
   }
   ```
-  - `protocol`: 协议版本号（当前恒为整型 `1`）。
+- **带 challenge 的响应** (`200 OK`):
+  ```json
+  {
+    "ok": true,
+    "service": "tf",
+    "protocol": 1,
+    "version": "<tf-version>",
+    "proof": "<base64url-hmac>"
+  }
+  ```
+  - `protocol`: 导入协议版本号（当前恒为整型 `1`）。
   - `version`: 当前 CLI 的版本号。
+  - `proof`: 可选会话证明。没有 challenge 的普通发现响应不会包含该字段；单独看到 `service: "tf"` 不能认证本机服务。
 
 ---
 
@@ -164,20 +214,21 @@ CLI 仅提供两个 endpoint：`GET /ping` 和 `POST /import`。不支持任何�
 - **Method**: `POST`
 - **Path**: `/import`
 - **Request Headers**:
-  - `Content-Type: application/json`（必需，且不能带其它无关媒体类型）
+  - `Content-Type: application/json`（必需；允许合法参数，例如 `charset=utf-8`，但媒体类型必须是 `application/json`）
   - `Origin: <当前网页Origin>`
-- **Request Body 限制**: JSON 请求体最大不超过 **32 KB**，且**禁止包含任何未定义字段**（CLI 端使用 `DisallowUnknownFields` 解析）。
+  - `X-TF-Session-Proof: <base64url-hmac>`（可选；缺失或错误时请求仍会进入终端确认，但标记为未验证）
+- **Request Body 限制**: JSON 请求体最大不超过 **32 KiB**，且**禁止包含任何未定义字段**（CLI 端使用 `DisallowUnknownFields` 解析）。
 
 #### 请求字段说明（Protocol Version 1）
 
 | 字段名 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|
 | `version` | `number` (int) | **是** | 必须为 `1`。非 `1` 会返回 `unsupported_protocol`。 |
-| `key` | `string` | **是** | API Key 字符串。长度 ≤ 16KB，两端自动 Trim，内容必须全部是可打印 ASCII（`0x21`–`0x7e`），不能包含空白、控制字符或 Unicode。 |
+| `key` | `string` | **是** | API Key 字符串。两端先自动 Trim；Trim 后长度 ≤ 16 KiB，剩余内容必须全部是可打印 ASCII（`0x21`–`0x7e`），不能包含内部空白、控制字符或 Unicode。 |
 | `host` | `string` | **是** | 目标网关 Base URL（例如 `https://tokenflux.dev` 或 `https://router.example.com`）。CLI 归一化后的 Origin 必须与 CLI 启动时的 host Origin 完全一致，否则返回 `host_mismatch`。 |
-| `key_name` | `string` | 否 | Key 的显示名称（如 `"macbook-key"`）。UTF-8 编码长度 ≤ 256 字节，不得包含 Unicode 控制字符、双向文本覆盖或零宽格式字符。 |
+| `key_name` | `string` | 否 | 来源网页中该 Key 的名称（如 `"macbook-key"`），只作为导入来源元数据保存，不决定本地 Key 名称；本地名称由 `tf login [名字]` 决定。UTF-8 编码长度 ≤ 256 字节，不得包含 Unicode `Cc`、`Cf` 或 `Cs` 类字符。 |
 | `group_id` | `number` (int64) | 否 | 分组 ID。必须 `≥ 0`。 |
-| `group_name` | `string` | 否 | 分组名称（如 `"Claude"` 或 `"GPT"`）。UTF-8 编码长度 ≤ 256 字节，不得包含 Unicode 控制字符、双向文本覆盖或零宽格式字符。 |
+| `group_name` | `string` | 否 | 分组名称（如 `"Claude"` 或 `"GPT"`）。UTF-8 编码长度 ≤ 256 字节，不得包含 Unicode `Cc`、`Cf` 或 `Cs` 类字符。 |
 
 #### 请求体示例
 ```json
@@ -199,21 +250,22 @@ CLI 仅提供两个 endpoint：`GET /ping` 和 `POST /import`。不支持任何�
 
 | HTTP 状态码 | 响应内容 / error 代码 | 触发原因 / 场景 | 前端处理建议 |
 |---|---|---|---|
-| **`200 OK`** | `{"ok":true,"service":"tf",...}` | `GET /ping` 成功探测到 CLI。 | 标记该端口可用，点亮导入按钮。 |
+| **`200 OK`** | `{"ok":true,"service":"tf",...}` | `GET /ping` 得到发现响应；带合法 challenge 时还会包含 `proof`。 | 只有 proof 校验通过才标记“已验证”；普通响应只能作为未验证发现结果。 |
 | **`202 Accepted`** | `{"ok":true,"status":"accepted"}` | `POST /import` 已经通过终端人工确认「写入」；CLI 随后还会进行 `/v1/models` 校验和本地写盘。 | 页面提示“终端已确认，CLI 正在完成校验”；最终错误只会显示在终端，不能把 `202` 当作网关校验成功回执。 |
 | **`204 No Content`** | *(无 Body)* | `OPTIONS` 预检请求通过。 | 浏览器内部流程。 |
-| **`400 Bad Request`** | `{"ok":false,"error":"unsupported_protocol"}` | `version` 不为 1。 | 提示用户升级 CLI 或检查前端调用版本。 |
-| | `{"ok":false,"error":"invalid_key"}` | `key` 为空、超长(>16KB)或含有空格/换行等空白字符。 | 检查前端 Key 格式。 |
+| **`400 Bad Request`** | `{"ok":false,"error":"invalid_challenge"}` | `/ping` 的 challenge 长度不在 16 至 128 字符内，含有非 base64url 字符，或带 `=` padding。 | 放弃会话验证，将该连接标记为未验证。 |
+| | `{"ok":false,"error":"unsupported_protocol"}` | `version` 不为 1。 | 提示用户升级 CLI 或检查前端调用版本。 |
+| | `{"ok":false,"error":"invalid_key"}` | Key 在 Trim 后为空、超过 16 KiB，或剩余内容含空白、控制字符或非 ASCII 字符。 | 检查前端 Key 格式。 |
 | | `{"ok":false,"error":"host_mismatch"}` | 请求体中的 `host` 计算出的 Origin 与 CLI 期望的 Origin 不匹配。 | 确认请求 host 是否与当前站点一致。 |
-| | `{"ok":false,"error":"invalid_metadata"}` | `group_id < 0` 或 `key_name`/`group_name` 超长(>256B)或含控制字符。 | 检查填入的元数据。 |
+| | `{"ok":false,"error":"invalid_metadata"}` | `group_id < 0`，或 `key_name`/`group_name` 超过 256 字节或含 Unicode `Cc`、`Cf`、`Cs` 类字符。 | 检查填入的元数据。 |
 | | `{"ok":false,"error":"invalid_json"}` | JSON 格式错误，或含有未定义字段。 | 确保 JSON 纯净且字段无拼写错误。 |
-| **`403 Forbidden`** | `{"ok":false,"error":"origin_not_allowed"}` | 请求 Header 的 `Origin` 与 CLI 允许的 Origin 不一致。 | 跨站请求被拦截。 |
-| **`404 Not Found`** | `{"ok":false,"error":"not_found"}` | 访问了除 `/ping`、`/import` 外的其它路径。 | 检查请求路径。 |
+| **`403 Forbidden`** | `{"ok":false,"error":"origin_not_allowed"}` | 请求 Header 的 `Origin` 与 CLI 允许的 Origin 不一致。响应没有 CORS 允许头。 | 浏览器脚本只能观察到网络错误；通过 DevTools 或原始 HTTP 调试 Origin。 |
+| **`404 Not Found`** | `{"ok":false,"error":"not_found"}` | 访问了除 `/ping`、`/import` 外的其它路径。响应没有 CORS 允许头。 | 浏览器脚本只能观察到网络错误；检查请求路径。 |
 | **`405 Method Not Allowed`** | `{"ok":false,"error":"method_not_allowed"}` | 在 `/ping` 上使用非 GET/OPTIONS，或在 `/import` 上使用非 POST/OPTIONS。 | 检查 HTTP Method。 |
 | **`409 Conflict`** | `{"ok":false,"error":"rejected"}` | 用户在终端弹出的确认提示中主动选择了「拒绝」（Reject）。 | 页面提示“用户已在终端拒绝导入”。 |
 | | `{"ok":false,"error":"cancelled"}` | 用户在终端用 ESC 取消确认，或确认输入无法继续。Ctrl+C 会直接终止 CLI，浏览器通常得到网络错误。 | 页面提示“终端已取消操作”或要求重新启动监听。 |
 | | `{"ok":false,"error":"busy"}` | 已经有一个导入请求正在等待终端确认，同一时间收到并发请求。 | 提示“CLI 正在处理其他确认，请稍后重试”。 |
-| **`415 Unsupported Media Type`** | `{"ok":false,"error":"content_type"}` | `Content-Type` 不是 `application/json`。 | 请求 Header 显式加上 `Content-Type: application/json`。 |
+| **`415 Unsupported Media Type`** | `{"ok":false,"error":"content_type"}` | 解析出的媒体类型不是 `application/json`，或 Content-Type 语法无效。 | 请求 Header 显式加上 `Content-Type: application/json`。 |
 
 ---
 
@@ -225,6 +277,13 @@ export interface PingResponse {
   service: string;
   protocol: number;
   version: string;
+  proof?: string;
+}
+
+export interface TfCliTarget {
+  port: number;
+  // true 只表示通过了本次终端链接的会话证明。
+  verified: boolean;
 }
 
 export interface ImportPayload {
@@ -245,115 +304,224 @@ export interface ImportResult {
 
 const PORT_START = 43110;
 const PORT_END = 43119;
+const LOCAL_REQUEST_TIMEOUT_MS = 30_000;
+const SESSION_PROOF_HEADER = 'X-TF-Session-Proof';
+const verifiedSessions = new WeakMap<TfCliTarget, ArrayBuffer>();
 
 type LoopbackRequestInit = RequestInit & {
   targetAddressSpace?: 'loopback';
 };
 
+type TfImportSession = {
+  port: number;
+  secret: ArrayBuffer;
+};
+
 function fetchLoopback(url: string, init: RequestInit = {}): Promise<Response> {
   return fetch(url, {
     ...init,
-    // 新版浏览器会据此应用 loopback 权限；旧版会忽略未知字典字段。
+    // 声明预期地址空间；浏览器仍会独立请求 LNA 权限。
     targetAddressSpace: 'loopback',
   } as LoopbackRequestInit);
 }
 
-/**
- * 用户点击“导入到 tf”后调用；不要在页面加载时自动扫描。
- */
-export async function detectTfCli(timeoutMs = 500): Promise<number | null> {
-  const ports = Array.from({ length: PORT_END - PORT_START + 1 }, (_, i) => PORT_START + i);
+function decodeBase64Url(value: string): ArrayBuffer {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0)).buffer;
+}
 
-  // 并发探测所有端口
-  const probePromises = ports.map(async (port) => {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+function encodeBase64Url(value: Uint8Array): string {
+  let binary = '';
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
-      const resp = await fetchLoopback(`http://127.0.0.1:${port}/ping`, {
-        method: 'GET',
-        headers: {
-          // 浏览器会自动附加 Origin: window.location.origin
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
+function readTfImportSession(): TfImportSession | null {
+  const match = /^#tf=1\.(4311[0-9])\.([A-Za-z0-9_-]{22})$/.exec(window.location.hash);
+  if (!match) return null;
 
-      if (resp.ok) {
-        const data: PingResponse = await resp.json();
-        if (data.service === 'tf' && data.protocol === 1) {
-          return port;
-        }
-      }
-    } catch {
-      // 端口未开放、连接拒绝或超时，忽略。不要记录请求对象或 Key。
-    }
+  // 尽早从地址栏移除会话 secret；fragment 不会发给 Web 后端。
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+  const port = Number(match[1]);
+  try {
+    const secret = decodeBase64Url(match[2]);
+    return secret.byteLength === 16 ? { port, secret } : null;
+  } catch {
     return null;
-  });
+  }
+}
 
-  const results = await Promise.all(probePromises);
+function randomChallenge(): string {
+  return encodeBase64Url(crypto.getRandomValues(new Uint8Array(18)));
+}
+
+async function fetchPing(
+  port: number,
+  challenge?: string,
+  timeoutMs = LOCAL_REQUEST_TIMEOUT_MS
+): Promise<PingResponse | null> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const suffix = challenge ? `?challenge=${encodeURIComponent(challenge)}` : '';
+  try {
+    const resp = await fetchLoopback(`http://127.0.0.1:${port}/ping${suffix}`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    if (!resp.ok) return null;
+    const data: PingResponse = await resp.json();
+    return data.service === 'tf' && data.protocol === 1 ? data : null;
+  } catch {
+    // 端口未开放、权限被拒绝、连接失败或超时都按未发现处理。
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function signSessionMessage(secret: ArrayBuffer, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    secret,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(message)
+  );
+  return encodeBase64Url(new Uint8Array(signature));
+}
+
+function expectedProof(session: TfImportSession, challenge: string): Promise<string> {
+  return signSessionMessage(
+    session.secret,
+    `tf-web-import-v1\n${session.port}\n${challenge}`
+  );
+}
+
+function equalProof(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let i = 0; i < left.length; i++) {
+    difference |= left.charCodeAt(i) ^ right.charCodeAt(i);
+  }
+  return difference === 0;
+}
+
+/**
+ * 首次 LNA 授权需要用户操作，因此不能使用亚秒级超时。
+ */
+export async function detectTfCli(
+  timeoutMs = LOCAL_REQUEST_TIMEOUT_MS
+): Promise<number | null> {
+  const ports = Array.from(
+    { length: PORT_END - PORT_START + 1 },
+    (_, index) => PORT_START + index
+  );
+  const results = await Promise.all(
+    ports.map(async (port) => ((await fetchPing(port, undefined, timeoutMs)) ? port : null))
+  );
   return results.find((port): port is number => port !== null) ?? null;
 }
 
 /**
- * 推送 API Key 到已发现的 tf CLI 端口
+ * 从终端链接进入时验证指定会话；直接打开页面时保留未验证发现流程。
+ */
+export async function findTfCli(): Promise<TfCliTarget | null> {
+  const session = readTfImportSession();
+  if (session) {
+    const challenge = randomChallenge();
+    const ping = await fetchPing(session.port, challenge);
+    if (ping) {
+      let verified = false;
+      try {
+        const expected = await expectedProof(session, challenge);
+        verified = typeof ping.proof === 'string' && equalProof(ping.proof, expected);
+      } catch {
+        // Web Crypto 不可用时降级为未验证，不阻断兼容流程。
+      }
+      const target: TfCliTarget = { port: session.port, verified };
+      if (verified) verifiedSessions.set(target, session.secret);
+      return target;
+    }
+  }
+
+  const port = await detectTfCli();
+  return port === null ? null : { port, verified: false };
+}
+
+/**
+ * 推送 API Key。调用前应显示 target.verified 对应的已验证状态或警告。
  */
 export async function importKeyToTf(
-  port: number,
+  target: TfCliTarget,
   payload: Omit<ImportPayload, 'version'>
 ): Promise<ImportResult> {
-  const body: ImportPayload = {
-    version: 1,
-    ...payload,
-  };
+  const body: ImportPayload = { version: 1, ...payload };
+  const encodedBody = JSON.stringify(body);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const secret = verifiedSessions.get(target);
+  if (secret) {
+    try {
+      headers[SESSION_PROOF_HEADER] = await signSessionMessage(
+        secret,
+        `tf-web-import-v1\n${target.port}\nimport\n${encodedBody}`
+      );
+    } catch {
+      // 证明生成失败时降级为未验证请求；CLI 会警告，但不会拒绝。
+    }
+  }
 
   try {
-    const resp = await fetchLoopback(`http://127.0.0.1:${port}/import`, {
+    const resp = await fetchLoopback(`http://127.0.0.1:${target.port}/import`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
+      headers,
+      body: encodedBody,
     });
-
     const resData = await resp.json();
-
     if (resp.status === 202 && resData.ok) {
-      return { accepted: true, port };
+      return { accepted: true, port: target.port };
     }
-
     return {
       accepted: false,
-      port,
+      port: target.port,
       error: resData.error || `HTTP_${resp.status}`,
     };
   } catch {
     // 不回传或记录原始异常对象，避免浏览器/监控 SDK 附带请求上下文。
-    return {
-      accepted: false,
-      port,
-      error: 'network_error',
-    };
+    return { accepted: false, port: target.port, error: 'network_error' };
   }
 }
 ```
+
+页面必须在调用 `importKeyToTf` 前展示连接状态：`target.verified === true` 时显示“已验证当前 tf 会话”；否则显示“未验证本机 CLI，继续操作会把 Key 发送给未经验证的本机服务”。未验证状态是警告，不禁用导入按钮。将 `findTfCli` 返回的同一个 `target` 对象传给 `importKeyToTf`，示例会自动附加可选导入证明，CLI 也会在终端显示相同状态。不要使用范围过大的“可信页面”或“可信 Key”，因为会话证明只认证这次 CLI 监听和本次请求。
 
 ---
 
 ## 七、安全规范与边界（前端开发必读）
 
 1. **禁止在前端日志或 URL 中暴露 API Key**
-   - 网页端不得将 API Key 作为 URL Query 参数传递。
+   - 网页端不得将 API Key 作为 URL Query 或 fragment 参数传递。
+   - 本次监听会话的 secret 可以出现在终端生成的 URL fragment 中，但页面读取后应立即从地址栏移除，也不得记录或持久化。
    - 捕获异常或输出 `console.log` / `console.error` 调试信息时，**严禁打印包含 `key` 字段的完整对象**；如果需要打日志，必须对 Key 进行掩码处理（如只保留首尾）。
-2. **终端交互确认绝不可绕过**
-   - CLI 在将任何凭据写入 `credentials.json`（权限 `0600`）之前，**必须且必定**在本地交互终端上向用户展示请求来源 `Origin`、`Host`、`Group` 及脱敏后的 Key，等待用户手动确认（选择 `写入` 或 `拒绝`）。HTTP `202` 表示这一步已确认，不等于网关校验与写盘已经成功。
+2. **会话验证可选，但状态必须如实显示**
+   - `/ping` challenge/HMAC 验证页面连接的是终端链接对应的本次 tf 会话；可选的 `X-TF-Session-Proof` 再让 CLI 验证 `/import` 请求持有同一会话 secret。它们不认证 Key、网关、分组元数据或网页自身。
+   - 旧前端或直接打开的页面可以继续使用未验证端口扫描；页面必须显示警告，但当前协议不强制阻断导入。
+   - 未验证扫描无法排除其它本机进程伪装 `/ping` 服务。因为 Key 在终端确认前已经通过 POST 发出，后续终端确认不能保护这条未验证路径上的 Key 机密性。
+3. **终端交互确认绝不可绕过**
+   - CLI 在将任何凭据写入 `credentials.json`（权限 `0600`）之前，**必须且必定**在本地交互终端上向用户展示请求来源 `Origin`、网关、分组及脱敏后的 Key，等待用户手动确认（选择 `写入` 或 `拒绝`）。HTTP `202` 表示这一步已确认，不等于网关校验与写盘已经成功。
    - CLI 明确设计：`--json` 或 `--no-input` 标志**不会且不能**绕过该终端确认。在非交互终端下不会显示方式选择器；显式使用 `--from-web` 会直接报错退出。
-   - `Origin` 与 CORS 只能限制普通浏览器页面，不能认证本机进程；任何本机进程都能伪造 HTTP `Origin`。最终授权边界是终端中展示的来源、网关和脱敏 Key，以及用户的手动确认。
-3. **元数据落地（`SourceImport`）**
-   - 网关校验和本地保存成功后，CLI 会在凭据库中写入 `source: "import"`（区别于手工粘贴的 `paste`），同时记录 `origin`、`key_name`、`group_id` 和 `group_name`。`tf keys` 的文本与 JSON 输出会带出这些来源信息。这些字段来自网页请求，供本地展示和追溯，不是网关签发的可信声明。
-4. **协议兼容策略**
-   - 当前协议主版本为 `version: 1`。CLI 收到非 1 版本的请求会直接拒绝并返回 `unsupported_protocol`。
-   - CLI 开启了严格的未知字段拦截（`DisallowUnknownFields`），前端**不得**在 JSON 中传递未在协议中约定的额外扩展字段，否则会导致 `invalid_json`。
+   - `Origin` 与 CORS 只能限制普通浏览器页面，不能认证本机进程；任何本机进程都能伪造 HTTP `Origin`。终端确认是写入本地凭据的最终授权边界，与网页侧的可选会话验证解决不同方向的问题。
+4. **元数据落地（`SourceImport`）**
+   - 凭据文件写入成功后，CLI 会记录 `source: "import"`（区别于手工粘贴的 `paste`），以及 `origin`、`key_name`、`group_id` 和 `group_name`。`tf keys` 的文本与 JSON 输出会带出这些来源信息。这些字段来自网页请求，供本地展示和追溯，不是网关签发的可信声明。
+5. **协议兼容策略**
+   - 当前导入协议主版本仍为 `version: 1`。CLI 收到非 1 版本的导入请求会返回 `unsupported_protocol`；可选的 challenge/proof 是向后兼容的 `/ping` 扩展。
+   - CLI 开启了严格的未知字段拦截（`DisallowUnknownFields`），前端**不得**在 `/import` JSON 中传递未在协议中约定的额外扩展字段，否则会导致 `invalid_json`。
 
 ---
 
@@ -363,9 +531,11 @@ export async function importKeyToTf(
    - 协议基于浏览器到本机回环地址（`127.0.0.1`）的通信。若用户通过 SSH 在远程服务器选择网页导入或运行 `tf login --from-web`，本地浏览器访问本地 `127.0.0.1` 将无法触达远端 CLI（除非用户自行配置了 SSH 端口转发）。此类场景请引导用户选择“粘贴 API Key”，或使用 `tf login --with-key`。
 2. **端口段固定为 43110-43119**
    - 若本机同时运行超过 10 个 `tf login --from-web` 实例，或者该范围内的 10 个端口全部被其他本地应用占用，CLI 会直接报错退出，前端也将无法探测到服务。
-3. **单并发排队限制**
-   - CLI 单个实例在同一时刻只能处理一个导入事务（进入确认期后原子标记 `busy`）。若并发发起多个 `/import` 请求，后续请求将立即收到 `409 Conflict (busy)`。
-4. **网页与网关目前必须同源**
-   - CLI 从 `--host` 同时推导网关地址和允许的网页 Origin。若自托管部署把 Keys 页面与 API 网关放在不同 Origin，目前需要调整为同源入口，不能在请求体中另行指定一个前端 Origin。
-5. **Windows 交互环境限制**
+3. **单并发拒绝，不提供排队**
+   - CLI 单个实例在同一时刻只能处理一个导入事务（进入确认期后原子标记 `busy`）。若并发发起多个 `/import` 请求，后续请求将立即收到 `409 Conflict (busy)`，不会进入队列。
+4. **未验证模式只告警，不阻断**
+   - 直接打开页面时的端口扫描不能认证本机服务，伪装的监听器可能在终端确认前收到 Key。前端应优先使用终端链接完成会话验证；按当前产品决策，未验证状态仍允许用户继续。
+5. **网页与网关目前必须同源**
+   - CLI 从本次登录最终生效的网关地址推导允许的网页 Origin。若自托管部署把 Keys 页面与 API 网关放在不同 Origin，目前需要调整为同源入口，不能在请求体中另行指定一个前端 Origin。
+6. **Windows 交互环境限制**
    - 当前 CLI 终端交互界面依赖 Unix TTY 特性。在未支持完整终端交互的 Windows 环境下，`--from-web` 会因为无法进行交互确认而提示不受支持。

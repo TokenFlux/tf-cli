@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +50,10 @@ func TestWebImportDecision(t *testing.T) {
 
 func TestWebImportPingAndPrivateNetworkPreflight(t *testing.T) {
 	events := make(chan webImportEvent)
-	h := &webImportHandler{host: testWebOrigin, origin: testWebOrigin, events: events}
+	h := &webImportHandler{
+		host: testWebOrigin, origin: testWebOrigin, port: webImportPortFirst,
+		sessionSecret: bytes.Repeat([]byte{0x42}, webImportSessionBytes), events: events,
+	}
 
 	ping := httptest.NewRecorder()
 	h.ServeHTTP(ping, webRequest(http.MethodGet, "/ping", testWebOrigin, ""))
@@ -66,6 +70,9 @@ func TestWebImportPingAndPrivateNetworkPreflight(t *testing.T) {
 	if data["service"] != "tf" || data["protocol"] != float64(webImportProtocol) {
 		t.Errorf("unexpected ping: %v", data)
 	}
+	if _, ok := data["proof"]; ok {
+		t.Error("ordinary discovery ping must not expose a session proof")
+	}
 
 	preflight := httptest.NewRecorder()
 	r := webRequest(http.MethodOptions, "/import", testWebOrigin, "")
@@ -76,6 +83,69 @@ func TestWebImportPingAndPrivateNetworkPreflight(t *testing.T) {
 	}
 	if got := preflight.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
 		t.Errorf("allow private network = %q", got)
+	}
+	if got := preflight.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, webImportProofHeader) {
+		t.Errorf("allow headers = %q", got)
+	}
+}
+
+func TestWebImportSessionURLUsesFragment(t *testing.T) {
+	secret := bytes.Repeat([]byte{0x42}, webImportSessionBytes)
+	got := webImportSessionURL("https://router.example/base/", webImportPortFirst, secret)
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Path != "/base/keys" || parsed.RawQuery != "" {
+		t.Fatalf("session URL path/query = %q %q", parsed.Path, parsed.RawQuery)
+	}
+	if parsed.Fragment != "tf=1.43110.QkJCQkJCQkJCQkJCQkJCQg" {
+		t.Errorf("session fragment = %q", parsed.Fragment)
+	}
+}
+
+func TestWebImportProofBindsPortAndChallenge(t *testing.T) {
+	secret := make([]byte, webImportSessionBytes)
+	for i := range secret {
+		secret[i] = byte(i)
+	}
+	const challenge = "abcdefghijklmnop"
+	const want = "OANoOu0fwo146i4Jsp5LVCCSuWp4wwh66qb8Z4NHoyA"
+	if got := webImportProof(secret, webImportPortFirst, challenge); got != want {
+		t.Fatalf("proof = %q, want %q", got, want)
+	}
+	if got := webImportProof(secret, webImportPortFirst+1, challenge); got == want {
+		t.Error("proof did not bind the listener port")
+	}
+	if got := webImportProof(secret, webImportPortFirst, challenge+"x"); got == want {
+		t.Error("proof did not bind the challenge")
+	}
+}
+
+func TestWebImportPingCanProveSession(t *testing.T) {
+	secret := bytes.Repeat([]byte{0x42}, webImportSessionBytes)
+	h := &webImportHandler{
+		host: testWebOrigin, origin: testWebOrigin, port: webImportPortFirst,
+		sessionSecret: secret, events: make(chan webImportEvent),
+	}
+	const challenge = "abcdefghijklmnop"
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, webRequest(http.MethodGet, "/ping?challenge="+challenge, testWebOrigin, ""))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("proof ping status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var data map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &data); err != nil {
+		t.Fatal(err)
+	}
+	if data["proof"] != webImportProof(secret, webImportPortFirst, challenge) {
+		t.Errorf("proof ping = %v", data)
+	}
+
+	bad := httptest.NewRecorder()
+	h.ServeHTTP(bad, webRequest(http.MethodGet, "/ping?challenge=short", testWebOrigin, ""))
+	if bad.Code != http.StatusBadRequest || !strings.Contains(bad.Body.String(), "invalid_challenge") {
+		t.Errorf("invalid challenge = %d %s", bad.Code, bad.Body.String())
 	}
 }
 
@@ -94,12 +164,18 @@ func TestWebImportRejectsOtherOrigins(t *testing.T) {
 
 func TestWebImportDeliversConfirmedRequestWithoutEchoingKey(t *testing.T) {
 	events := make(chan webImportEvent)
-	h := &webImportHandler{host: testWebOrigin, origin: testWebOrigin, events: events}
+	secret := bytes.Repeat([]byte{0x42}, webImportSessionBytes)
+	h := &webImportHandler{
+		host: testWebOrigin, origin: testWebOrigin, port: webImportPortFirst,
+		sessionSecret: secret, events: events,
+	}
 	body := `{"version":1,"key":"sk-secret-value","host":"https://tokenflux.dev/","key_name":"laptop","group_id":7,"group_name":"GPT"}`
 	rr := httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
-		h.ServeHTTP(rr, webRequest(http.MethodPost, "/import", testWebOrigin, body))
+		r := webRequest(http.MethodPost, "/import", testWebOrigin, body)
+		r.Header.Set(webImportProofHeader, webImportBodyProof(secret, webImportPortFirst, []byte(body)))
+		h.ServeHTTP(rr, r)
 		close(done)
 	}()
 
@@ -110,6 +186,9 @@ func TestWebImportDeliversConfirmedRequestWithoutEchoingKey(t *testing.T) {
 		}
 		if event.Request.Origin != testWebOrigin || event.Request.GroupID != 7 {
 			t.Errorf("metadata missing: %+v", event.Request)
+		}
+		if !event.Request.Verified {
+			t.Error("valid import proof was not carried to terminal confirmation")
 		}
 		event.Reply <- webImportDecision{Accepted: true}
 	case <-time.After(time.Second):
@@ -183,6 +262,9 @@ func TestWebImportReturnsRejectedDecision(t *testing.T) {
 	var event webImportEvent
 	select {
 	case event = <-events:
+		if event.Request.Verified {
+			t.Error("request without a session proof must remain unverified")
+		}
 	case <-time.After(time.Second):
 		t.Fatal("handler did not deliver the rejected request")
 	}

@@ -4,6 +4,9 @@ package e2e
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -202,6 +205,95 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 		t.Fatalf("没有从输出找到导入地址\n--- 屏幕 ---\n%s", p.tail())
 	}
 
+	session := regexp.MustCompile(`#tf=1\.(4311[0-9])\.([A-Za-z0-9_-]+)`).FindStringSubmatch(p.screen())
+	if len(session) != 3 {
+		t.Fatalf("没有从输出找到会话链接\n--- 屏幕 ---\n%s", p.tail())
+	}
+	if match != "http://127.0.0.1:"+session[1] {
+		t.Fatalf("监听端口 %q 与会话端口 %q 不一致", match, session[1])
+	}
+	challenge := "abcdefghijklmnop"
+	pingReq, err := http.NewRequest(http.MethodGet, match+"/ping?challenge="+challenge, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pingReq.Header.Set("Origin", srv.URL)
+	pingResp, err := (&http.Client{Timeout: 10 * time.Second}).Do(pingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ping struct {
+		Proof string `json:"proof"`
+	}
+	if err := json.NewDecoder(pingResp.Body).Decode(&ping); err != nil {
+		pingResp.Body.Close()
+		t.Fatal(err)
+	}
+	pingResp.Body.Close()
+	secret, err := base64.RawURLEncoding.DecodeString(session[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(secret) != 16 {
+		t.Fatalf("会话 secret 长度 = %d; want 16", len(secret))
+	}
+	mac := hmac.New(sha256.New, secret)
+	fmt.Fprintf(mac, "tf-web-import-v1\n%s\n%s", session[1], challenge)
+	wantProof := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if pingResp.StatusCode != http.StatusOK || ping.Proof != wantProof {
+		t.Fatalf("会话证明 = %d %q; want %q", pingResp.StatusCode, ping.Proof, wantProof)
+	}
+
+	type result struct {
+		status int
+		body   string
+		err    error
+	}
+	postImport := func(payload []byte, verified bool) <-chan result {
+		ch := make(chan result, 1)
+		go func() {
+			req, err := http.NewRequest(http.MethodPost, match+"/import", bytes.NewReader(payload))
+			if err != nil {
+				ch <- result{err: err}
+				return
+			}
+			req.Header.Set("Origin", srv.URL)
+			req.Header.Set("Content-Type", "application/json")
+			if verified {
+				importMAC := hmac.New(sha256.New, secret)
+				fmt.Fprintf(importMAC, "tf-web-import-v1\n%s\nimport\n", session[1])
+				_, _ = importMAC.Write(payload)
+				req.Header.Set("X-TF-Session-Proof", base64.RawURLEncoding.EncodeToString(importMAC.Sum(nil)))
+			}
+			resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+			if err != nil {
+				ch <- result{err: err}
+				return
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			ch <- result{status: resp.StatusCode, body: string(body), err: err}
+		}()
+		return ch
+	}
+
+	unverifiedPayload := []byte(fmt.Sprintf(
+		`{"version":1,"key":"sk-unverified","host":%q}`, srv.URL))
+	unverifiedCh := postImport(unverifiedPayload, false)
+	p.waitFor("未验证本机 tf 会话")
+	p.waitFor("写入")
+	p.send(keyDown)
+	p.send(keyEnter)
+	select {
+	case got := <-unverifiedCh:
+		if got.err != nil || got.status != http.StatusConflict || !strings.Contains(got.body, `"rejected"`) {
+			t.Fatalf("未验证请求响应 = %d %s %v", got.status, got.body, got.err)
+		}
+	case <-time.After(12 * time.Second):
+		t.Fatal("未验证请求没有收到拒绝响应")
+	}
+	p.waitFor("已拒绝该请求，继续等待")
+
 	payload := []byte(fmt.Sprintf(`{
 		"version": 1,
 		"key": "sk-web-import-test",
@@ -210,31 +302,10 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 		"group_id": 7,
 		"group_name": "GPT"
 	}`, srv.URL))
-	type result struct {
-		status int
-		body   string
-		err    error
-	}
-	resultCh := make(chan result, 1)
-	go func() {
-		req, err := http.NewRequest(http.MethodPost, match+"/import", bytes.NewReader(payload))
-		if err != nil {
-			resultCh <- result{err: err}
-			return
-		}
-		req.Header.Set("Origin", srv.URL)
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
-		if err != nil {
-			resultCh <- result{err: err}
-			return
-		}
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		resultCh <- result{status: resp.StatusCode, body: string(body), err: err}
-	}()
+	resultCh := postImport(payload, true)
 
 	p.waitFor("收到网页导入请求")
+	p.waitFor("已验证当前 tf 会话")
 	p.waitFor("写入")
 	p.send(keyEnter)
 
