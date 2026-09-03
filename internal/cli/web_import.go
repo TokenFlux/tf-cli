@@ -177,7 +177,7 @@ func confirmWebImport(c *Context, req webImportRequest, credentialsPath, targetN
 
 	c.UI.Logf("%s", c.UI.Bold(c.UI.T("收到网页导入请求", "Web import received")))
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("来源", "origin"), 8), req.Origin)
-	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("网关", "host"), 8), req.Host)
+	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("网关", "gateway"), 8), req.Host)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("分组", "group"), 8), group)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("Key", "key"), 8), key)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("名称", "name"), 8), destination)

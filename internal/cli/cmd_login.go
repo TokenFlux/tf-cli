@@ -18,7 +18,7 @@ import (
 func newLoginCommand() *Command {
 	return &Command{
 		Name:  "login",
-		Usage: "tf login [<名字>]",
+		Usage: "tf login [<name>]",
 		Summary: func(u *ui.UI) string {
 			return u.T("保存 API Key", "Store an API key")
 		},
@@ -29,6 +29,13 @@ func newLoginCommand() *Command {
 			{Name: "force", Kind: KindBool, Desc: "名称冲突时直接覆盖；网页导入仍需确认||Overwrite on name conflicts; web import still requires confirmation"},
 		},
 		Run: runLogin,
+	}
+}
+
+func loginMethodItems(u *ui.UI) []ui.Item {
+	return []ui.Item{
+		{Label: u.T("粘贴 API Key", "Paste API key"), Detail: u.T("终端隐藏输入", "hidden terminal input")},
+		{Label: u.T("从网页导入", "Import from web"), Detail: u.T("等待网页发送", "wait for a web page")},
 	}
 }
 
@@ -64,10 +71,7 @@ func runLogin(c *Context) error {
 	}
 	// 管道输入本身就是明确选择，不能为了问方式而先去读 /dev/tty。
 	if !fromWeb && !withKey && isTerminal(os.Stdin) && c.UI.Interactive(c.Flags.Bool("no-input")) {
-		idx, err := c.UI.Select(c.UI.T("选择登录方式", "Choose a login method"), []ui.Item{
-			{Label: c.UI.T("粘贴 API Key", "Paste an API key"), Detail: c.UI.T("终端隐藏输入", "hidden terminal input")},
-			{Label: c.UI.T("从网页导入", "Import from the web"), Detail: c.UI.T("等待 TokenFlux 页面发送", "wait for the TokenFlux page")},
-		})
+		idx, err := c.UI.Select(c.UI.T("选择登录方式", "Choose a login method"), loginMethodItems(c.UI))
 		if err != nil {
 			return err
 		}
@@ -157,7 +161,7 @@ func runLogin(c *Context) error {
 		"key": config.Mask(key), "models": ids, "protocols": cfg.Keys[keyName].Protocols,
 	}, func() {
 		c.UI.Printf("✓ %s\n", fmt.Sprintf(c.UI.T("已保存为 Key %q", "saved as key %q"), keyName))
-		c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("网关", "host"), 8), host)
+		c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("网关", "gateway"), 8), host)
 		c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("Key", "key"), 8), config.Mask(key))
 		c.UI.Printf("  %s %d %s\n", ui.Pad(c.UI.T("模型", "models"), 8), len(ids), c.UI.Dim(strings.Join(ids, ", ")))
 		if protos := cfg.Keys[keyName].ProtocolSummary(); len(protos) > 0 {
@@ -172,7 +176,7 @@ func runLogin(c *Context) error {
 	return nil
 }
 
-// resolveLoginName 处理“这个 profile 已经有另一把 Key”的情况。
+// resolveLoginName 处理“这个 Key 名称已经有另一把 Key”的情况。
 //
 // 默认行为绝不能是静默覆盖：覆掉的 Key 本地无处可找，用户得重新
 // 去网页拿。但也不能要求用户自己想名字 —— 直接根据这把 Key 看得到的
@@ -182,11 +186,11 @@ func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 
 	existing, ok := creds.Get(target)
 	switch {
-	case !ok: // 该 profile 还没凭据
+	case !ok: // 该名称还没凭据
 		return target, nil
 	case existing.Key == key: // 同一把，重写无害
 		return target, nil
-	case explicit: // 用户点名了这个 profile，意图明确
+	case explicit: // 用户点名了这个名称，意图明确
 		return target, nil
 	case c.Flags.Bool("force"):
 		return target, nil
@@ -220,24 +224,24 @@ func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
 	case 1:
 		return target, nil
 	}
-	return askProfileName(c, creds, suggestion)
+	return askKeyName(c, creds, suggestion)
 }
 
-// askProfileName 让用户输入 profile 名，并当场校验。
+// askKeyName 让用户输入 Key 名称，并当场校验。
 //
 // 已存在的名字不直接拒绝 —— 用户可能就是想覆盖那一个，
 // 但必须把影响说清楚。
-func askProfileName(c *Context, creds *config.Credentials, suggestion string) (string, error) {
+func askKeyName(c *Context, creds *config.Credentials, suggestion string) (string, error) {
 	for {
 		name, err := c.UI.ReadLine(fmt.Sprintf(
-			c.UI.T("名字 [%s]：", "name [%s]:"), suggestion))
+			c.UI.T("Key 名称 [%s]：", "key name [%s]:"), suggestion))
 		if err != nil {
 			return "", err
 		}
 		if name == "" {
 			return suggestion, nil
 		}
-		if !validProfileName(name) {
+		if !validKeyName(name) {
 			c.UI.Warnf("%s", c.UI.T("名称只能用字母、数字、下划线和连字符，最长 32 位",
 				"names may only contain letters, digits, underscores and hyphens, max 32"))
 			continue
@@ -250,7 +254,7 @@ func askProfileName(c *Context, creds *config.Credentials, suggestion string) (s
 	}
 }
 
-func validProfileName(s string) bool {
+func validKeyName(s string) bool {
 	if s == "" || len(s) > 32 {
 		return false
 	}
@@ -387,7 +391,7 @@ func readKey(c *Context) (string, error) {
 		return "", ui.Errf(ui.CodeUsage, msg).WithHint("echo $KEY | tf login")
 	}
 
-	key, err := c.UI.ReadSecret(c.UI.T("输入 API Key（不回显）：", "Paste your API key (hidden):"))
+	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（输入不回显）：", "Paste API key (hidden):"))
 	if err != nil {
 		// ui 层的哨兵错误只有英文，是底层措辞；本地化只在命令层做，
 		// 直接抛上去会让中文界面顶着一句英文。

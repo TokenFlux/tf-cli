@@ -86,7 +86,7 @@ func (c *Credentials) Save() error {
 	return writeAtomic(c.paths.CredentialsFile(), append(data, '\n'), credsFilePerm)
 }
 
-// Get 返回某 profile 的凭据。
+// Get 返回某个 Key 名称对应的凭据。
 //
 // 环境变量 TF_API_KEY 优先于落盘凭据，且不写盘 —— 容器与 CI 场景。
 func (c *Credentials) Get(name string) (*Credential, bool) {
@@ -97,7 +97,7 @@ func (c *Credentials) Get(name string) (*Credential, bool) {
 	return cred, ok && cred != nil && cred.Key != ""
 }
 
-// Set 写入某 profile 的凭据。
+// Set 写入某个 Key 名称对应的凭据。
 func (c *Credentials) Set(name string, cred *Credential) {
 	if c.Items == nil {
 		c.Items = map[string]*Credential{}
@@ -132,7 +132,7 @@ func (c *Credentials) Names() []string {
 	return out
 }
 
-// Remove 删除某个 profile 的凭据。
+// Remove 删除某个 Key 名称对应的凭据。
 func (c *Credentials) Remove(name string) {
 	delete(c.Items, name)
 }

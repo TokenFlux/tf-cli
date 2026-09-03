@@ -37,9 +37,13 @@ Unix 上 `syscall.Exec` 直接将自身进程替换为 harness 进程，信号�
 - `~/.tf/cache/`（`0700`）：存储探测缓存与元数据。
 - 支持 `XDG_CONFIG_HOME` 与 `XDG_CACHE_HOME` 环境变量规范。
 
-### D. 国际化与错误输出规范
+### D. 国际化、文案与机器接口
 
-文案支持中英双语（跟随系统 Locale，支持 `TF_LANG` 覆盖）；错误码采用稳定英文常量（如 `TF_NETWORK`、`TF_NOT_LOGGED_IN`）。
+当前支持中英双语：依次读取 `TF_LANG`、`LC_ALL`、`LC_MESSAGES`、`LANG`，无法识别时回退英文。面向人的 CLI 文案就近写为 `u.T(中文, English)`，不引入 catalog 或第三方框架；只有真实需要第三语言时，才统一评估 `Slot.Purpose(bool)` 一类二元语言接口。
+
+人类输出可本地化：交互标签、提示、错误 `message` / `hint`、帮助标题和 CLI 自己生成的 JSON `warnings` / `notes` 都随语言切换。机器接口不可本地化：错误码（如 `TF_NETWORK`、`TF_NOT_LOGGED_IN`）、命令和 flag、JSON 字段与枚举值、协议端点与参数、模型 ID 和槽位名均保持稳定 ASCII/英文。`Command.Usage` 的占位符同样使用语言中性的 ASCII（如 `tf login [<name>]`）。
+
+展示层把接入端点称作“网关 / gateway”；兼容性接口仍保持 `--host` 与配置、JSON 中的 `host`。登录保存的是命名 Key，不存在全局 profile。
 
 ---
 

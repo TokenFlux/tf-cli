@@ -96,7 +96,7 @@ func printStatus(c *Context, cfg *config.Config, creds *config.Credentials, out 
 		}
 		meta := cfg.KeyMetaOf(name)
 		c.UI.Printf("\n%s  %s  %s\n", name, c.UI.Dim(config.Mask(cred.Key)),
-			c.UI.Dim(fmt.Sprintf(c.UI.T("%d 个模型", "%d models"), len(meta.Models))))
+			c.UI.Dim(formatModelCount(c.UI, len(meta.Models))))
 		printUsage(c, out.Usage[name])
 	}
 
@@ -134,6 +134,16 @@ func printStatus(c *Context, cfg *config.Config, creds *config.Credentials, out 
 	for _, p := range out.Problems {
 		c.UI.Warnf("%s", p)
 	}
+}
+
+func formatModelCount(u *ui.UI, n int) string {
+	if u.Lang == ui.LangZH {
+		return fmt.Sprintf("%d 个模型", n)
+	}
+	if n == 1 {
+		return "1 model"
+	}
+	return fmt.Sprintf("%d models", n)
 }
 
 // fetchUsage 并发取各把 Key 的额度。取不到就没有，不报错。

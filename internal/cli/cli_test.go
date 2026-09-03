@@ -142,6 +142,52 @@ func TestGlobalFlagsAvailableEverywhere(t *testing.T) {
 	}
 }
 
+func TestLoginMethodItemsFollowLocale(t *testing.T) {
+	cases := []struct {
+		lang ui.Lang
+		want []ui.Item
+	}{
+		{ui.LangZH, []ui.Item{
+			{Label: "粘贴 API Key", Detail: "终端隐藏输入"},
+			{Label: "从网页导入", Detail: "等待网页发送"},
+		}},
+		{ui.LangEN, []ui.Item{
+			{Label: "Paste API key", Detail: "hidden terminal input"},
+			{Label: "Import from web", Detail: "wait for a web page"},
+		}},
+	}
+	for _, tc := range cases {
+		if got := loginMethodItems(&ui.UI{Lang: tc.lang}); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("loginMethodItems(%s) = %#v, want %#v", tc.lang, got, tc.want)
+		}
+	}
+}
+
+func TestCommandUsageIsASCII(t *testing.T) {
+	for _, cmd := range allCommands() {
+		if strings.ContainsFunc(cmd.Usage, func(r rune) bool { return r > 0x7f }) {
+			t.Errorf("%s usage must use ASCII placeholders: %q", cmd.Name, cmd.Usage)
+		}
+	}
+}
+
+func TestFormatModelCountFollowsLocale(t *testing.T) {
+	cases := []struct {
+		lang ui.Lang
+		n    int
+		want string
+	}{
+		{ui.LangZH, 1, "1 个模型"},
+		{ui.LangEN, 1, "1 model"},
+		{ui.LangEN, 2, "2 models"},
+	}
+	for _, tc := range cases {
+		if got := formatModelCount(&ui.UI{Lang: tc.lang}, tc.n); got != tc.want {
+			t.Errorf("formatModelCount(%s, %d) = %q, want %q", tc.lang, tc.n, got, tc.want)
+		}
+	}
+}
+
 // 建议的名字取自分组前缀或模型名首词元，并要避开已占用的名字。
 func TestSuggestKeyName(t *testing.T) {
 	cases := []struct {

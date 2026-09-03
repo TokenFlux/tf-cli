@@ -296,7 +296,7 @@ func TestInteractiveLoginCanChoosePaste(t *testing.T) {
 	p.waitFor("选择登录方式")
 	p.waitFor("粘贴 API Key")
 	p.send(keyEnter)
-	p.waitFor("输入 API Key")
+	p.waitFor("粘贴 API Key")
 	p.send("sk-interactive-paste\n")
 	p.waitFor(`已保存为 Key "paste"`)
 	if code := p.waitExit(); code != 0 {

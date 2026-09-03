@@ -11,7 +11,7 @@ import (
 func newLogoutCommand() *Command {
 	return &Command{
 		Name:  "logout",
-		Usage: "tf logout [<名字>] [--all] [--force]",
+		Usage: "tf logout [<name>] [--all] [--force]",
 		Summary: func(u *ui.UI) string {
 			return u.T("删除本机的 Key", "Remove a key stored here")
 		},
@@ -23,11 +23,11 @@ func newLogoutCommand() *Command {
 	}
 }
 
-// pickProfile 确定要删哪一把。
+// pickKeyName 确定要删哪一把。
 //
-// 优先级：位置参数 > --profile > 只有一把时直接选它 > 交互选择。
+// 优先级：位置参数 > --key > 只有一把时直接选它 > 交互选择。
 // 多把凭据下绝不静默猜：删错一把就要重新去网页拿 Key。
-func pickProfile(c *Context, creds *config.Credentials, stored []string) (string, error) {
+func pickKeyName(c *Context, creds *config.Credentials, stored []string) (string, error) {
 	if len(c.Args) > 0 {
 		return c.Args[0], nil
 	}
@@ -59,7 +59,7 @@ func pickProfile(c *Context, creds *config.Credentials, stored []string) (string
 // confirm 在删之前问一句。
 //
 // 单把也要问：原来的理由是「--all 删完只能回网页重新拿」，但删单把同样
-// 只能回网页重新拿 —— 本地不留明文备份。而且只有一把 Key 时 pickProfile
+// 只能回网页重新拿 —— 本地不留明文备份。而且只有一把 Key 时 pickKeyName
 // 会直接选中它，tf logout 一秒删完，中间没有任何一屏。
 //
 // 真正的不对称不在删几把，而在能不能撤销，那一点上两者相同。
@@ -116,7 +116,7 @@ func runLogout(c *Context) error {
 		removed = stored
 		creds.Clear()
 	default:
-		name, err := pickProfile(c, creds, stored)
+		name, err := pickKeyName(c, creds, stored)
 		if err != nil {
 			return err
 		}

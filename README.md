@@ -53,8 +53,8 @@ make build
 $ tf login
 选择登录方式
 ❯ 粘贴 API Key  终端隐藏输入
-  从网页导入     等待 TokenFlux 页面发送
-输入 API Key（不回显）：
+  从网页导入     等待网页发送
+粘贴 API Key（输入不回显）：
 ✓ 已保存为 Key "work"
   网关     https://tokenflux.dev
   Key      sk-d61…5b1c
