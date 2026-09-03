@@ -23,6 +23,12 @@
 
 ## [未发布]
 
+（暂无）
+
+---
+
+## [0.5.2] — 2026-09-04
+
 ### 破坏性变更
 
 - 项目仓库与 Go module 从 `github.com/tokenflux/tkr` 改为 `github.com/tokenflux/tf-cli`。源码安装请改用 `go install github.com/tokenflux/tf-cli/cmd/tf@latest`；命令名、二进制名、配置目录和 `TF_*` 环境变量保持不变。
@@ -171,7 +177,8 @@
 - 方向键选择器，支持输入过滤。
 - 中英双语，跟随系统 locale，`TKR_LANG` 可覆盖。
 
-[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.5.1...HEAD
+[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/TokenFlux/tf-cli/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/TokenFlux/tf-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/TokenFlux/tf-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TokenFlux/tf-cli/compare/v0.3.0...v0.4.0

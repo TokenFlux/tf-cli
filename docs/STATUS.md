@@ -1,6 +1,6 @@
 # tf-cli 现状
 
-对应 v0.5.1 之后的 main。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 v0.5.2。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
@@ -20,7 +20,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 7800 行生产代码、4200 行测试，155 个测试函数，六个已发布版本，零第三方依赖。
+约 7800 行生产代码、4200 行测试，155 个测试函数，七个已发布版本，零第三方依赖。
 
 ## 二、里程碑
 
@@ -56,12 +56,12 @@
   `tf model` 需 `--edit` 才进编辑器）
 - **v0.5.0** 新增 `tf status`、额度显示和启动前冲突检查；补上 PTY、网关固件与 Linux 实机测试
 - **v0.5.1** 重写 README，统一中文 CLI 文案，规范发布说明
-- **main（待发布）** 落地网页 Key 导入与可选会话证明、归档早期设计稿，并新增前端接入文档；
+- **v0.5.2** 落地网页 Key 导入与可选会话证明、归档早期设计稿，并新增前端接入文档；
   GitHub 仓库改名为 `TokenFlux/tf-cli`，Go module 改为 `github.com/tokenflux/tf-cli`，命令名仍为 `tf`
 
 仓库改名后，旧 GitHub URL 会自动重定向，现有二进制的自更新和 `install.sh` 均已实测可用。
-首个包含新 module 路径的版本发布前，`go install github.com/tokenflux/tf-cli/cmd/tf@latest`
-仍会命中声明旧路径的 `v0.5.1` 而失败；源码用户暂时使用 README 的 clone 构建方式，不重打历史 tag。
+自 `v0.5.2` 起 module 路径已正式匹配，
+`go install github.com/tokenflux/tf-cli/cmd/tf@latest` 可直接使用。
 
 ## 四、实测得到的事实
 

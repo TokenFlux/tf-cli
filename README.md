@@ -23,7 +23,15 @@ curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | 
 
 默认安装至 `~/.local/bin/tf`（可通过环境变量 `TF_INSTALL_DIR` 自定义安装路径），无需管理员权限。
 
-### 源码编译
+### 源码安装与编译
+
+通过 `go install` 直接安装：
+
+```sh
+go install github.com/tokenflux/tf-cli/cmd/tf@latest
+```
+
+或克隆源码仓库本地编译：
 
 ```sh
 git clone https://github.com/tokenflux/tf-cli.git
