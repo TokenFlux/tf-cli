@@ -16,11 +16,11 @@
 ## 一、当前形态
 
 命令：`version` `status` `config` `login` `logout` `keys` `update` `harness`
-`model` `completions` + `claude` `codex` `opencode`。`tf login --from-web` 提供网页 Key 导入。
+`model` `completions` + `claude` `codex` `opencode`。`tf login` 可交互选择粘贴或网页导入，`--from-web` 可直接进入网页导入。
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 7900 行生产代码、3900 行测试，145 个测试函数，六个已发布版本，零第三方依赖。
+约 7900 行生产代码、3900 行测试，147 个测试函数，六个已发布版本，零第三方依赖。
 
 ## 二、里程碑
 

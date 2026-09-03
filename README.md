@@ -47,10 +47,13 @@ make build
 
 ### 1. 登录并绑定网关
 
-执行 `tf login` 保存 API Key。系统将自动探测网关可用的模型列表与协议支持：
+执行 `tf login` 后先选择粘贴或网页导入。收到 Key 后，系统将自动探测网关可用的模型列表与协议支持：
 
 ```console
 $ tf login
+选择登录方式
+❯ 粘贴 API Key  终端隐藏输入
+  从网页导入     等待 TokenFlux 页面发送
 输入 API Key（不回显）：
 ✓ 已保存为 Key "work"
   网关     https://tokenflux.dev
@@ -66,7 +69,7 @@ $ tf login
 tf login work --host https://router.example.com
 ```
 
-如果接入该协议的 TokenFlux 网页已经提供“导入到 tf”按钮，也可以先启动本地导入等待，再从 Keys 页面发送 Key：
+如果接入该协议的 TokenFlux 网页已经提供“导入到 tf”按钮，在 `tf login work` 的登录方式选择器里选“从网页导入”即可。脚本或熟悉该流程的用户也可以用 flag 直接进入：
 
 ```sh
 tf login work --from-web

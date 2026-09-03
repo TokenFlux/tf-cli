@@ -57,13 +57,26 @@ func runLogin(c *Context) error {
 		host = normalizeHost(h)
 	}
 
+	fromWeb, withKey := c.Flags.Bool("from-web"), c.Flags.Bool("with-key")
+	if fromWeb && withKey {
+		return ui.Errf(ui.CodeUsage,
+			c.UI.T("--from-web 不能和 --with-key 一起使用", "--from-web cannot be used with --with-key"))
+	}
+	// 管道输入本身就是明确选择，不能为了问方式而先去读 /dev/tty。
+	if !fromWeb && !withKey && isTerminal(os.Stdin) && c.UI.Interactive(c.Flags.Bool("no-input")) {
+		idx, err := c.UI.Select(c.UI.T("选择登录方式", "Choose a login method"), []ui.Item{
+			{Label: c.UI.T("粘贴 API Key", "Paste an API key"), Detail: c.UI.T("终端隐藏输入", "hidden terminal input")},
+			{Label: c.UI.T("从网页导入", "Import from the web"), Detail: c.UI.T("等待 TokenFlux 页面发送", "wait for the TokenFlux page")},
+		})
+		if err != nil {
+			return err
+		}
+		fromWeb = idx == 1
+	}
+
 	var key string
 	var imported *webImportRequest
-	if c.Flags.Bool("from-web") {
-		if c.Flags.Bool("with-key") {
-			return ui.Errf(ui.CodeUsage,
-				c.UI.T("--from-web 不能和 --with-key 一起使用", "--from-web cannot be used with --with-key"))
-		}
+	if fromWeb {
 		if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 			return ui.Errf(ui.CodeUsage,
 				c.UI.T("网页导入需要交互式终端确认", "web import requires an interactive terminal for confirmation")).

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -190,7 +191,11 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	f := writeConfig(t, srv.URL, models)
 	env := append(f.env(), "SHELL=/bin/sh") // 不在登录成功后追问 shell 补全
 
-	p := start(t, env, "login", "web", "--from-web", "--host", srv.URL)
+	p := start(t, env, "login", "web", "--host", srv.URL)
+	p.waitFor("选择登录方式")
+	p.waitFor("从网页导入")
+	p.send(keyDown)
+	p.send(keyEnter)
 	p.waitFor("等待网页导入")
 	match := regexp.MustCompile(`http://127\.0\.0\.1:4311[0-9]`).FindString(p.screen())
 	if match == "" {
@@ -279,5 +284,47 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Errorf("凭据权限 = %v; want 0600", info.Mode().Perm())
+	}
+}
+
+func TestInteractiveLoginCanChoosePaste(t *testing.T) {
+	srv := fakeGateway(t, []string{"gpt-5.4"})
+	f := writeConfig(t, srv.URL, []string{"gpt-5.4"})
+	env := append(f.env(), "SHELL=/bin/sh")
+
+	p := start(t, env, "login", "paste", "--host", srv.URL)
+	p.waitFor("选择登录方式")
+	p.waitFor("粘贴 API Key")
+	p.send(keyEnter)
+	p.waitFor("输入 API Key")
+	p.send("sk-interactive-paste\n")
+	p.waitFor(`已保存为 Key "paste"`)
+	if code := p.waitExit(); code != 0 {
+		t.Fatalf("退出码 = %d，want 0\n--- 屏幕 ---\n%s", code, p.tail())
+	}
+}
+
+// 管道本身已经明确选择了粘贴方式；即使机器有控制终端，也不能再弹
+// 登录方式选择器抢走 stdin。
+func TestPipedLoginSkipsMethodPicker(t *testing.T) {
+	srv := fakeGateway(t, []string{"gpt-5.4"})
+	f := writeConfig(t, srv.URL, []string{"gpt-5.4"})
+	bin, err := filepath.Abs("../bin/tf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "login", "pipe", "--host", srv.URL)
+	cmd.Env = append(os.Environ(), append(f.env(), "SHELL=/bin/sh")...)
+	cmd.Stdin = strings.NewReader("sk-piped-login\n")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("管道登录失败：%v\n%s", err, out)
+	}
+	text := clean(string(out))
+	if strings.Contains(text, "选择登录方式") {
+		t.Fatalf("管道登录不应弹方式选择器：\n%s", text)
+	}
+	if !strings.Contains(text, `已保存为 Key "pipe"`) {
+		t.Fatalf("管道登录没有保存：\n%s", text)
 	}
 }

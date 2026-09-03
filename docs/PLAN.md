@@ -13,7 +13,7 @@ M0–M6 已完成，M7 分发仍缺 npm 平台包，见 [`STATUS.md`](STATUS.md)
 | 语言 / 分发 | Go 单二进制；GitHub Actions 交叉编译 + install.sh；npm 平台包待做 |
 | 进程模型 | fork + wait（信号转发自己写，换取确定性清理与终端收尾）|
 | 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA |
-| 认证 | 支持粘贴/管道传入 Key；网页「导入 tf」已落地为 localhost 回环 + Origin 预览确认，接入契约见 [`integrations/web-import.md`](integrations/web-import.md) |
+| 认证 | `tf login` 交互选择粘贴或网页导入；管道和显式 flag 直达对应方式。网页导入使用 localhost 回环 + Origin 预览确认，契约见 [`integrations/web-import.md`](integrations/web-import.md) |
 | 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；`--` 无条件透传 |
 | 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；不用钥匙串 |
 | 文案 | 跟随 locale + `TF_LANG`；错误码保持英文常量 |
@@ -71,7 +71,7 @@ internal/
 
 这里的“过渡版”是阶段名，不对应 SemVer 的 `v0.5.0`。CLI 侧已实现 localhost 回环 + Origin 预览确认，不改 TokenRouter 后端；TokenFlux 网页前端仍需按接入文档接线并联调。
 
-CLI 入口为 `tf login [名字] --from-web [--host <网关>]`，完整字段与浏览器示例见 [`integrations/web-import.md`](integrations/web-import.md)。
+普通入口为 `tf login [名字]` 后选择“从网页导入”；`--from-web` 保留为显式直达方式。完整字段与浏览器示例见 [`integrations/web-import.md`](integrations/web-import.md)。
 
 ### 待定：Windows 交互支持
 
