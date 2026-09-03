@@ -34,8 +34,8 @@ func newLoginCommand() *Command {
 
 func loginMethodItems(u *ui.UI) []ui.Item {
 	return []ui.Item{
+		{Label: u.T("从网页导入", "Import from web"), Detail: u.T("自动打开 Keys 页面", "open the Keys page")},
 		{Label: u.T("粘贴 API Key", "Paste API key"), Detail: u.T("终端隐藏输入", "hidden terminal input")},
-		{Label: u.T("从网页导入", "Import from web"), Detail: u.T("等待网页发送", "wait for a web page")},
 	}
 }
 
@@ -75,7 +75,7 @@ func runLogin(c *Context) error {
 		if err != nil {
 			return err
 		}
-		fromWeb = idx == 1
+		fromWeb = idx == 0
 	}
 
 	var key string
@@ -128,7 +128,11 @@ func runLogin(c *Context) error {
 		ids = append(ids, m.ID)
 	}
 
-	keyName, err = resolveLoginName(c, creds, cfg, keyName, explicit, key, ids)
+	if imported != nil && !explicit && !c.Flags.Bool("force") {
+		keyName, err = chooseImportedKeyName(c, creds, imported.KeyName, key, ids)
+	} else {
+		keyName, err = resolveLoginName(c, creds, keyName, explicit, key, ids)
+	}
 	if err != nil {
 		return err
 	}
@@ -176,12 +180,64 @@ func runLogin(c *Context) error {
 	return nil
 }
 
+// chooseImportedKeyName 在网关返回模型目录后，让用户在自动识别、网页名称
+// 和自订名称之间选择。网页名称只是候选，不能绕过本地名称校验。
+func chooseImportedKeyName(c *Context, creds *config.Credentials, webName, key string,
+	ids []string) (string, error) {
+	automatic := suggestKeyName(ids, creds.Names())
+	items := importedKeyNameItems(c.UI, creds, automatic, webName, key)
+	idx, err := c.UI.Select(c.UI.T("选择本地 Key 名称", "Choose a local key name"), items)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case idx == 0:
+		return automatic, nil
+	case idx == len(items)-1:
+		return askKeyName(c, creds, automatic)
+	default:
+		return webName, nil
+	}
+}
+
+func importedKeyNameItems(u *ui.UI, creds *config.Credentials, automatic, webName,
+	key string) []ui.Item {
+	items := []ui.Item{{
+		Label:  fmt.Sprintf(u.T("自动识别为 %q", "detect automatically as %q"), automatic),
+		Detail: u.T("根据可用模型，避开已用名称", "based on available models; avoids existing names"),
+	}}
+
+	if webName != "" && webName != automatic {
+		item := ui.Item{
+			Label:  fmt.Sprintf(u.T("使用网页名称 %q", "use web name %q"), webName),
+			Detail: u.T("网页提供的名称", "name provided by the web page"),
+		}
+		if !validKeyName(webName) {
+			item.Detail = u.T("不符合本地名称规则", "not a valid local name")
+			item.Disabled = true
+		} else if old, ok := creds.Items[webName]; ok && old != nil && old.Key != "" {
+			if old.Key == key {
+				item.Detail = u.T("同一把 Key 已存在，将更新来源信息",
+					"the same key exists; its source metadata will be updated")
+			} else {
+				item.Detail = fmt.Sprintf(u.T("将覆盖 %s", "replaces %s"), config.Mask(old.Key))
+			}
+		}
+		items = append(items, item)
+	}
+
+	return append(items, ui.Item{
+		Label:  u.T("自订名称…", "custom name…"),
+		Detail: u.T("自己输入一个", "type your own"),
+	})
+}
+
 // resolveLoginName 处理“这个 Key 名称已经有另一把 Key”的情况。
 //
 // 默认行为绝不能是静默覆盖：覆掉的 Key 本地无处可找，用户得重新
 // 去网页拿。但也不能要求用户自己想名字 —— 直接根据这把 Key 看得到的
 // 模型挑一个。
-func resolveLoginName(c *Context, creds *config.Credentials, cfg *config.Config,
+func resolveLoginName(c *Context, creds *config.Credentials,
 	target string, explicit bool, key string, ids []string) (string, error) {
 
 	existing, ok := creds.Get(target)

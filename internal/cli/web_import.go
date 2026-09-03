@@ -14,6 +14,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os/exec"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -116,11 +118,16 @@ func waitForWebImport(c *Context, host, credentialsPath, targetName string,
 		}
 	}()
 
+	sessionURL := webImportSessionURL(host, port, sessionSecret)
 	c.UI.Logf("%s", c.UI.Bold(c.UI.T("等待网页导入", "Waiting for web import")))
 	c.UI.Logf("  %s http://127.0.0.1:%d", ui.Pad(c.UI.T("监听", "listen"), 8), port)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("来源", "origin"), 8), origin)
-	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("打开", "open"), 8), webImportSessionURL(host, port, sessionSecret))
+	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("打开", "open"), 8), sessionURL)
 	c.UI.Logf("  %s", c.UI.Dim(c.UI.T("10 分钟内没有请求会自动退出", "exits after 10 minutes without a request")))
+	if err := openWebBrowser(sessionURL); err != nil {
+		c.UI.Warnf("%s", c.UI.T("无法自动打开浏览器；请打开上方链接",
+			"could not open a browser automatically; open the URL above"))
+	}
 
 	timer := time.NewTimer(webImportTimeout)
 	defer timer.Stop()
@@ -181,6 +188,23 @@ func webImportSessionURL(host string, port int, secret []byte) string {
 	return page.String()
 }
 
+func openWebBrowser(rawURL string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", rawURL)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
+	default:
+		cmd = exec.Command("xdg-open", rawURL)
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
 func webImportProof(secret []byte, port int, challenge string) string {
 	mac := hmac.New(sha256.New, secret)
 	fmt.Fprintf(mac, "tf-web-import-v1\n%d\n%s", port, challenge)
@@ -226,12 +250,10 @@ func confirmWebImport(c *Context, req webImportRequest, credentialsPath, targetN
 	}
 
 	destination := targetName
-	if existing != nil && existing.Key != "" && existing.Key != req.Key {
-		if fixedTarget {
-			destination += fmt.Sprintf(c.UI.T("（将覆盖 %s）", " (replaces %s)"), config.Mask(existing.Key))
-		} else {
-			destination = fmt.Sprintf(c.UI.T("校验后选择（%s 已存在）", "choose after validation (%s exists)"), targetName)
-		}
+	if !fixedTarget {
+		destination = c.UI.T("校验后选择", "choose after validation")
+	} else if existing != nil && existing.Key != "" && existing.Key != req.Key {
+		destination += fmt.Sprintf(c.UI.T("（将覆盖 %s）", " (replaces %s)"), config.Mask(existing.Key))
 	}
 
 	c.UI.Logf("%s", c.UI.Bold(c.UI.T("收到网页导入请求", "Web import received")))

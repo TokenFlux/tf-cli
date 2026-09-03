@@ -148,18 +148,50 @@ func TestLoginMethodItemsFollowLocale(t *testing.T) {
 		want []ui.Item
 	}{
 		{ui.LangZH, []ui.Item{
+			{Label: "从网页导入", Detail: "自动打开 Keys 页面"},
 			{Label: "粘贴 API Key", Detail: "终端隐藏输入"},
-			{Label: "从网页导入", Detail: "等待网页发送"},
 		}},
 		{ui.LangEN, []ui.Item{
+			{Label: "Import from web", Detail: "open the Keys page"},
 			{Label: "Paste API key", Detail: "hidden terminal input"},
-			{Label: "Import from web", Detail: "wait for a web page"},
 		}},
 	}
 	for _, tc := range cases {
 		if got := loginMethodItems(&ui.UI{Lang: tc.lang}); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("loginMethodItems(%s) = %#v, want %#v", tc.lang, got, tc.want)
 		}
+	}
+}
+
+func TestImportedKeyNameItems(t *testing.T) {
+	creds := &config.Credentials{Items: map[string]*config.Credential{
+		"browser-key": {Key: "sk-other"},
+	}}
+	u := &ui.UI{Lang: ui.LangZH}
+
+	items := importedKeyNameItems(u, creds, "gpt", "browser-key", "sk-new")
+	if len(items) != 3 {
+		t.Fatalf("items = %#v; want automatic, web, and custom choices", items)
+	}
+	if !strings.Contains(items[0].Label, `"gpt"`) || items[0].Disabled {
+		t.Errorf("automatic item = %#v", items[0])
+	}
+	if !strings.Contains(items[1].Label, `"browser-key"`) ||
+		!strings.Contains(items[1].Detail, "覆盖") || items[1].Disabled {
+		t.Errorf("web item = %#v", items[1])
+	}
+	if !strings.Contains(items[2].Label, "自订") {
+		t.Errorf("custom item = %#v", items[2])
+	}
+
+	invalid := importedKeyNameItems(u, creds, "gpt", "网页 Key", "sk-new")
+	if len(invalid) != 3 || !invalid[1].Disabled || !strings.Contains(invalid[1].Detail, "不符合") {
+		t.Errorf("invalid web name item = %#v", invalid)
+	}
+
+	duplicate := importedKeyNameItems(u, creds, "gpt", "gpt", "sk-new")
+	if len(duplicate) != 2 {
+		t.Errorf("a web name equal to the automatic name must be deduplicated: %#v", duplicate)
 	}
 }
 

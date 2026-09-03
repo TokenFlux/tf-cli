@@ -48,21 +48,21 @@ make build
 
 ### 1. 登录并绑定网关
 
-执行 `tf login` 后先选择粘贴或网页导入。收到 Key 后，系统将自动探测网关可用的模型列表与协议支持：
+`tf login` 默认高亮“从网页导入”。确认后 CLI 会建立本机监听并自动打开 Keys 页面：
 
 ```console
 $ tf login
 选择登录方式
-❯ 粘贴 API Key  终端隐藏输入
-  从网页导入     等待网页发送
-粘贴 API Key（输入不回显）：
-✓ 已保存为 Key "default"
-  网关     https://tokenflux.dev
-  Key      sk-d61…5b1c
-  模型     14 claude-opus-5, claude-sonnet-5, gpt-5.6-sol, …
-  协议     anthropic_messages openai_responses
-  可用于   claude codex opencode
+❯ 从网页导入    自动打开 Keys 页面
+  粘贴 API Key  终端隐藏输入
+等待网页导入
+  监听     http://127.0.0.1:43110
+  来源     https://tokenflux.dev
+  打开     https://tokenflux.dev/keys#tf=1.43110.<session-secret>
+  10 分钟内没有请求会自动退出
 ```
+
+需要粘贴时，在选择器中选择第二项，或使用 `tf login --with-key`。
 
 如使用私有化部署的 TokenRouter 网关：
 
@@ -70,14 +70,15 @@ $ tf login
 tf login work --host https://router.example.com
 ```
 
-如果接入该协议的 TokenFlux 网页已经提供“导入到 tf”按钮，在 `tf login work` 的登录方式选择器里选“从网页导入”即可。脚本或熟悉该流程的用户也可以用 flag 直接进入：
+也可以用 flag 直接进入网页导入：
 
 ```sh
 tf login work --from-web
-# 私有网关：tf login work --from-web --host https://router.example.com
 ```
 
-CLI 会在 `127.0.0.1:43110-43119` 中绑定一个端口，并打印带本次监听会话信息的 Keys 页链接。支持该扩展的网页和终端确认页会显示“已验证当前 tf 会话”；直接打开页面仍可导入，但网页与终端都会显示未验证会话警告。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会校验并写入 `credentials.json`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
+网页和终端确认页会对终端链接显示“已验证当前 tf 会话”；直接打开页面仍可导入，但两端都会显示未验证会话警告。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会继续。
+
+未在命令中指定名称时，CLI 校验 Key 后会让用户选择按可用模型自动命名、采用网页 Key 名称或自订名称。自动命名会避开已有名称；显式运行 `tf login work` 则直接使用 `work`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
 
 ### 2. 启动客户端
 

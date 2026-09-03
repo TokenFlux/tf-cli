@@ -25,13 +25,13 @@ CLI 等待网页请求并给出本次会话链接
         终端确认
           |
           +-- 拒绝 -> 409 rejected -> 回到等待
-          +-- 写入 -> 202 accepted -> 校验 Key -> 保存 -> 退出
+          +-- 写入 -> 202 accepted -> 校验 Key -> 选择本地名称 -> 保存 -> 退出
           +-- 取消或输入中断 -> 409 cancelled -> 退出
 ```
 
 ### 1. 启动 CLI
 
-用户运行 `tf login [名字]` 并选择“从网页导入”，或运行 `tf login [名字] --from-web [--host <网关>]`。CLI 会在 `127.0.0.1:43110` 到 `127.0.0.1:43119` 中顺序绑定第一个可用端口，生成本次监听会话的 secret，并在终端显示监听地址、允许的网页 Origin、带验证信息的 Keys 页链接和 10 分钟超时提示。secret 只放在 URL fragment 中，不会随页面请求发送到 TokenFlux 后端。
+用户运行 `tf login [名字]` 并选择默认项“从网页导入”，或运行 `tf login [名字] --from-web [--host <网关>]`。CLI 会在 `127.0.0.1:43110` 到 `127.0.0.1:43119` 中顺序绑定第一个可用端口，生成本次监听会话的 secret，在终端显示监听地址、允许的网页 Origin、带验证信息的 Keys 页链接和 10 分钟超时提示，然后用系统默认浏览器打开该链接。secret 只放在 URL fragment 中，不会随页面请求发送到 TokenFlux 后端。
 
 ### 2. 网页发现 CLI
 
@@ -45,11 +45,11 @@ CLI 等待网页请求并给出本次会话链接
 
 ### 4. 用户在终端确认
 
-终端先显示“已验证当前 tf 会话”状态，或对缺失/错误的导入证明显示“未验证本机 tf 会话；确认后仍可继续”警告，再展示来源 Origin、网关、分组、脱敏 Key 和目标 Key 名称。验证状态不改变可选项：用户选择“写入”时，CLI 返回 `202 Accepted`；选择“拒绝”时，CLI 返回 `409 rejected` 并继续等待下一次请求；取消或输入中断时，CLI 返回 `409 cancelled` 并结束流程。
+终端先显示“已验证当前 tf 会话”状态，或对缺失/错误的导入证明显示“未验证本机 tf 会话；确认后仍可继续”警告，再展示来源 Origin、网关、分组、脱敏 Key 和名称去向。命令中已指定名称时显示该名称；未指定时显示“校验后选择”。验证状态不改变可选项：用户选择“写入”时，CLI 返回 `202 Accepted`；选择“拒绝”时，CLI 返回 `409 rejected` 并继续等待下一次请求；取消或输入中断时，CLI 返回 `409 cancelled` 并结束流程。
 
 ### 5. CLI 完成后续工作
 
-收到 `202` 后，页面最多只能提示“终端已确认，CLI 正在完成校验”，不能显示“导入成功”。CLI 返回 HTTP 响应后会先关闭本地监听，再请求网关 `/v1/models`、探测协议并写入本地凭据；任何校验或写盘错误只在终端报告。
+收到 `202` 后，页面最多只能提示“终端已确认，CLI 正在完成校验”，不能显示“导入成功”。CLI 返回 HTTP 响应后会先关闭本地监听，再请求网关 `/v1/models`。未在命令中指定本地名称时，终端随后提供按模型自动识别、采用合法的网页 `key_name` 或自订名称三个选项；自动候选会避开已有名称。协议探测、名称选择或写盘错误只在终端报告。
 
 ---
 
@@ -63,7 +63,7 @@ CLI 等待网页请求并给出本次会话链接
 tf login [名字] [--host <网关地址>]
 ```
 
-若 stdin 是终端，且没有指定 `--from-web` 或 `--with-key`，CLI 会显示“粘贴 API Key / 从网页导入”选择器。选择“从网页导入”后进入等待状态。管道输入本身视为已选择粘贴方式，不会弹选择器。
+若 stdin 是终端，且没有指定 `--from-web` 或 `--with-key`，CLI 会显示“从网页导入 / 粘贴 API Key”选择器，并默认高亮网页导入。进入网页导入后，CLI 先建立监听并打印链接，再尝试打开浏览器；浏览器启动失败时继续等待，用户可手动打开终端中的链接。管道输入本身视为已选择粘贴方式，不会弹选择器。
 
 需要直接进入网页导入时使用：
 
@@ -71,8 +71,8 @@ tf login [名字] [--host <网关地址>]
 tf login [名字] --from-web [--host <网关地址>]
 ```
 
-- `[名字]`（可选）：指定保存的 Key 名称。如不传，默认目标为 `default`。
-- `--from-web`（可选直达）：跳过方式选择器，直接开启本地回环 HTTP 导入监听。不能与 `--with-key` 同时使用。
+- `[名字]`（可选）：指定保存的 Key 名称。粘贴登录未指定时使用 `default`；网页导入未指定时，在网关校验后选择自动识别、网页名称或自订名称。
+- `--from-web`（可选直达）：跳过方式选择器，直接开启本地回环 HTTP 导入监听并打开 Keys 页面。不能与 `--with-key` 同时使用。
 - `--with-key`（可选直达）：跳过方式选择器，直接从管道或终端隐藏输入读取 Key。
 - `--host <网关地址>`（可选）：覆盖本次登录使用的网关 Base URL。未指定时，CLI 优先沿用同名 Key 已保存的 host，否则使用二进制的编译时默认值；官方二进制默认为 `https://tokenflux.dev`。CLI 会将最终生效的地址归一化并提取出允许的 `Origin`。
 
@@ -98,7 +98,7 @@ fragment 不会进入发往 TokenFlux Web 服务器的 HTTP 请求。页面脚�
 
 ### 1. 页面发起请求的前置条件
 
-- 只从 HTTPS secure context 接入。用户点击“导入到 tf”后再探测端口，不要在页面加载时自动扫描并触发本地网络权限提示。
+- 只从 HTTPS secure context 接入。用户点击“导入 TF CLI”后再探测端口，不要在页面加载时自动扫描并触发本地网络权限提示。
 - 页面 CSP 的 `connect-src` 必须允许 `http://127.0.0.1:43110` 至 `http://127.0.0.1:43119`。可以逐项列出，也可以在安全策略允许时使用 `http://127.0.0.1:*`。
 - 对支持 LNA 的浏览器，可在 `fetch` / `Request` 参数中声明 `targetAddressSpace: "loopback"`。浏览器仍会要求用户授予 loopback 权限；该参数不绕过权限。
 - 顶层同源页面通常使用默认 Permissions Policy 即可。若 Keys 页面运行在跨源 iframe 中，嵌入方还需委托 `loopback-network`；兼容旧 Chromium 时一并委托 `local-network-access`。
@@ -226,7 +226,7 @@ CLI 仅提供两个业务接口：`GET /ping` 和 `POST /import`；浏览器可�
 | `version` | `number` (int) | **是** | 必须为 `1`。非 `1` 会返回 `unsupported_protocol`。 |
 | `key` | `string` | **是** | API Key 字符串。两端先自动 Trim；Trim 后长度 ≤ 16 KiB，剩余内容必须全部是可打印 ASCII（`0x21`–`0x7e`），不能包含内部空白、控制字符或 Unicode。 |
 | `host` | `string` | **是** | 目标网关 Base URL（例如 `https://tokenflux.dev` 或 `https://router.example.com`）。CLI 归一化后的 Origin 必须与 CLI 启动时的 host Origin 完全一致，否则返回 `host_mismatch`。 |
-| `key_name` | `string` | 否 | 来源网页中该 Key 的名称（如 `"macbook-key"`），只作为导入来源元数据保存，不决定本地 Key 名称；本地名称由 `tf login [名字]` 决定。UTF-8 编码长度 ≤ 256 字节，不得包含 Unicode `Cc`、`Cf`、`Cs`、`Zl` 或 `Zp` 类字符。 |
+| `key_name` | `string` | 否 | 来源网页中该 Key 的名称（如 `"macbook-key"`）。始终作为来源元数据保存；未运行 `tf login [名字]` 指定本地名称时，符合本地命名规则的值还会作为终端候选。UTF-8 编码长度 ≤ 256 字节，不得包含 Unicode `Cc`、`Cf`、`Cs`、`Zl` 或 `Zp` 类字符。 |
 | `group_id` | `number` (int64) | 否 | 分组 ID。必须 `≥ 0`。 |
 | `group_name` | `string` | 否 | 分组名称（如 `"Claude"` 或 `"GPT"`）。UTF-8 编码长度 ≤ 256 字节，不得包含 Unicode `Cc`、`Cf`、`Cs`、`Zl` 或 `Zp` 类字符。 |
 
@@ -507,7 +507,7 @@ export async function importKeyToTf(
 }
 ```
 
-Keys 路由初始化时应立即调用 `const tfImportSession = readTfImportSession()`，将结果只保存在内存中；这一步会先从地址栏移除 `#tf=...`，不会扫描端口或触发 LNA 权限。用户点击“导入到 tf”后再调用 `findTfCli(tfImportSession)`。
+Keys 路由初始化时应立即调用 `const tfImportSession = readTfImportSession()`，将结果只保存在内存中；这一步会先从地址栏移除 `#tf=...`，不会扫描端口或触发 LNA 权限。用户点击“导入 TF CLI”后再调用 `findTfCli(tfImportSession)`。
 
 页面必须在调用 `importKeyToTf` 前展示连接状态：`target.verified === true` 时显示“已验证当前 tf 会话”；否则显示“未验证本机 CLI，继续操作会把 Key 发送给未经验证的本机服务”。未验证状态是警告，不禁用导入按钮。将 `findTfCli` 返回的同一个 `target` 对象传给 `importKeyToTf`，示例会自动附加可选导入证明，CLI 也会在终端显示相同状态。不要使用范围过大的“可信页面”或“可信 Key”，因为会话证明只认证这次 CLI 监听和本次请求。
 
@@ -529,7 +529,7 @@ Keys 路由初始化时应立即调用 `const tfImportSession = readTfImportSess
    - CLI 明确设计：`--json` 或 `--no-input` 标志**不会且不能**绕过该终端确认。在非交互终端下不会显示方式选择器；显式使用 `--from-web` 会直接报错退出。
    - `Origin` 与 CORS 只能限制普通浏览器页面，不能认证本机进程；任何本机进程都能伪造 HTTP `Origin`。终端确认是写入本地凭据的最终授权边界，与网页侧的可选会话验证解决不同方向的问题。
 4. **元数据落地（`SourceImport`）**
-   - 凭据文件写入成功后，CLI 会记录 `source: "import"`（区别于手工粘贴的 `paste`），以及 `origin`、`key_name`、`group_id` 和 `group_name`。`tf keys` 的文本与 JSON 输出会带出这些来源信息。这些字段来自网页请求，供本地展示和追溯，不是网关签发的可信声明。
+   - 凭据文件写入成功后，CLI 会记录 `source: "import"`（区别于手工粘贴的 `paste`），以及 `origin`、`key_name`、`group_id` 和 `group_name`。`tf keys` 的文本与 JSON 输出会带出这些来源信息。这些字段来自网页请求，不是网关签发的可信声明；`key_name` 只有经过本地规则校验并由终端用户选择后，才会成为本地名称。
 5. **协议兼容策略**
    - 当前导入协议主版本仍为 `version: 1`。CLI 收到非 1 版本的导入请求会返回 `unsupported_protocol`；可选的 challenge/proof 是向后兼容的 `/ping` 扩展。
    - CLI 开启了严格的未知字段拦截（`DisallowUnknownFields`），前端**不得**在 `/import` JSON 中传递未在协议中约定的额外扩展字段，否则会导致 `invalid_json`。
@@ -539,7 +539,7 @@ Keys 路由初始化时应立即调用 `const tfImportSession = readTfImportSess
 ## 八、当前实现的已知限制
 
 1. **不支持远程/SSH 环境的网页直连**
-   - 协议基于浏览器到本机回环地址（`127.0.0.1`）的通信。若用户通过 SSH 在远程服务器选择网页导入或运行 `tf login --from-web`，本地浏览器访问本地 `127.0.0.1` 将无法触达远端 CLI（除非用户自行配置了 SSH 端口转发）。此类场景请引导用户选择“粘贴 API Key”，或使用 `tf login --with-key`。
+   - 协议基于浏览器到本机回环地址（`127.0.0.1`）的通信。若用户通过 SSH 在远程服务器选择网页导入或运行 `tf login --from-web`，本地浏览器访问本地 `127.0.0.1` 将无法触达远端 CLI（除非用户自行配置了 SSH 端口转发）。没有端口转发时应选择“粘贴 API Key”，或使用 `tf login --with-key`。
 2. **端口段固定为 43110-43119**
    - 若本机同时运行超过 10 个 `tf login --from-web` 实例，或者该范围内的 10 个端口全部被其他本地应用占用，CLI 会直接报错退出，前端也将无法探测到服务。
 3. **单并发拒绝，不提供排队**

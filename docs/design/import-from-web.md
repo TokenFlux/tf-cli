@@ -35,10 +35,11 @@
 同一个「页面主导」的想法，把通道换成 CLI 自己起的 localhost 服务，两个硬伤同时消失：
 
 ```
-用户在终端跑：tf login → 选择「从网页导入」
+用户在终端跑：tf login → 默认高亮「从网页导入」
   （也可用 tf login --from-web 直接进入）
   CLI 绑定 127.0.0.1:43110-43119 中首个可用端口
-  并打印带实际端口和本次监听 session secret 的 Keys 页链接
+  打印带实际端口和本次监听 session secret 的 Keys 页链接
+  调用系统默认浏览器打开
 
 用户通过终端链接打开 Keys 页
   页面只访问指定端口，通过 challenge/HMAC 验证本次 tf 会话
@@ -50,7 +51,8 @@
   页面仍可扫描固定端口，但必须标记「未验证」并警告；不强制阻断
 
 CLI 收到 → 终端预览并确认 → 回应 202 → 关闭监听
-  → 用 /v1/models 校验 → 写 ~/.tf/credentials.json (0600)
+  → 用 /v1/models 校验 → 选择自动识别、网页或自订名称
+  → 写 ~/.tf/credentials.json (0600)
 ```
 
 优点：
@@ -63,7 +65,7 @@ CLI 收到 → 终端预览并确认 → 回应 202 → 关闭监听
 需要处理的细节：
 
 1. **浏览器本地网络权限**：Chrome 142+ 从 HTTPS 页面访问 `http://127.0.0.1` 会请求 Local Network Access 权限；旧 Chromium 还可能发送带 `Access-Control-Request-Private-Network: true` 的 PNA 预检。本地服务同时返回严格的 `Access-Control-Allow-Origin` 和兼容旧 PNA 的 `Access-Control-Allow-Private-Network: true`。前端应在用户点击后发起探测，并放行 CSP `connect-src`；细节见接入文档。
-2. **固定端口段与可选会话验证**：CLI 仍在 43110–43119 中顺序选择端口，兼容旧前端扫描。CLI 打印的 Keys 页链接通过 URL fragment 携带实际端口和本次监听会话 secret；实现扩展的前端用 challenge/HMAC 验证该端口，成功时标记“已验证当前 tf 会话”，并用 `X-TF-Session-Proof` 让终端确认页显示相同状态。直接打开页面仍可扫描和导入，但页面与终端都只能标记“未验证”并显示警告。
+2. **固定端口段与可选会话验证**：CLI 仍在 43110–43119 中顺序选择端口，兼容旧前端扫描。CLI 打印的 Keys 页链接通过 URL fragment 携带实际端口和本次监听会话 secret，并调用系统默认浏览器打开。实现扩展的前端用 challenge/HMAC 验证该端口，成功时标记“已验证当前 tf 会话”，并用 `X-TF-Session-Proof` 让终端确认页显示相同状态。直接打开页面仍可扫描和导入，但页面与终端都只能标记“未验证”并显示警告。
 3. **终端侧预览确认**：CLI 收到导入请求后**不直接落盘**，先在终端打印一份预览并等一个 y/n：
 
    ```
@@ -73,6 +75,7 @@ CLI 收到 → 终端预览并确认 → 回应 202 → 关闭监听
      网关  https://tokenflux.dev
      分组  Claude（Anthropic 格式）
      Key   tk-a1b2…3f2c  「macbook」
+     名称  校验后选择
    写入 ~/.tf/credentials.json？[写入 / 拒绝]（方向键选择，回车确认）
    ```
 

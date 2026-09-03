@@ -192,12 +192,18 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	models := []string{"gpt-5.4", "gpt-5.5"}
 	srv := fakeGateway(t, models)
 	f := writeConfig(t, srv.URL, models)
-	env := append(f.env(), "SHELL=/bin/sh") // 不在登录成功后追问 shell 补全
+	browserMarker := filepath.Join(f.dir, "browser-url")
+	browserStub := "#!/bin/sh\nprintf '%s' \"$1\" > \"$TF_BROWSER_MARKER\"\n"
+	for _, name := range []string{"open", "xdg-open"} {
+		if err := os.WriteFile(filepath.Join(f.dir, "bin", name), []byte(browserStub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := append(f.env(), "SHELL=/bin/sh", "TF_BROWSER_MARKER="+browserMarker)
 
-	p := start(t, env, "login", "web", "--host", srv.URL)
+	p := start(t, env, "login", "--host", srv.URL)
 	p.waitFor("选择登录方式")
 	p.waitFor("从网页导入")
-	p.send(keyDown)
 	p.send(keyEnter)
 	p.waitFor("等待网页导入")
 	match := regexp.MustCompile(`http://127\.0\.0\.1:4311[0-9]`).FindString(p.screen())
@@ -208,6 +214,20 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	session := regexp.MustCompile(`#tf=1\.(4311[0-9])\.([A-Za-z0-9_-]+)`).FindStringSubmatch(p.screen())
 	if len(session) != 3 {
 		t.Fatalf("没有从输出找到会话链接\n--- 屏幕 ---\n%s", p.tail())
+	}
+	wantBrowserURL := srv.URL + "/keys" + session[0]
+	var openedURL string
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(browserMarker)
+		if err == nil {
+			openedURL = string(data)
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if openedURL != wantBrowserURL {
+		t.Fatalf("浏览器打开地址 = %q; want %q", openedURL, wantBrowserURL)
 	}
 	if match != "http://127.0.0.1:"+session[1] {
 		t.Fatalf("监听端口 %q 与会话端口 %q 不一致", match, session[1])
@@ -321,7 +341,12 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 		t.Fatal("浏览器没有收到导入响应")
 	}
 
-	p.waitFor(`已保存为 Key "web"`)
+	p.waitFor("选择本地 Key 名称")
+	p.waitFor(`自动识别为 "gpt"`)
+	p.waitFor(`使用网页名称 "browser-key"`)
+	p.send(keyDown)
+	p.send(keyEnter)
+	p.waitFor(`已保存为 Key "browser-key"`)
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("退出码 = %d，want 0\n--- 屏幕 ---\n%s", code, p.tail())
 	}
@@ -344,7 +369,7 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	if err := json.Unmarshal(data, &stored); err != nil {
 		t.Fatal(err)
 	}
-	got := stored.Items["web"]
+	got := stored.Items["browser-key"]
 	if got.Key != "sk-web-import-test" || got.Source != "import" || got.Origin != srv.URL ||
 		got.KeyName != "browser-key" || got.GroupID != 7 || got.GroupName != "GPT" {
 		t.Errorf("落盘元数据不完整：%+v", got)
@@ -366,6 +391,7 @@ func TestInteractiveLoginCanChoosePaste(t *testing.T) {
 	p := start(t, env, "login", "paste", "--host", srv.URL)
 	p.waitFor("选择登录方式")
 	p.waitFor("粘贴 API Key")
+	p.send(keyDown)
 	p.send(keyEnter)
 	p.waitFor("粘贴 API Key")
 	p.send("sk-interactive-paste\n")
