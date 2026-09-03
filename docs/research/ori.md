@@ -1,5 +1,10 @@
 # Ori 调研 + tf 设计草案
 
+> 状态：Ori 调研记录仍供参考；其中关于 tf 的认证与分发内容是早期草案，
+> 不是当前功能说明。PKCE/grant/exchange 已由 localhost 网页导入路线替代，
+> GoReleaser、npm 平台包、Homebrew 与 Scoop 尚未实现。当前状态见
+> [`../STATUS.md`](../STATUS.md) 和 [`../PLAN.md`](../PLAN.md)。
+
 调研对象：`ori`（OpenRouter 官方 CLI，2026-08 发布）
 目标：为 TokenFlux（托管）与 TokenRouter（自托管）做一个同类工具 `tf`。
 

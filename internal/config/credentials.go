@@ -23,7 +23,7 @@ type Credential struct {
 }
 
 const (
-	SourcePaste  = "paste"  // tf login --with-key
+	SourcePaste  = "paste"  // 终端粘贴或 stdin 管道输入
 	SourceImport = "import" // 网页「导入 tf」按钮
 	SourceEnv    = "env"    // 环境变量，不落盘
 )

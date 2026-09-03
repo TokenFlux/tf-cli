@@ -35,11 +35,12 @@ make build
 
 - **检查更新**：`tf update --check`
 - **自动升级**：`tf update`（下载最新 Release 并校验 SHA256 后执行原子替换）
-- **卸载**：
+- **卸载**：删除配置将永久清除本机保存的 Key。默认安装和默认配置路径可执行：
   ```sh
   rm ~/.local/bin/tf
   rm -rf ~/.tf
   ```
+  若安装时设置了 `TF_INSTALL_DIR`，二进制路径为 `$TF_INSTALL_DIR/tf`。若使用 XDG 路径，请先运行 `tf config` 确认配置与缓存目录，再删除对应目录。
 
 > **操作系统支持**：支持 Linux 与 macOS 全交互特性。Windows 当前仅支持非交互模式（支持通过管道传入 Key 及使用 `--set` 预设参数）。
 
@@ -55,11 +56,11 @@ $ tf login
 ❯ 粘贴 API Key  终端隐藏输入
   从网页导入     等待网页发送
 粘贴 API Key（输入不回显）：
-✓ 已保存为 Key "work"
+✓ 已保存为 Key "default"
   网关     https://tokenflux.dev
   Key      sk-d61…5b1c
   模型     14 claude-opus-5, claude-sonnet-5, gpt-5.6-sol, …
-  协议     anthropic_messages / openai_responses
+  协议     anthropic_messages openai_responses
   可用于   claude codex opencode
 ```
 

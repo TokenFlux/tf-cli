@@ -20,7 +20,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 7900 行生产代码、4000 行测试，153 个测试函数，六个已发布版本，零第三方依赖。
+约 7800 行生产代码、4200 行测试，154 个测试函数，六个已发布版本，零第三方依赖。
 
 ## 二、里程碑
 
@@ -133,8 +133,8 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 ## 六、不会变的几条
 
-1. **tf 是启动器，不是配置管理器。** 只做进程内注入，退出不留痕，
-   不改用户的 `~/.claude/settings.json`、`~/.codex/config.toml`
+1. **tf 是启动器，不是 harness 配置改写器。** 对 harness 的注入只存在于子进程，退出后不改写
+   `~/.claude/settings.json`、`~/.codex/config.toml`；tf 自己的 Key、绑定和模型槽仍会按用户操作持久化。
 2. **不做本地代理、不做 MITM、不覆盖 harness 的 User-Agent**
 3. **没有隐藏的全局可变状态。** 绑定属于 harness，没有「当前 profile」
 4. **不在客户端建推断子系统去补上游数据缺口**

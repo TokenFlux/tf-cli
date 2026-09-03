@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tokenflux/tkr/internal/config"
 	"github.com/tokenflux/tkr/internal/harness"
 	"github.com/tokenflux/tkr/internal/ui"
 )
@@ -155,7 +154,6 @@ func EnsureInstalled(c *Context, h *harness.Harness) error {
 			WithHint(chosen.Command())
 	}
 
-	recordInstall(c, h.Name, chosen, st.Version)
 	c.UI.Logf("✓ %s %s", h.Name, st.Version)
 	return nil
 }
@@ -178,25 +176,4 @@ func notInstalledErr(c *Context, h *harness.Harness, options []harness.InstallOp
 	return ui.Errf(ui.CodeHarnessNotInstalled,
 		fmt.Sprintf(c.UI.T("未安装 %s", "%s is not installed"), h.Name)).
 		WithHint(hint)
-}
-
-// recordInstall 登记安装来源，供 doctor 回溯。写失败不影响主流程。
-func recordInstall(c *Context, name string, opt harness.InstallOption, version string) {
-	paths, err := config.DefaultPaths()
-	if err != nil {
-		return
-	}
-	cfg, err := config.Load(paths)
-	if err != nil {
-		return
-	}
-	cfg.RecordInstall(name, config.InstallRecord{
-		Manager: opt.Manager,
-		Command: opt.Command(),
-		Version: version,
-	})
-	if err := cfg.Save(); err != nil {
-		c.UI.Warnf(c.UI.T("安装已完成，但记录安装来源失败：%v",
-			"installed, but recording the install source failed: %v"), err)
-	}
 }

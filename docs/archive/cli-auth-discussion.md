@@ -1,4 +1,10 @@
-# tf 认证与 Key 发放：与后端讨论用的事实与议题
+# tf 认证与 Key 发放：与后端讨论用的历史议题
+
+> 状态：已归档。本文讨论的 PKCE、grant/exchange 与后端授权接口没有实施，
+> 已由无需后端改动的 localhost 网页导入方案替代。当前方案见
+> [`../design/import-from-web.md`](../design/import-from-web.md) 和
+> [`../integrations/web-import.md`](../integrations/web-import.md)。下文保留当时的
+> 后端调研与取舍，不代表当前路线。
 
 代码依据：`backend/internal/server/routes/{auth,user}.go`、`backend/internal/handler/api_key_handler.go`、`backend/internal/handler/dto/mappers.go`、`docs/interfaces/http_api.md`。
 

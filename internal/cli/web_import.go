@@ -25,15 +25,16 @@ import (
 )
 
 const (
-	webImportProtocol     = 1
-	webImportPortFirst    = 43110
-	webImportPortLast     = 43119
-	webImportMaxBody      = 32 << 10
-	webImportSessionBytes = 16
-	webImportChallengeMin = 16
-	webImportChallengeMax = 128
-	webImportProofHeader  = "X-TF-Session-Proof"
-	webImportTimeout      = 10 * time.Minute
+	webImportProtocol        = 1
+	webImportPortFirst       = 43110
+	webImportPortLast        = 43119
+	webImportMaxBody         = 32 << 10
+	webImportSessionBytes    = 16
+	webImportChallengeMin    = 16
+	webImportChallengeMax    = 128
+	webImportProofHeader     = "X-TF-Session-Proof"
+	webImportBodyReadTimeout = 10 * time.Second
+	webImportTimeout         = 10 * time.Minute
 )
 
 type webImportRequest struct {
@@ -91,19 +92,13 @@ func waitForWebImport(c *Context, host, credentialsPath, targetName string,
 		return webImportRequest{}, ui.Errf(ui.CodeInternal,
 			c.UI.T("无法建立网页导入会话", "cannot create a web-import session")).WithCause(err)
 	}
-	defer func() {
-		for i := range sessionSecret {
-			sessionSecret[i] = 0
-		}
-	}()
-
 	events := make(chan webImportEvent)
 	server := &http.Server{
 		Handler: &webImportHandler{
 			host: host, origin: origin, port: port, sessionSecret: sessionSecret, events: events,
 		},
-		// Do not set ReadTimeout: the request remains open while the user
-		// reviews the origin and confirms it in the terminal.
+		// handleImport applies and then clears a deadline around the body read,
+		// before the potentially long terminal confirmation.
 		ReadHeaderTimeout: 3 * time.Second,
 		IdleTimeout:       30 * time.Second,
 	}
@@ -116,7 +111,9 @@ func waitForWebImport(c *Context, host, credentialsPath, targetName string,
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		_ = server.Shutdown(ctx)
+		if err := server.Shutdown(ctx); err != nil {
+			_ = server.Close()
+		}
 	}()
 
 	c.UI.Logf("%s", c.UI.Bold(c.UI.T("等待网页导入", "Waiting for web import")))
@@ -176,8 +173,12 @@ func listenWebImport() (net.Listener, int, error) {
 }
 
 func webImportSessionURL(host string, port int, secret []byte) string {
-	encoded := base64.RawURLEncoding.EncodeToString(secret)
-	return fmt.Sprintf("%s/keys#tf=1.%d.%s", strings.TrimRight(host, "/"), port, encoded)
+	page, _ := url.Parse(host) // host was validated by webOrigin before this call.
+	page.Path = strings.TrimRight(page.Path, "/") + "/keys"
+	page.RawPath = ""
+	page.Fragment = fmt.Sprintf("tf=%d.%d.%s", webImportProtocol, port,
+		base64.RawURLEncoding.EncodeToString(secret))
+	return page.String()
 }
 
 func webImportProof(secret []byte, port int, challenge string) string {
@@ -203,7 +204,8 @@ func validWebImportChallenge(challenge string) bool {
 			return false
 		}
 	}
-	return true
+	_, err := base64.RawURLEncoding.Strict().DecodeString(challenge)
+	return err == nil
 }
 
 func confirmWebImport(c *Context, req webImportRequest, credentialsPath, targetName string,
@@ -258,11 +260,15 @@ func webOrigin(host string) (string, error) {
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return "", fmt.Errorf("expected an http(s) URL")
 	}
-	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if u.User != nil || u.ForceQuery || u.RawQuery != "" || u.Fragment != "" {
 		return "", fmt.Errorf("URL must not contain user info, query, or fragment")
 	}
 	scheme := strings.ToLower(u.Scheme)
-	originHost := strings.ToLower(u.Hostname())
+	hostname := u.Hostname()
+	if hostname == "" {
+		return "", fmt.Errorf("URL host must not be empty")
+	}
+	originHost := strings.ToLower(hostname)
 	if strings.Contains(originHost, ":") {
 		originHost = "[" + originHost + "]"
 	}
@@ -332,8 +338,19 @@ func (h *webImportHandler) handleImport(w http.ResponseWriter, r *http.Request) 
 		writeWebJSON(w, http.StatusUnsupportedMediaType, map[string]any{"ok": false, "error": "content_type"})
 		return
 	}
+	// Claim the one available import transaction before reading the body.
+	// Otherwise many slow local clients can all occupy handler goroutines
+	// before any of them reaches the confirmation-stage busy check.
+	if !h.busy.CompareAndSwap(false, true) {
+		writeWebJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "busy"})
+		return
+	}
+	defer h.busy.Store(false)
 
+	controller := http.NewResponseController(w)
+	_ = controller.SetReadDeadline(time.Now().Add(webImportBodyReadTimeout))
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, webImportMaxBody))
+	_ = controller.SetReadDeadline(time.Time{})
 	if err != nil {
 		writeWebJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_json"})
 		return
@@ -357,11 +374,6 @@ func (h *webImportHandler) handleImport(w http.ResponseWriter, r *http.Request) 
 	providedProof := r.Header.Get(webImportProofHeader)
 	req.Verified = len(h.sessionSecret) > 0 && h.port != 0 &&
 		hmac.Equal([]byte(providedProof), []byte(expectedProof))
-	if !h.busy.CompareAndSwap(false, true) {
-		writeWebJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "busy"})
-		return
-	}
-	defer h.busy.Store(false)
 
 	event := webImportEvent{
 		Request: req, Reply: make(chan webImportDecision, 1), Responded: make(chan struct{}),
@@ -411,10 +423,10 @@ func safeImportText(s string, max int) bool {
 	if len(s) > max {
 		return false
 	}
-	// Format controls include bidi overrides and zero-width characters. They
-	// are harmless in storage but unsafe in a terminal confirmation prompt.
+	// Format controls include bidi overrides and zero-width characters;
+	// line and paragraph separators can also restructure the confirmation.
 	return strings.IndexFunc(s, func(r rune) bool {
-		return unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Cs)
+		return unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Cs, unicode.Zl, unicode.Zp)
 	}) < 0
 }
 

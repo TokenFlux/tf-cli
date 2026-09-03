@@ -2,8 +2,8 @@
 # 在一台 Linux 机器上验证终端相关的行为。
 #
 # 为什么需要它：终端那几条防线（CRLF、光标归零、信号后复位、读输入时
-# 自设行规程）全部建在 /dev/tty 与 stty 上，而 CI 里没有 tty —— 它们
-# 在 Linux 上从未真正跑过。stty 与 script 的行为两个平台并不一样。
+# 自设行规程）全部建在 /dev/tty 与 stty 上，而普通 CI 没有 tty。这个脚本
+# 保留真实 Linux PTY 的可重复验证；stty 与 script 的行为在两个平台并不一样。
 #
 # 已经因此抓到过一个真问题：util-linux 的 script 不加 -e 恒返回 0，
 # 于是所有退出码断言在 Linux 上悄悄失效。

@@ -27,9 +27,9 @@
 
 推论：
 
-- `tf models` / `tf groups` **完全未登录就能工作**，`pnpx tf models` 开箱即用。
+- 从接口能力看，未登录目录命令本可直接读取这些数据；当前 `tf models` / `tf groups` 方案已经放弃，CLI 并未实现这两个命令。
 - 但**协议准入仍只能靠 JWT 或主动探测**（§3）。
-- 过渡版（早期记作 v0.5）的「导入 tf」按钮已经在 CLI 侧落地：页面持有 JWT，可把 Key 连同 `group_id` / `group_name` 等展示元数据推给 CLI。协议集合不从网页导入，仍由 CLI 对网关做零 token 探测，避免把页面传来的元数据当成准入事实。
+- 过渡版（早期记作 v0.5）的 CLI 接收端已经落地，网页 Keys 页的「导入 tf」按钮仍待接入：页面持有 JWT，可把 Key 连同 `group_id` / `group_name` 等展示元数据推给 CLI。协议集合不从网页导入，仍由 CLI 对网关做零 token 探测，避免把页面传来的元数据当成准入事实。
 
 ### 公开 marketplace 端点的内容
 

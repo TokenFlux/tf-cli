@@ -6,7 +6,7 @@
 每一条命令用哪把 Key。
 
 这违反 tf 自己的产品理念。我们当初正是因为「不做持久化模式切换」才和 CC-Switch
-划清界限（见 product-decisions.md），结果又把同一个模型搬进了 profile 层。
+划清界限（见历史提案 [`../archive/product-decisions.md`](../archive/product-decisions.md)），结果又把同一个模型搬进了 profile 层。
 
 实际后果已经发生：用户 login 后存进 `gpt`，当前 profile 仍是 `default`，
 下一条 `tf codex` 继续用旧 Key，列出一堆 claude 模型且毫无提示。
@@ -61,19 +61,21 @@ codex 的候选里**。
 `allowed_client_protocols` 只有 JWT 能读（见 tokenflux-api-probe.md），
 但协议准入可以零成本探测：
 
-| 请求 | 结果 | 含义 |
-| --- | --- | --- |
-| 空 body 打各协议入口 | `400 model is required` | 该协议准入通过 |
-| 同上 | `403 does not allow ... requests` | 该协议不准入 |
+| 探针结果 | 含义 |
+| --- | --- |
+| `400` 参数校验，或明确的 model miss（如 `requested model` / `model_not_found`） | 已越过协议与分组准入，记为通过 |
+| `403 ...does not allow ... requests` | 该协议不准入 |
+| `403 ...Claude Code client...` | 分组锁定真实 Claude Code 客户端，单独记录 |
+| `429`、网络错误或未知响应 | 本次无结论，保留已有结果 |
 
-准入检查发生在读 body 之前，所以**不消耗任何 token**。login 时顺带探 3 次，
-结果连同模型列表一起存进凭据记录。启动时只读本地，零网络。
+准入检查发生在模型调度之前，所以**不消耗任何 token**。login 时按分组前缀探测三个协议入口，
+结果连同模型列表一起存进 `config.json` 的 `KeyMeta`。正常启动只读本地；遇到失败时才触发重探。
 
 ## 边界
 
 - 探测结果**只能证伪**：账号级 endpoint capability 可能更窄，通过不代表一定能跑。
   因此候选为空时才拦，候选非空时静默放行，绝不给「配置正确」的承诺。
-- 能力会变（用户改分组），所以带 TTL，并在启动失败时主动失效重探。
+- 能力会变（用户改分组）。早期曾计划使用 TTL，现行实现不设 TTL，而是在启动失败时主动重探。
 - `tf keys` 展示每把 Key 的协议矩阵与可用 harness，替代 `tf use` 的查看职能。
 
 ## 处置
@@ -96,7 +98,7 @@ codex 的候选里**。
 - `Supports`（任一分组允许）用来筛 **Key 候选**
 - `SupportsIn`（指定分组允许）用来筛 **模型候选**
 - 探测必须逐前缀做：空 body 对复合 Key 无效，网关会先要 `COMPOSITE_KEY_MODEL_PREFIX_REQUIRED`。
-  改为发 `{"model":"<前缀>/__tkr_probe__"}`：前缀决定分组，模型不存在则请求
+  改为发 `{"model":"<前缀>/__tf_probe__"}`：前缀决定分组，模型不存在则请求
   在调度前就被拒，同样零 token。
 - 403 有两种含义，必须按文案区分：`does not allow ... requests` 是协议不准入，
   其余 403 只是模型不在分组里。只看状态码会把「模型选错」误判成「协议不通」。

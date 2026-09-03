@@ -1,4 +1,10 @@
-# 产品决策
+# 产品决策（历史提案）
+
+> 状态：已归档。本文混合记录了项目早期约束与未实施提案，不是当前功能说明。
+> 全局 profile、项目级绑定、`--insecure`、marketplace 自动选槽、`tf models`
+> 和 `tf feedback` 均未落地。当前决策见
+> [`../design/open-decisions.md`](../design/open-decisions.md) 与
+> [`../design/no-global-mode.md`](../design/no-global-mode.md)。
 
 前置：`claude_code_only` 的识别机制已确认为 **UA + TLS 指纹，直连时自动识别**。
 
@@ -30,7 +36,7 @@ tf 要同时服务两类目标：TokenFlux（托管，单一权威 host）和 To
 
 > **这一节的方案已作废。** 下面的 profile 机制、`tf use`、`TKR_PROFILE`
 > 都没有落地：绑定改为属于 harness，不存在全局的「当前 profile」。
-> 原因见 [`no-global-mode.md`](no-global-mode.md)。保留原文是为了留下
+> 原因见 [`../design/no-global-mode.md`](../design/no-global-mode.md)。保留原文是为了留下
 > 当初为什么会走到那一步的记录。
 
 ```

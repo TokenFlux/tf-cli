@@ -142,10 +142,19 @@ func TestWebImportPingCanProveSession(t *testing.T) {
 		t.Errorf("proof ping = %v", data)
 	}
 
-	bad := httptest.NewRecorder()
-	h.ServeHTTP(bad, webRequest(http.MethodGet, "/ping?challenge=short", testWebOrigin, ""))
-	if bad.Code != http.StatusBadRequest || !strings.Contains(bad.Body.String(), "invalid_challenge") {
-		t.Errorf("invalid challenge = %d %s", bad.Code, bad.Body.String())
+	for _, challenge := range []string{
+		"short",
+		"abcdefghijklmnopq",  // impossible unpadded base64 length
+		"aaaaaaaaaaaaaaaaaa", // non-zero trailing padding bits
+		"abcdefghijklmnop=",  // padding is forbidden
+		"abcdefghijklmno*",   // outside the base64url alphabet
+	} {
+		bad := httptest.NewRecorder()
+		h.ServeHTTP(bad, webRequest(http.MethodGet,
+			"/ping?challenge="+url.QueryEscape(challenge), testWebOrigin, ""))
+		if bad.Code != http.StatusBadRequest || !strings.Contains(bad.Body.String(), "invalid_challenge") {
+			t.Errorf("challenge %q = %d %s", challenge, bad.Code, bad.Body.String())
+		}
 	}
 }
 
@@ -224,6 +233,7 @@ func TestWebImportValidatesRequestBeforeDelivery(t *testing.T) {
 		{"unicode key", testWebOrigin, "application/json", strings.Replace(valid, "sk-test", "sk-密钥", 1), 400, "invalid_key"},
 		{"control metadata", testWebOrigin, "application/json", strings.TrimSuffix(valid, "}") + `,"group_name":"bad\u001b"}`, 400, "invalid_metadata"},
 		{"bidi metadata", testWebOrigin, "application/json", strings.TrimSuffix(valid, "}") + `,"group_name":"bad\u202e"}`, 400, "invalid_metadata"},
+		{"line separator metadata", testWebOrigin, "application/json", strings.TrimSuffix(valid, "}") + `,"group_name":"bad\u2028"}`, 400, "invalid_metadata"},
 		{"unknown field", testWebOrigin, "application/json", strings.TrimSuffix(valid, "}") + `,"extra":true}`, 400, "invalid_json"},
 		{"wrong content type", testWebOrigin, "text/plain", valid, 415, "content_type"},
 	}
@@ -290,6 +300,48 @@ func TestWebImportRejectsConcurrentRequest(t *testing.T) {
 	}
 }
 
+func TestWebImportClaimsBusyBeforeReadingBody(t *testing.T) {
+	h := &webImportHandler{host: testWebOrigin, origin: testWebOrigin, events: make(chan webImportEvent)}
+	bodyReader, bodyWriter := io.Pipe()
+	first := httptest.NewRequest(http.MethodPost, "/import", bodyReader)
+	first.Header.Set("Origin", testWebOrigin)
+	first.Header.Set("Content-Type", "application/json")
+	firstResponse := httptest.NewRecorder()
+	firstDone := make(chan struct{})
+	go func() {
+		h.ServeHTTP(firstResponse, first)
+		close(firstDone)
+	}()
+
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	for !h.busy.Load() {
+		select {
+		case <-deadline.C:
+			_ = bodyWriter.Close()
+			t.Fatal("first request did not claim the import transaction before reading its body")
+		case <-time.After(time.Millisecond):
+		}
+	}
+
+	secondResponse := httptest.NewRecorder()
+	h.ServeHTTP(secondResponse, webRequest(http.MethodPost, "/import", testWebOrigin,
+		`{"version":1,"key":"sk-test","host":"https://tokenflux.dev"}`))
+	if secondResponse.Code != http.StatusConflict || !strings.Contains(secondResponse.Body.String(), "busy") {
+		t.Errorf("second status/body = %d %s", secondResponse.Code, secondResponse.Body.String())
+	}
+
+	_ = bodyWriter.Close()
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("first request did not stop after its body closed")
+	}
+	if firstResponse.Code != http.StatusBadRequest || !strings.Contains(firstResponse.Body.String(), "invalid_json") {
+		t.Errorf("first status/body = %d %s", firstResponse.Code, firstResponse.Body.String())
+	}
+}
+
 func TestWebOrigin(t *testing.T) {
 	for _, tc := range []struct {
 		host string
@@ -304,6 +356,8 @@ func TestWebOrigin(t *testing.T) {
 		{"http://[::1]:43110", "http://[::1]:43110", true},
 		{"file:///tmp/key", "", false},
 		{"https://user@example.com", "", false},
+		{"https://example.com?", "", false},
+		{"https://:443", "", false},
 	} {
 		got, err := webOrigin(tc.host)
 		if (err == nil) != tc.ok || got != tc.want {

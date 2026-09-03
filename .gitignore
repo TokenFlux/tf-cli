@@ -3,6 +3,7 @@ dist/
 *.test
 .DS_Store
 .playwright-mcp/
+.zvec-grep/
 
 # 绝不提交任何凭据
 credentials.json

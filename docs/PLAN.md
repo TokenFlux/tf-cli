@@ -52,7 +52,7 @@ internal/
 
 ## 往后的路线
 
-排序依据是风险，不是工作量。逐条的展开见仓库根目录的 `todo-*.md`。
+排序依据是风险，不是工作量。此前的执行清单已归档至 [`archive/todo-20260831-1847.md`](archive/todo-20260831-1847.md)。
 
 ### 近期：完善测试与验证
 
@@ -66,6 +66,10 @@ internal/
 5. npm 平台包（optionalDependencies + JS shim，无 postinstall 下载），目标是 `pnpx tf` 开箱可用。
 6. ~~拆出 Key 与协议准入、shell 补全逻辑~~ 已完成（`internal/access`、`internal/completions`）；继续拆分仍与命令 I/O 耦合的部分。
 7. ~~完善 `CHANGELOG.md`~~ 已完成；`README.en.md` 待补。
+8. ~~决定 `InstallRecord` 的消费者~~ 已停止写入并删除；安装记录没有消费者，且外部升级后会失真。
+9. ~~决定无生产读写方的 `CacheDir` 去留~~ v0 保留 `tf config` 的 `cache_dir` 兼容字段，但不创建或读写目录；不静默删除旧 `models.json`，v1 再评估移除字段。
+10. ~~明确 `tf keys` 与绑定展示的职责~~ `tf keys` 专注 Key 来源与分组能力；harness 绑定统一由 `tf status` / `tf model` 展示，不重复维护。
+11. ~~迁移并归档根目录临时 TODO~~ 开放项已并入本文件或 STATUS，原清单移至 `docs/archive/`。
 
 ### 过渡版：网页导入（已落地）
 

@@ -172,7 +172,6 @@ type Config struct {
 	Version   int                       `json:"version"`
 	Keys      map[string]*KeyMeta       `json:"keys"`
 	Harnesses map[string]*HarnessConfig `json:"harnesses,omitempty"`
-	Installs  map[string]InstallRecord  `json:"installs,omitempty"`
 
 	// CompletionsAsked 记下已经问过要不要装 shell 补全。
 	//
@@ -282,21 +281,4 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
-}
-
-// InstallRecord 记录某个 harness 是被 tf 用什么方式装上的。
-type InstallRecord struct {
-	Manager string    `json:"manager"`
-	Command string    `json:"command"`
-	Version string    `json:"version,omitempty"`
-	At      time.Time `json:"at"`
-}
-
-// RecordInstall 记下一次安装，供 doctor 回溯与卸载参考。
-func (c *Config) RecordInstall(name string, rec InstallRecord) {
-	if c.Installs == nil {
-		c.Installs = map[string]InstallRecord{}
-	}
-	rec.At = time.Now()
-	c.Installs[name] = rec
 }

@@ -9,7 +9,7 @@ import (
 //
 //	<config>/config.json        0644  可分享、可贴进工单
 //	<config>/credentials.json   0600  仅凭据，独立文件
-//	<cache>/                    0700  目录数据与探测结果
+//	<cache>/                    v0 输出兼容；生产代码不创建也不读写
 //
 // 默认 <config> = ~/.tf，<cache> = ~/.tf/cache；
 // 设置了 XDG_CONFIG_HOME / XDG_CACHE_HOME 时优先遵循 XDG。

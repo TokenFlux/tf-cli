@@ -34,18 +34,23 @@
 - `tf login` 未指定方式时会交互选择粘贴或网页导入；管道输入及 `--with-key` / `--from-web` 仍可直接进入对应方式。
 - 统一中英文登录文案、网关展示术语与模型数单复数；帮助用法占位符保持语言中性的 ASCII。
 - `tf keys` 现在显示网页导入的 Origin、分组和远端 Key 名，JSON 输出同步提供来源字段。
+- harness 安装完成后不再写入无人消费且可能随外部升级失真的 `installs` 记录；实际安装状态继续以 PATH 探测为准，旧字段会在下次保存配置时清理。
+- v0 继续保留 `tf config` 的 `cache_dir` 输出以兼容机器调用，但不再把该路径描述为现有存储层，也不会静默迁移或删除旧缓存文件。
 
 ### 修复
 
 - 手动触发发版时明确检出输入 tag，避免用 main HEAD 构建旧 tag 的产物。
 - 删除 CI 中重复的五目标交叉编译，并把发版检查移到构建矩阵之前。
-- 归档不再作为现行依据的早期分组识别、模型选择和下一批功能设计稿。
+- 归档不再作为现行依据的早期分组识别、模型选择、下一批功能、产品决策、后端认证讨论稿及时间戳 TODO；仍有效的开放项已迁入 PLAN / STATUS。
+- 修正文档中的缓存存储、参数透传、探针名、默认登录名称、XDG 卸载路径和网页前端落地状态。
 
 ### 安全
 
 - 网页导入只监听 `127.0.0.1:43110-43119`，严格校验 Origin、限制请求体并拒绝未知 JSON 字段；Key 不回显到 HTTP 响应。
 - 网页导入始终要求交互式终端确认，`--json` 和 `--no-input` 不能绕过确认。
 - 网页导入链接新增短期 session secret；前端可通过绑定实际端口与随机 challenge 的 HMAC 验证 CLI，并用可选导入证明让终端显示相同状态。普通端口扫描和无证明导入保持兼容，但页面与终端必须显示未验证警告。
+- `/import` 在读取请求体前占用单一事务，并将 body 读取限制为 10 秒，避免并发慢请求持续占用处理协程；会话关闭超时后会强制关闭活动连接。
+- 收紧 challenge、网关 hostname 和终端展示元数据校验；前端示例会在 Keys 路由初始化时清除有效或畸形的 `#tf=...` fragment，并明确导入证明不提供防重放语义。
 
 ---
 
@@ -151,14 +156,14 @@
 
 首个版本。
 
-- 启动三个 harness：`tf claude`、`tf codex`、`tf opencode`。
-  只做进程内注入（环境变量与命令行参数），**不改用户的任何配置文件**。
-- `tf login` / `tf logout` / `tf keys` 管理 Key。
-- `tf model` 编辑各 harness 的模型与档位绑定。
-- `tf harness install` 引导安装缺失的 harness，绝不 sudo。
-- `tf update` 自更新。
+- 启动三个 harness：`tkr claude`、`tkr codex`、`tkr opencode`。
+  只做进程内注入（环境变量与命令行参数），**不改各 harness 的用户配置文件**。
+- `tkr login` / `tkr logout` / `tkr keys` 管理 Key。
+- `tkr model` 编辑各 harness 的模型与档位绑定。
+- `tkr harness install` 引导安装缺失的 harness，绝不 sudo。
+- `tkr update` 自更新。
 - 方向键选择器，支持输入过滤。
-- 中英双语，跟随系统 locale，`TF_LANG` 可覆盖。
+- 中英双语，跟随系统 locale，`TKR_LANG` 可覆盖。
 
 [未发布]: https://github.com/TokenFlux/tkr/compare/v0.5.1...HEAD
 [0.5.1]: https://github.com/TokenFlux/tkr/compare/v0.5.0...v0.5.1
