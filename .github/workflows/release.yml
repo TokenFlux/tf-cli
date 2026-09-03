@@ -21,12 +21,13 @@ jobs:
     steps:
       # 手动触发时 github.ref 是用户选择的分支，不是输入框里的 tag。
       # 所有 job 都必须显式检出同一个 tag，避免旧 tag 装进 main HEAD 的二进制。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.mod
 
       - name: 发版前检查
         run: |
@@ -59,12 +60,13 @@ jobs:
           # Windows v0 标注实验性：能编译，但交互路径未验证。
           - { goos: windows, goarch: amd64 }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.mod
 
       - name: 确定版本号
         id: v
@@ -111,7 +113,7 @@ jobs:
             echo "asset=$base.tar.gz" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.pack.outputs.asset }}
           path: ${{ steps.pack.outputs.asset }}
@@ -121,10 +123,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: staging
           merge-multiple: true
