@@ -79,7 +79,7 @@ tf login [名字] --from-web [--host <网关地址>]
 终端中的会话链接使用以下 fragment；示例中的 secret 已省略：
 
 ```text
-https://tokenflux.dev/keys#tf=1.43110.<base64url-secret>
+https://tokenflux.dev/keys#tfcli=1.43110.<base64url-secret>
 ```
 
 fragment 不会进入发往 TokenFlux Web 服务器的 HTTP 请求。页面脚本读取后应从地址栏移除它，且不得写入日志、分析事件或持久化存储。
@@ -117,7 +117,7 @@ iframe 场景：
 
 ### 2. 可选的监听会话验证
 
-CLI 每次启动网页导入时生成 16 字节（128 位）随机 secret，并把扩展版本、实际监听端口和 secret 放进 Keys 页 URL fragment：`#tf=1.<port>.<base64url-secret>`。页面通过该链接启动时：
+CLI 每次启动网页导入时生成 16 字节（128 位）随机 secret，并把扩展版本、实际监听端口和 secret 放进 Keys 页 URL fragment：`#tfcli=1.<port>.<base64url-secret>`。页面通过该链接启动时：
 
 1. 生成一个 16 至 128 字符、规范编码且无 `=` padding 的 base64url challenge。
 2. 请求指定端口的 `GET /ping?challenge=<challenge>`。
@@ -339,7 +339,7 @@ function encodeBase64Url(value: Uint8Array): string {
 
 export function readTfImportSession(): TfImportSession | null {
   const fragment = window.location.hash;
-  if (!fragment.startsWith('#tf=')) return null;
+  if (!fragment.startsWith('#tfcli=')) return null;
 
   // Keys 路由初始化时就调用本函数：先清除 fragment，再检查格式，不发网络请求。
   window.history.replaceState(
@@ -347,7 +347,7 @@ export function readTfImportSession(): TfImportSession | null {
     '',
     window.location.pathname + window.location.search
   );
-  const match = /^#tf=1\.(4311[0-9])\.([A-Za-z0-9_-]{22})$/.exec(fragment);
+  const match = /^#tfcli=1\.(4311[0-9])\.([A-Za-z0-9_-]{22})$/.exec(fragment);
   if (!match) return null;
 
   const port = Number(match[1]);
@@ -507,7 +507,7 @@ export async function importKeyToTf(
 }
 ```
 
-Keys 路由初始化时应立即调用 `const tfImportSession = readTfImportSession()`，将结果只保存在内存中；这一步会先从地址栏移除 `#tf=...`，不会扫描端口或触发 LNA 权限。用户点击“导入 TF CLI”后再调用 `findTfCli(tfImportSession)`。
+Keys 路由初始化时应立即调用 `const tfImportSession = readTfImportSession()`，将结果只保存在内存中；这一步会先从地址栏移除 `#tfcli=...`，不会扫描端口或触发 LNA 权限。用户点击“导入 TF CLI”后再调用 `findTfCli(tfImportSession)`。
 
 页面必须在调用 `importKeyToTf` 前展示连接状态：`target.verified === true` 时显示“已验证当前 tf 会话”；否则显示“未验证本机 CLI，继续操作会把 Key 发送给未经验证的本机服务”。未验证状态是警告，不禁用导入按钮。将 `findTfCli` 返回的同一个 `target` 对象传给 `importKeyToTf`，示例会自动附加可选导入证明，CLI 也会在终端显示相同状态。不要使用范围过大的“可信页面”或“可信 Key”，因为会话证明只认证这次 CLI 监听和本次请求。
 

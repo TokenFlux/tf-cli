@@ -183,7 +183,7 @@ func webImportSessionURL(host string, port int, secret []byte) string {
 	page, _ := url.Parse(host) // host was validated by webOrigin before this call.
 	page.Path = strings.TrimRight(page.Path, "/") + "/keys"
 	page.RawPath = ""
-	page.Fragment = fmt.Sprintf("tf=%d.%d.%s", webImportProtocol, port,
+	page.Fragment = fmt.Sprintf("tfcli=%d.%d.%s", webImportProtocol, port,
 		base64.RawURLEncoding.EncodeToString(secret))
 	return page.String()
 }

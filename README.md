@@ -58,7 +58,7 @@ $ tf login
 等待网页导入
   监听     http://127.0.0.1:43110
   来源     https://tokenflux.dev
-  打开     https://tokenflux.dev/keys#tf=1.43110.<session-secret>
+  打开     https://tokenflux.dev/keys#tfcli=1.43110.<session-secret>
   10 分钟内没有请求会自动退出
 ```
 

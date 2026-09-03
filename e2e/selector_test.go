@@ -211,7 +211,7 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 		t.Fatalf("没有从输出找到导入地址\n--- 屏幕 ---\n%s", p.tail())
 	}
 
-	session := regexp.MustCompile(`#tf=1\.(4311[0-9])\.([A-Za-z0-9_-]+)`).FindStringSubmatch(p.screen())
+	session := regexp.MustCompile(`#tfcli=1\.(4311[0-9])\.([A-Za-z0-9_-]+)`).FindStringSubmatch(p.screen())
 	if len(session) != 3 {
 		t.Fatalf("没有从输出找到会话链接\n--- 屏幕 ---\n%s", p.tail())
 	}

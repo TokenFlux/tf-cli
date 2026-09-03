@@ -99,7 +99,7 @@ func TestWebImportSessionURLUsesFragment(t *testing.T) {
 	if parsed.Path != "/base/keys" || parsed.RawQuery != "" {
 		t.Fatalf("session URL path/query = %q %q", parsed.Path, parsed.RawQuery)
 	}
-	if parsed.Fragment != "tf=1.43110.QkJCQkJCQkJCQkJCQkJCQg" {
+	if parsed.Fragment != "tfcli=1.43110.QkJCQkJCQkJCQkJCQkJCQg" {
 		t.Errorf("session fragment = %q", parsed.Fragment)
 	}
 }
