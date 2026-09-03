@@ -59,6 +59,10 @@
 - **main（待发布）** 落地网页 Key 导入与可选会话证明、归档早期设计稿，并新增前端接入文档；
   GitHub 仓库改名为 `TokenFlux/tf-cli`，Go module 改为 `github.com/tokenflux/tf-cli`，命令名仍为 `tf`
 
+仓库改名后，旧 GitHub URL 会自动重定向，现有二进制的自更新和 `install.sh` 均已实测可用。
+首个包含新 module 路径的版本发布前，`go install github.com/tokenflux/tf-cli/cmd/tf@latest`
+仍会命中声明旧路径的 `v0.5.1` 而失败；源码用户暂时使用 README 的 clone 构建方式，不重打历史 tag。
+
 ## 四、实测得到的事实
 
 这些是靠发请求、跑进程得来的，不是推的。
