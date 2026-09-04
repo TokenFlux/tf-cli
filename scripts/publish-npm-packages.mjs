@@ -57,11 +57,9 @@ for (const entry of index.packages) {
 }
 
 if (!dryRun) {
+  const verifiedTags = new Map()
   for (const entry of index.packages) {
-    const tags = distTags(entry.name)
-    if (tags[tag] !== index.version) {
-      fail(`${entry.name} tag ${tag} is ${tags[tag] || 'missing'}; expected ${index.version}`)
-    }
+    verifiedTags.set(entry.name, waitForDistTag(entry.name, tag, index.version))
   }
 
   // npm currently adds latest while creating a package even when the first
@@ -69,11 +67,29 @@ if (!dryRun) {
   // version. Surface that temporary state until the first stable release.
   if (index.version.includes('-') && tag !== 'latest') {
     for (const entry of index.packages) {
-      if (distTags(entry.name).latest === index.version) {
+      if (verifiedTags.get(entry.name).latest === index.version) {
         console.warn(`warning: latest temporarily points to ${entry.name}@${index.version}`)
       }
     }
   }
+}
+
+function waitForDistTag(name, tag, version) {
+  const retryDelaysMs = [0, 1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
+  let tags = {}
+  for (const delayMs of retryDelaysMs) {
+    if (delayMs > 0) sleep(delayMs)
+    tags = distTags(name)
+    if (tags[tag] === version) return tags
+    if (delayMs !== retryDelaysMs.at(-1)) {
+      console.warn(`waiting for ${name} tag ${tag} to reach ${version}`)
+    }
+  }
+  fail(`${name} tag ${tag} is ${tags[tag] || 'missing'}; expected ${version}`)
+}
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
 }
 
 function packageExists(name, version) {

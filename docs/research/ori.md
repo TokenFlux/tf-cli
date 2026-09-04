@@ -3,7 +3,7 @@
 > 状态：Ori 调研记录仍供参考；其中关于 tf 的认证与分发内容是早期草案，
 > 不是当前功能说明。PKCE/grant/exchange 已由 localhost 网页导入路线替代；
 > 分发采用 Go 原生交叉编译加独立脚本构建 5 个平台二进制包与 1 个主包（`@tokenflux/tf`），
-> 已完成 0.5.3-bootstrap.0 预发布与 6 个包的 OIDC 信任绑定，首个稳定版本为 v0.5.3。
+> 已完成 0.5.3-bootstrap.0 预发布与 6 个包的 OIDC 信任绑定，稳定版 v0.5.3 已公开发布。
 > 当前状态见 [`../STATUS.md`](../STATUS.md)、[`../PLAN.md`](../PLAN.md) 与 [`../distribution/npm.md`](../distribution/npm.md)。
 
 调研对象：`ori`（OpenRouter 官方 CLI，2026-08 发布）

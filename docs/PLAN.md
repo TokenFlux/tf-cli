@@ -71,7 +71,7 @@ scripts/
 
 ### 中期：分发与代码结构
 
-5. ~~npm 平台包分发~~ 已完成：`@tokenflux/tf` 及 5 个平台包已完成 0.5.3-bootstrap.0 预发布与 registry 验证，GitHub Actions OIDC Trusted Publishing 绑定已配置；支持正式打 tag 发布。操作手册见 [`distribution/npm.md`](distribution/npm.md)。
+5. ~~npm 平台包分发~~ 已完成：`@tokenflux/tf` 及 5 个平台包已完成 0.5.3-bootstrap.0 预发布与 registry 验证，GitHub Actions OIDC Trusted Publishing 绑定已配置；稳定版 v0.5.3 已公开发布。操作手册见 [`distribution/npm.md`](distribution/npm.md)。
 6. ~~拆出 Key 与协议准入、shell 补全逻辑~~ 已完成（`internal/access`、`internal/completions`）；继续拆分仍与命令 I/O 耦合的部分。
 7. ~~完善 `CHANGELOG.md`~~ 已完成；`README.en.md` 待补。
 8. ~~决定 `InstallRecord` 的消费者~~ 已停止写入并删除；安装记录没有消费者，且外部升级后会失真。
@@ -107,4 +107,4 @@ Windows 交互需基于 `CONIN$` 与 `SetConsoleMode` 重写。待具备实际�
 | harness 迭代导致注入 flag 失效 | 持续跟进 | 记录已验证版本，保持架构轻量与直接透传 |
 | 分组配置改动导致探测结果过期 | **已处理** | 启动失败后触发重探，支持 `tf keys --refresh` 刷新缓存 |
 | harness 隐式模型槽位引发异常 | **已处理** | 适配表穷举各 harness 槽位并做补齐约束 |
-| npm 平台包体积与发布复杂度 | **已处理** | 采用 5 个二进制可选依赖包加轻量 JS launcher，完成 Bootstrap 预发布与 6 个包的 OIDC 信任绑定，支持 v0.5.3 正式发布 |
+| npm 平台包体积与发布复杂度 | **已处理** | 采用 5 个二进制可选依赖包加轻量 JS launcher，完成 Bootstrap 预发布与 6 个包的 OIDC 信任绑定，稳定版 v0.5.3 已公开发布 |

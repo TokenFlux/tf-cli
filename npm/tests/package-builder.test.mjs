@@ -107,7 +107,12 @@ if (args[0] === 'view') {
   process.exit(1)
 }
 if (args[0] === 'dist-tag' && args[1] === 'ls') {
-  const tags = state.packages[args[2]] || {}
+  state.tagReads = state.tagReads || {}
+  state.tagReads[args[2]] = (state.tagReads[args[2]] || 0) + 1
+  const tags = { ...(state.packages[args[2]] || {}) }
+  if (args[2] === '@tokenflux/tf' && state.tagReads[args[2]] === 2) {
+    tags.bootstrap = '1.2.3-test.stale'
+  }
   fs.writeFileSync(stateFile, JSON.stringify(state))
   for (const [tag, value] of Object.entries(tags)) console.log(tag + ': ' + value)
   process.exit(0)
@@ -133,7 +138,9 @@ process.exit(args[0] === 'publish' ? 90 : 91)
   const state = JSON.parse(readFileSync(fakeState, 'utf8'))
   assert.equal(state.calls.filter((args) => args[0] === 'publish').length, 0)
   assert.equal(state.calls.filter((args) => args[0] === 'dist-tag' && args[1] === 'rm').length, 0)
+  assert.match(recovered.stderr, /waiting for @tokenflux\/tf tag bootstrap to reach 1\.2\.3-test\.0/)
   assert.match(recovered.stderr, /latest temporarily points to @tokenflux\/tf@1\.2\.3-test\.0/)
+  assert.equal(state.tagReads['@tokenflux/tf'], 3)
   for (const tags of Object.values(state.packages)) {
     assert.deepEqual(tags, { bootstrap: version, latest: version })
   }

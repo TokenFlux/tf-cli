@@ -2,7 +2,7 @@
 
 本文档记录 `tf-cli` 的 npm 平台包分发架构、本地验证流程、历史首发 Bootstrap 记录、GitHub Actions OIDC Trusted Publishing 信任配置及常态发布流程。
 
-> **当前状态**：`@tokenflux/tf` 及 5 个平台包已成功完成 `0.5.3-bootstrap.0` 预发布并完成 OIDC 绑定。当前正准备发布首个正式稳定版本 `v0.5.3`（发布 tag 尚未创建）。
+> **当前状态**：稳定版 `v0.5.3` 已公开发布，GitHub Release 已创建。全部 6 个包均包含 `bootstrap=0.5.3-bootstrap.0` 与 `latest=0.5.3`。
 
 ---
 
@@ -101,7 +101,7 @@ npm trust github @tokenflux/tf-win32-x64 --repo TokenFlux/tf-cli --file release.
 
 ## 五、常态化稳定版本发布流程
 
-首发及信任绑定完成后，后续稳定版本（如 `v0.5.3`）走自动化 CI 流程。
+首发及信任绑定完成后，后续稳定版本走自动化 CI 流程。
 
 ### 1. 发布触发与执行阶段
 
@@ -116,19 +116,23 @@ npm trust github @tokenflux/tf-win32-x64 --repo TokenFlux/tf-cli --file release.
    - 调用 `scripts/publish-npm-packages.mjs` **优先发布 5 个平台包，最后发布主包 `@tokenflux/tf`**，并附加 `--provenance`；
 4. **release**：创建 GitHub Release 并上传归档与 `SHA256SUMS`。
 
-### 2. 传播重试与防冲突机制
+### 2. 失败重试与幂等恢复机制
 
-- **元数据传播重试**：当 npm 远端 package 文档尚未完成传播时，发布脚本通过 `dist-tags` 确认已发布版本，跳过不可变的已存在版本，并校验目标 tag 正确性；
-- **重试幂等**：若流水线因网络中断，重新运行 GitHub Actions Job 时会自动跳过已发布的包，继续发布未完成的包。
+发布流程具备幂等与传播容忍设计，job 失败时可直接在 GitHub Actions 重新运行：
 
-### 3. 稳定发布后验证与凭据清理
+1. **不可变版本跳过**：已存在的版本无法覆盖，重跑时脚本会自动跳过已发布的 tarball。
+2. **E404 传播降级检测**：若新版本的 package document 尚未完成传播而返回 E404，脚本会回退读取 dist-tags 列表确认版本是否存在，避免重试时误判未发布而重复上传。
+3. **目标 Tag 读取退避重试**：发布完成后校验目标 dist-tag 时，脚本使用 `0/1/2/4/8/15/30` 秒有界退避重试等待 registry 传播一致。该机制于 `v0.5.3` tag 发布后合入 `main` 分支，不属于该 tag 发行版本。
 
-在首个稳定版本（`v0.5.3`）发布并验证完成后，维护者在本机执行凭据清理：
+### 3. v0.5.3 发布实测与历史记录
 
-```sh
-# 验证稳定版
-npx @tokenflux/tf@latest --json version
-
-# 验证通过后退出本地 npm 登录
-npm logout
-```
+1. **工作流首发与重跑**：`v0.5.3` 首发执行时，因 `@tokenflux/tf-linux-x64` 发布后立即读取到旧 tag（`latest` 仍指向预发布版本）导致首次 job 失败；触发 failed-job rerun 后，发布脚本自动跳过已存在的 6 个不可变版本，顺利通过 tag 校验并创建 GitHub Release。
+2. **实测校验结果**：
+   - 清理缓存测试 `npx @tokenflux/tf@latest --json version` 与 `pnpx @tokenflux/tf@latest --json version`，均正确返回版本 `0.5.3` 与 commit `59ef0c8`；
+   - 隔离全局安装测试中，从 `bootstrap` 升级至 `latest` 成功，且仅下载匹配当前系统的 `darwin-arm64` 平台包；
+   - `npm audit signatures` 验证通过（2 个已安装包 registry 签名及 2 个 attestation 校验通过）；
+   - 全部 6 个包在 npm 上均具备 SLSA provenance v1 元数据；
+   - GitHub Release 中的 5 个归档产物及 `SHA256SUMS` 校验通过。
+3. **凭据与生态记录**：
+   - 维护者本地已执行登出，`npm whoami` 校验失败，`~/.npmrc` 中无 npmjs 认证 token；
+   - Go proxy 传播已完成，全新查询与无缓存请求下 `@latest` 均已正确解析并返回 `v0.5.3`（tag 指向 `59ef0c8`）。
