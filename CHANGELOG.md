@@ -25,6 +25,11 @@
 
 ### 新增
 
+- 新增 Pi coding agent 支持（命令 `tf pi`，进程名 `pi`）：
+  - 接入协议覆盖 `openai_responses`（映射 `openai-responses`）、`anthropic_messages`（映射 `anthropic-messages`）与 `openai_chat_completions`（映射 `openai-completions`），通常优先 Responses，Claude 模型在允许时优先原生 Anthropic，Chat 作为兼容回退；绝不伪装 Claude Code，`claude_code_only` 分组仍不可用于 Pi。
+  - 启动采用纯进程环境与扩展方案：通过 `--extension` 加载权限 `0600` 的临时 JavaScript Extension 动态注册随机名 provider，退出后自动删除；网关 API Key 仅保留在进程环境变量中，不进入 argv、临时文件或 `~/.pi/agent/auth.json`、`~/.pi/agent/models.json` 等持久配置，Pi 原有的 settings、扩展、技能与会话仍正常加载。
+  - 模型槽定义仅需 `default` 主模型槽；网关 `/v1/models` 仅提供模型 ID 时采用保守自定义模型缺省（128K context、16K output、text-only）；`tf pi -e high` 映射到 `pi --thinking high`，仅在传入独立 effort 时声明 reasoning。
+  - harness 缺失时引导安装选项支持 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` 与 `pnpm add -g --ignore-scripts @earendil-works/pi-coding-agent`。
 - 新增可重复执行的卸载脚本 `uninstall.sh`，用于删除由 `install.sh` 安装在 `TF_INSTALL_DIR`（默认 `~/.local/bin`）的 `tf` 二进制；默认保留当前生效的配置、凭据与缓存，支持通过 `--purge` 显式清理。
 
 ---

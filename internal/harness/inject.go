@@ -1,10 +1,10 @@
 package harness
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 )
 
@@ -24,18 +24,44 @@ type Input struct {
 
 // Plan 是一次启动的完整描述。
 //
-// 刻意只包含「进程怎么起」，不含任何落盘动作：tf 不改用户的配置文件。
+// 不含任何用户配置写入。Pi 需要的临时 Extension 只在 Prepare 时创建，
+// 子进程退出后删除。
 type Plan struct {
 	Bin  string
 	Args []string
 	Env  []string // 完整环境，已在父进程环境基础上增删
 
-	// Managed 是 tf 显式设定的环境变量名。
-	//
-	// 供启动前的冲突检查用：harness 自己的配置文件里若也设了同名变量，
-	// 谁赢要看 harness 怎么实现 —— 实测 Claude Code 的 settings.json
-	// 会赢过进程环境。要判断相撞，先得知道自己设了哪些。
-	Managed []string
+	// Managed 仅供已实测的 Claude settings.json 冲突检查使用。
+	Managed map[string]string
+}
+
+// Prepare 把 Pi 的进程私有 Extension 落地，并返回实际 argv。
+// 调用方必须执行 cleanup；文件只包含配方，凭据仍只在进程环境里。
+func (p *Plan) Prepare() ([]string, func(), error) {
+	if p.Bin != "pi" {
+		return p.Args, func() {}, nil
+	}
+
+	args := append([]string(nil), p.Args...)
+	if len(args) < 2 || args[0] != "--extension" {
+		return nil, nil, fmt.Errorf("pi extension argument is missing")
+	}
+	f, err := os.CreateTemp("", "tf-pi-*.js")
+	if err != nil {
+		return nil, nil, err
+	}
+	cleanup := func() { _ = os.Remove(f.Name()) }
+	if _, err := f.WriteString(piProviderExtension); err != nil {
+		_ = f.Close()
+		cleanup()
+		return nil, nil, err
+	}
+	if err := f.Close(); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	args[1] = f.Name()
+	return args, cleanup, nil
 }
 
 // AnthropicBase 返回 Anthropic 协议的 base：根路径，不带 /v1。
@@ -61,25 +87,17 @@ func (h *Harness) BuildPlan(in Input) (*Plan, error) {
 		return planCodex(in)
 	case "opencode":
 		return planOpencode(in)
+	case "pi":
+		return planPi(in)
 	default:
 		return nil, fmt.Errorf("no launch recipe for %s", h.Name)
 	}
 }
 
-// env 在父进程环境上叠加修改。
+// buildEnv 在父进程环境上叠加修改。
 //
 // 值为空字符串表示「显式置空」而非「删除」，用于压制 harness 对
 // 其它凭据来源的探测；真正要删除的用 drop。
-// keysOf 取出映射的键并排序，让输出稳定。
-func keysOf(set map[string]string) []string {
-	out := make([]string, 0, len(set))
-	for k := range set {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
 func buildEnv(set map[string]string, drop []string) []string {
 	dropped := map[string]bool{}
 	for _, k := range drop {
@@ -148,7 +166,7 @@ func planClaude(in Input) (*Plan, error) {
 		"CLAUDE_CODE_OAUTH_TOKEN",
 	}
 
-	return &Plan{Bin: "claude", Args: in.Args, Env: buildEnv(set, drop), Managed: keysOf(set)}, nil
+	return &Plan{Bin: "claude", Args: in.Args, Env: buildEnv(set, drop), Managed: set}, nil
 }
 
 // planCodex 全部用 -c 覆盖，不落盘。
@@ -178,7 +196,7 @@ func planCodex(in Input) (*Plan, error) {
 	args = append(args, in.Args...)
 
 	set := map[string]string{keyEnv: in.Key}
-	return &Plan{Bin: "codex", Args: args, Env: buildEnv(set, nil), Managed: keysOf(set)}, nil
+	return &Plan{Bin: "codex", Args: args, Env: buildEnv(set, nil)}, nil
 }
 
 // planOpencode 用 OPENCODE_CONFIG_CONTENT 覆盖内置 openai provider。
@@ -238,5 +256,91 @@ func planOpencode(in Input) (*Plan, error) {
 	}
 
 	set := map[string]string{"OPENCODE_CONFIG_CONTENT": string(blob)}
-	return &Plan{Bin: "opencode", Args: args, Env: buildEnv(set, nil), Managed: keysOf(set)}, nil
+	return &Plan{Bin: "opencode", Args: args, Env: buildEnv(set, nil)}, nil
+}
+
+const piProviderExtension = `export default function (pi) {
+  const config = JSON.parse(process.env.TF_PI_PROVIDER_CONFIG);
+  const compat = config.api === "openai-completions" ? {
+    supportsStore: false,
+    supportsDeveloperRole: false,
+    supportsStrictMode: false,
+    maxTokensField: "max_tokens"
+  } : undefined;
+
+  pi.registerProvider(config.provider, {
+    baseUrl: config.baseUrl,
+    apiKey: "$TF_UPSTREAM_KEY",
+    api: config.api,
+    models: [{
+      id: config.model,
+      name: config.model,
+      reasoning: config.reasoning,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128000,
+      maxTokens: 16384,
+      ...(compat ? { compat } : {})
+    }]
+  });
+}
+`
+
+type piProviderConfig struct {
+	Provider  string `json:"provider"`
+	BaseURL   string `json:"baseUrl"`
+	API       string `json:"api"`
+	Model     string `json:"model"`
+	Reasoning bool   `json:"reasoning"`
+}
+
+// planPi 通过一次性 Extension 注册独立 provider。
+//
+// 不能改 PI_CODING_AGENT_DIR：那会连 settings、扩展、技能与会话目录一起换掉。
+// 也不能把 Key 交给 --api-key：命令行会暴露在进程列表里。动态 provider 名
+// 避免 ~/.pi/agent/auth.json 里碰巧同名的凭据按 Pi 的优先级覆盖本次注入。
+func planPi(in Input) (*Plan, error) {
+	modelID := in.Slots["default"]
+	if modelID == "" {
+		return nil, fmt.Errorf("pi requires a default model")
+	}
+
+	var api, baseURL string
+	switch in.Protocol {
+	case ProtoAnthropicMessages:
+		api = "anthropic-messages"
+		baseURL = AnthropicBase(in.Host)
+	case ProtoOpenAIResponses:
+		api = "openai-responses"
+		baseURL = OpenAIBase(in.Host)
+	case ProtoOpenAIChat:
+		api = "openai-completions"
+		baseURL = OpenAIBase(in.Host)
+	default:
+		return nil, fmt.Errorf("pi cannot use protocol %q", in.Protocol)
+	}
+
+	provider := "tf-" + strings.ToLower(rand.Text())
+	blob, err := json.Marshal(piProviderConfig{
+		Provider: provider, BaseURL: baseURL, API: api,
+		Model: modelID, Reasoning: in.Effort != "",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	args := []string{
+		"--extension", "",
+		"--model", provider + "/" + modelID,
+	}
+	if in.Effort != "" {
+		args = append(args, "--thinking", in.Effort)
+	}
+	args = append(args, in.Args...)
+
+	set := map[string]string{
+		"TF_PI_PROVIDER_CONFIG": string(blob),
+		"TF_UPSTREAM_KEY":       in.Key,
+	}
+	return &Plan{Bin: "pi", Args: args, Env: buildEnv(set, nil)}, nil
 }

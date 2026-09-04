@@ -6,8 +6,46 @@
 | harness | 版本 | 状态 |
 |---|---|---|
 | opencode | 1.18.20 | ✅ 已验证 |
-| claude | 未安装 | ⏳ 待验证（含最高风险项 `claude_code_only`）|
-| codex | 未安装 | ⏳ 待验证 |
+| pi | 0.84.4 / 0.85.0 | ✅ 已验证 |
+| claude | 2.1.251 | ✅ 已验证（含确定性结论 `claude_code_only` 拦截 UA/TLS 指纹）|
+| codex | 0.151.0 | ✅ 已验证 |
+
+---
+
+## Pi ✅
+
+### 配方（已验证可用）
+
+通过 Pi 的 `--extension` 加载权限为 `0600` 的临时 JavaScript Extension，在进程内动态注册随机命名的 provider（如 `tf-<random>`），并在子进程退出后由 `Plan.Prepare()` 的 cleanup 自动删除临时文件。
+
+具体实现见 [`internal/harness/inject.go`](../../internal/harness/inject.go)。临时 Extension 的输入与边界如下：
+- **输入**：从环境变量 `TF_PI_PROVIDER_CONFIG` 读取 JSON 配置（含 `provider`、`baseUrl`、`api`、`model`、`reasoning`），API Key 引用环境变量 `$TF_UPSTREAM_KEY`。
+- **边界**：按协议动态配置 `api` 与 `baseUrl`；当 `api` 为 `openai-completions` 时，覆盖 compat 选项（`supportsStore: false`、`supportsDeveloperRole: false`、`supportsStrictMode: false`、`maxTokensField: "max_tokens"`）；注册单模型（`id` / `name` 为目标模型 ID，`contextWindow: 128000`，`maxTokens: 16384`，`input: ["text"]`）。
+
+启动参数注入：
+- 命令行参数：`--extension <temp-file> --model <provider>/<model>`
+- 当传入独立 effort（如 `-e high`）时追加 `--thinking high`
+- 凭据仅注入环境变量 `TF_UPSTREAM_KEY`，配置 JSON 注入 `TF_PI_PROVIDER_CONFIG`
+
+### 结论与设计要点
+
+- **不改动 `~/.pi`**：不修改 `~/.pi/agent/auth.json`、`~/.pi/agent/models.json` 或 `settings.json`；也不改变 `PI_CODING_AGENT_DIR`，确保 Pi 自带的扩展、技能、会话历史正常加载。
+- **凭据与进程环境**：API Key 仅存放在进程环境变量 `TF_UPSTREAM_KEY` 中，由 Pi 的 `$ENV_VAR` 机制解析，Key 不进入 CLI argv、临时文件或 Pi 持久配置。
+- **动态 provider 避免污染与冲突**：使用随机 `tf-<random>` 避免与用户已配置的 provider 冲突，启动时注入 `--model <provider>/<model>` 精确选中临时 provider。不限制 Pi 的会话模型 scope，保留 Pi 原生模型切换能力。
+- **保留 0600 临时文件的原因**：实测将 JavaScript 以 `data:text/javascript;base64,...` 传给 Pi 0.84.4 的 `--extension` 时虽退出码为 0 且无报错，但 Extension 会被静默忽略（测试 provider 不出现在模型目录），且 `/dev/fd` 方案无法跨 Windows，因此必须保留自动清理的 0600 临时文件。
+- **协议三路映射**：
+  - `openai_responses` → `openai-responses`（baseURL 为 `<host>/v1`）
+  - `anthropic_messages` → `anthropic-messages`（baseURL 为根路径 `<host>`，不带 `/v1`）
+  - `openai_chat_completions` → `openai-completions`（baseURL 为 `<host>/v1`，声明 compat 选项：`supportsStore: false`、`supportsDeveloperRole: false`、`supportsStrictMode: false`、`maxTokensField: "max_tokens"`）
+  - 优先级通常优先 Responses，Claude 模型在分组允许时优先 Anthropic Messages，Chat 作兼容回退。绝不伪装 Claude Code，`claude_code_only` 分组不可用于 Pi。
+- **模型能力声明边界**：网关 `/v1/models` 当前只提供模型 ID，临时模型注册使用保守缺省（`contextWindow: 128000`, `maxTokens: 16384`, `input: ["text"]`），不代表上游模型的真实上限。
+- **Reasoning 声明**：仅在 tf 显式传入独立 effort 时设置 `reasoning: true` 并传入 `--thinking <effort>`。若模型 ID 本身自带 `-high`/`-tiered` 后缀，不额外开启 reasoning，避免叠加 Pi 默认 thinking 配置。
+- **实测验证记录（Pi 0.84.4 / 0.85.0）**：
+  - TokenFlux 真实网关 `openai_responses` 请求成功，完成端到端对话。
+  - 本地假网关验证：`anthropic-messages`、`openai-responses`、`openai-completions` 三路流式响应及 `-e high` 全部跑通，模型 ID、鉴权头与 Pi 自身 User-Agent 正确。
+  - 0.85.0 的 Anthropic 客户端请求路径带查询参数 `/v1/messages?beta=true`，不影响现有 base URL 根路径配方。
+  - 复合模型 ID（如 `gpt/gpt-5.6-terra`）能正确注册与选择。
+  - 临时 extension 文件权限验证为 `0600`，tf 退出后文件被可靠删除无残留。
 
 ---
 
@@ -107,8 +145,8 @@ model=gpt-5.4-nano  small=true  agent=title
 - **codex 的 `-c` 覆盖是否足以避免落盘**：**足够**。用 mtime 验证过
   `~/.codex/config.toml` 在启动前后未被修改。
 
-- **三个 harness 的端到端**：全部通过。claude 2.1.251、codex 0.151.0、
-  opencode 1.18.20，真实对话、退出码 0。
+- **此前三个已有 harness 的端到端**：全部通过。claude 2.1.251、codex 0.151.0、
+  opencode 1.18.20，真实对话、退出码 0（Pi 的端到端实测见上文）。
 
 仍未验证：`HTTPS_PROXY` 存在时对指纹识别的影响（`tf status` 会提示存在代理，
 但影响未测）；`ENABLE_TOOL_SEARCH` 在 Anthropic 分组是否生效。

@@ -1,12 +1,12 @@
 # tf-cli 现状
 
-对应 main 分支（v0.6.0）。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 main 分支（v0.6.0 之后）。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
 - `research/ori.md` — ori 逆向调研、整体设计、分发方案
 - `research/tokenflux-api-probe.md` — 网关实测记录
-- `research/harness-probe.md` — 三个 harness 的注入配方与实测
+- `research/harness-probe.md` — 各 harness 的注入配方与实测
 - `design/` — 当前设计决策及其依据
 - `archive/` — 已放弃或被替代的早期方案，仅供追溯
 - `integrations/web-import.md` — 网页前端接入 `tf login --from-web` 的协议契约
@@ -17,11 +17,11 @@
 ## 一、当前形态
 
 命令：`version` `status` `config` `login` `logout` `keys` `update` `harness`
-`model` `completions` + `claude` `codex` `opencode`。`tf login` 默认高亮网页导入，确认后打开 Keys 页面，也可选择粘贴；`--from-web` 可直接进入网页导入。
+`model` `completions` + `claude` `codex` `opencode` `pi`。`tf login` 默认高亮网页导入，确认后打开 Keys 页面，也可选择粘贴；`--from-web` 可直接进入网页导入。
 
-全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。对 `claude`/`codex`/`opencode` 透传命令，写在 harness 名后的 `-h`/`--help` 交给底层工具，`tf --help <harness>` 用于查看 tf 包装帮助。`login` 另有 `--with-key`、`--from-web`、`--force`。
+全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。对 `claude`/`codex`/`opencode`/`pi` 透传命令，写在 harness 名后的 `-h`/`--help` 交给底层工具，`tf --help <harness>` 用于查看 tf 包装帮助。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 8,300 行生产代码（7,729 Go + 586 npm）；约 4,700 行测试（4,370 Go + 305 Node）；158 个 Go 测试函数；8 个 Node 用例，九个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
+约 8,400 行生产代码（7,846 Go + 586 npm）；约 4,800 行测试（4,519 Go + 305 Node）；162 个 Go 测试函数；8 个 Node 用例，九个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
 
 ## 二、里程碑
 
@@ -30,10 +30,10 @@
 | M0 骨架 | 完成 | CLI 框架、config/credentials、权限自修复、错误码、双语、`--json` |
 | M1 目录 | 放弃 | 见下 |
 | M2 认证 | 完成 | `login`、`login --from-web`、`logout`、`keys`、`status`（含额度） |
-| M3 启动 | 完成 | fork+wait、信号转发、退出码穿透、终端复位。三个 harness 均已实测 |
+| M3 启动 | 完成 | fork+wait、信号转发、退出码穿透、终端复位。各 harness 均已实测 |
 | M4 模型 | 完成 | 模型 ID 与强度后缀解析、补全顺序、方向键选择器、按 harness 分开的模型槽 |
 | M5 预检 | 完成 | 零 token 协议探测、按分组前缀的准入记录、隐藏原因说明 |
-| M6 harness | 完成 | claude 2.1.251、codex 0.151.0、opencode 1.18.20 均真实对话通过 |
+| M6 harness | 完成 | claude 2.1.251、codex 0.151.0、opencode 1.18.20 均真实对话通过；pi 0.84.4 与 0.85.0 均已验证（真实 TokenFlux Responses 对话通过，且本地假网关跑通三协议流式请求） |
 | M7 分发 | 完成 | GitHub Actions + install.sh + `tf update`（5 组平台二进制）；npm 平台包已正式发布（1 个主包 + 5 个平台二进制包，详见 [`distribution/npm.md`](distribution/npm.md)） |
 
 **M1 目录（`tf models` / `tf groups`）已放弃。** 原计划走公开的
@@ -148,7 +148,7 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 ## 六、不会变的几条
 
 1. **tf 是启动器，不是 harness 配置改写器。** 对 harness 的注入只存在于子进程，退出后不改写
-   `~/.claude/settings.json`、`~/.codex/config.toml`；tf 自己的 Key、绑定和模型槽仍会按用户操作持久化。
+   `~/.claude/settings.json`、`~/.codex/config.toml`、`~/.pi`；tf 自己的 Key、绑定和模型槽仍会按用户操作持久化。
 2. **不做本地代理、不做 MITM、不覆盖 harness 的 User-Agent**
 3. **没有隐藏的全局可变状态。** 绑定属于 harness，没有「当前 profile」
 4. **不在客户端建推断子系统去补上游数据缺口**

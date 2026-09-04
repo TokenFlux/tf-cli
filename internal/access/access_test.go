@@ -15,6 +15,7 @@ func TestCanRunRespectsClaudeCodeLock(t *testing.T) {
 	claude, _ := harness.Lookup("claude")
 	codex, _ := harness.Lookup("codex")
 	oc, _ := harness.Lookup("opencode")
+	pi, _ := harness.Lookup("pi")
 
 	if !CanRun(locked, config.GroupScope, claude) {
 		t.Error("Claude Code itself passes the fingerprint check")
@@ -24,6 +25,9 @@ func TestCanRunRespectsClaudeCodeLock(t *testing.T) {
 	}
 	if CanRun(locked, config.GroupScope, oc) {
 		t.Error("opencode must not be offered a claude-code-only group either")
+	}
+	if CanRun(locked, config.GroupScope, pi) {
+		t.Error("pi must not be offered a claude-code-only group either")
 	}
 }
 

@@ -38,7 +38,7 @@ internal/
   completions/ shell 补全脚本与落盘位置
   config/     配置、凭据、XDG、文件权限
   gateway/    HTTP 客户端、协议探测、用量
-  harness/    适配表 + 三个 harness 的注入配方 + 安装
+  harness/    适配表 + 各 harness 的注入配方 + 安装
   launch/     fork+wait、信号转发、终端复位
   model/      模型 ID 解析（纯函数）
   ui/         输出层、选择器、终端原始模式、--json、错误码

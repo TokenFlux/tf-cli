@@ -1,6 +1,6 @@
 # @tokenflux/tf
 
-`@tokenflux/tf` is the npm package for the `tf` CLI, providing process-level credential and model slot management for AI coding tools including Claude Code, Codex, and opencode.
+`@tokenflux/tf` is the npm package for the `tf` CLI, providing process-level credential and model slot management for AI coding tools including Claude Code, Codex, opencode, and Pi.
 
 Unscoped `tf` and `tf-cli` on npm belong to unrelated projects. Always use `@tokenflux/tf`.
 

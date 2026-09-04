@@ -186,6 +186,29 @@ func TestControlKeysStillNavigate(t *testing.T) {
 	}
 }
 
+func TestPiLaunchUsesEphemeralExtension(t *testing.T) {
+	models := []string{"gpt-5.4"}
+	srv := fakeGateway(t, models)
+	f := writeConfig(t, srv.URL, models)
+
+	p := start(t, f.env(), "pi", "-m", "gpt-5.4", "--print", "hello")
+	p.waitFor("FAKE-pi args:")
+	if code := p.waitExit(); code != 0 {
+		t.Fatalf("exit code = %d, want 0\n%s", code, p.tail())
+	}
+
+	match := regexp.MustCompile(`FAKE-pi args:--extension ([^ ]+) --model (tf-[a-z2-7]+)/gpt-5\.4 --print hello`).FindStringSubmatch(p.screen())
+	if len(match) != 3 {
+		t.Fatalf("pi launch recipe missing from output\n--- screen ---\n%s", p.screen())
+	}
+	if _, err := os.Stat(match[1]); !os.IsNotExist(err) {
+		t.Errorf("temporary Pi extension still exists after tf exits: %v", err)
+	}
+	if strings.Contains(p.screen(), "sk-test") {
+		t.Fatal("Pi launch output exposed the API key")
+	}
+}
+
 // 网页导入必须走完整的真实边界：HTTP 回环通道 → 终端确认 → 网关校验
 // → 0600 凭据写盘。只测 handler 会漏掉控制终端和主登录流程之间的接线。
 func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {

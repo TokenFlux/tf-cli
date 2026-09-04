@@ -9,6 +9,7 @@
     "claude",
     "codex",
     "opencode",
+    "pi",
     "tokenflux"
   ],
   "license": "Apache-2.0",

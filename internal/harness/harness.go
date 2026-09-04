@@ -124,6 +124,20 @@ var All = []*Harness{
 			{Args: []string{"brew", "install", "sst/tap/opencode"}},
 		},
 	},
+	{
+		Name: "pi",
+		Bin:  "pi",
+		// Pi 原生支持三种网关协议。通常优先 responses；模型原生协议
+		// 选择可将 Claude 调整为 Anthropic，前两种都不可用时再走 chat。
+		Protocols: []Protocol{ProtoOpenAIResponses, ProtoAnthropicMessages, ProtoOpenAIChat},
+		Slots: []Slot{
+			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
+		},
+		Installs: []InstallOption{
+			{Args: []string{"npm", "install", "-g", "--ignore-scripts", "@earendil-works/pi-coding-agent"}},
+			{Args: []string{"pnpm", "add", "-g", "--ignore-scripts", "@earendil-works/pi-coding-agent"}},
+		},
+	},
 }
 
 // Speaks 报告该 harness 会不会某个协议。

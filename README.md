@@ -3,12 +3,12 @@
 [![Release](https://img.shields.io/github/v/release/tokenflux/tf-cli)](https://github.com/tokenflux/tf-cli/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-`tf-cli` 项目提供命令 `tf`，用于启动和管理 AI 编程客户端（Claude Code、Codex、opencode）的网关凭据。它将 [TokenFlux](https://tokenflux.dev) 或自建 TokenRouter 网关的密钥、模型路由及槽位配置以纯进程级方式注入各客户端，不读写各工具的全局配置文件，支持多 Key 隔离与多模型槽协同。
+`tf-cli` 项目提供命令 `tf`，用于启动和管理 AI 编程客户端（Claude Code、Codex、opencode、Pi）的网关凭据。它将 [TokenFlux](https://tokenflux.dev) 或自建 TokenRouter 网关的密钥、模型路由及槽位配置以纯进程级方式注入各客户端，不读写各工具的全局配置文件，支持多 Key 隔离与多模型槽协同。
 
 ## 特性
 
-- **非侵入式注入**：仅在子进程生命周期内通过环境变量与 CLI 参数注入配置，不修改 `~/.claude/settings.json` 或 `~/.codex/config.toml`；`~/.claude/settings.json` 的 `env` 可覆盖进程注入，`tf` 会在启动前检查并告警。
-- **全模型槽位管理**：自动配置主对话模型及后台任务模型（如 Claude 的 `fast` 摘要槽、Codex 的 `review` 审查槽、opencode 的 `small` 模型槽），避免因缺省配置导致静默调用失败。
+- **非侵入式注入**：仅在子进程生命周期内通过环境变量与 CLI 参数注入配置，不修改 `~/.claude/settings.json`、`~/.codex/config.toml` 或 `~/.pi`；`~/.claude/settings.json` 的 `env` 可覆盖进程注入，`tf` 会在启动前检查并告警。
+- **全模型槽位管理**：自动配置主对话模型及后台任务模型（如 Claude 的 `fast` 摘要槽、Codex 的 `review` 审查槽、opencode 的 `small` 模型槽、Pi 的 `default` 主对话槽），避免因缺省配置导致静默调用失败。
 - **协议探测与路由过滤**：登录及需要模型候选或校验时刷新模型列表，通过零 token 探测过滤不兼容模型。绑定与槽位完整的启动和补全直接读取本地缓存。
 - **多凭据隔离**：按 harness 独立绑定 Key，支持单凭据跨分组前缀路由，无需切换全局环境。
 - **环境诊断与冲突预警**：内置状态检查与配置冲突检测，实时识别本地覆盖环境变量及配额耗尽状态。
@@ -144,6 +144,7 @@ $ tf claude
 ```sh
 tf claude -m              # 唤起模型交互选择器
 tf codex  -e high         # 调整推理思考强度（reasoning effort）
+tf pi     -e high         # 调整推理思考强度（reasoning effort）
 tf codex  -k work         # 显式指定本次使用的 Key 别名
 tf claude -- --resume     # 双破折号 -- 后的所有参数将直接透传给底层工具
 tf opencode --help        # harness 命令后的 -h/--help 直接交给底层工具
@@ -172,6 +173,7 @@ tf model claude --set fast=claude-haiku-4-5-20251001
 - **Claude Code**：`default`（主会话）、`fast`（摘要与标题生成）、`heavy`（高算力模式）
 - **Codex**：`default`（主会话）、`review`（代码审查）
 - **opencode**：`default`（主模型）、`small`（轻量任务模型；未配置时将触发回退警告）
+- **Pi**：`default`（主会话）
 
 ### 凭据与多 Key 查看
 
@@ -181,9 +183,9 @@ tf model claude --set fast=claude-haiku-4-5-20251001
 $ tf keys
 work  sk-d61…5b1c
   Claude/    claude
-  GPT/       codex opencode
+  GPT/       codex opencode pi
 personal  sk-9f2…a047
-  ChatGPT/   codex opencode
+  ChatGPT/   codex opencode pi
 ```
 
 `tf keys --refresh` 先拉每把 Key 的 `/v1/models` 再按最新前缀探协议；启动筛选从缓存找不到可用 Key 时同样自动刷新；这些刷新路径网络失败时沿用已有缓存。
@@ -203,6 +205,7 @@ default  sk-d7d…a4fe  13 个模型
   claude    default  claude-sonnet-5
   codex     default  gpt-5.6-terra
   opencode  —        claude-sonnet-5
+  pi        default  gpt-5.6-terra
 警告：~/.codex/auth.json 本地已存在凭据；直接运行 codex（不经由 tf）将使用该凭据
 ```
 
@@ -215,6 +218,7 @@ default  sk-d7d…a4fe  13 个模型
 | **Claude Code** | 2.1.251 | 注入 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_DEFAULT_*_MODEL` | 清理继承的 `ANTHROPIC_API_KEY` 及 AWS Bedrock / GCP Vertex 相关环境变量 |
 | **Codex** | 0.151.0 | 注入命令行参数 `-c model_provider=…`、`-c model_providers.*.base_url=…`、`env_key` | 不注入额外环境变量，避免污染 Shell 上下文 |
 | **opencode** | 1.18.20 | 注入 `OPENCODE_CONFIG_CONTENT` 内联 JSON（包含 `model` 与 `small_model`） | 覆盖进程局部配置，不落盘修改全局配置文件 |
+| **Pi** | 0.84.4 / 0.85.0 | 通过 `--extension` 加载进程私有临时 JS 扩展注册随机 provider，仅在专用环境变量传递凭据，注入限定 `--model <provider>/<model>` | 临时扩展文件权限 `0600` 且退出后自动删除；Key 不进入 argv 或落盘配置，不改动 `~/.pi` |
 
 ## 配置与存储结构
 
@@ -236,4 +240,4 @@ default  sk-d7d…a4fe  13 个模型
 
 ## 许可协议
 
-本项目采用 [Apache-2.0](LICENSE) 许可证。Claude、Codex、opencode 分别为各自实体的注册商标，本项目与其无商业从属关系。
+本项目采用 [Apache-2.0](LICENSE) 许可证。相关名称与商标归各自权利人所有，本项目与其无商业从属关系。

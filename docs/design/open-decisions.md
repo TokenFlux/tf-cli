@@ -24,7 +24,7 @@ Unix 上 `syscall.Exec` 直接将自身进程替换为 harness 进程，信号�
 透传原则：
 
 1. 全局 Flag 可写在子命令前或后；命令专属 Flag 写在对应子命令后。
-2. 对 `claude`、`codex`、`opencode` 三个透传命令，首个非内置参数开启透传；写在 harness 名后的 `-h`/`--help` 也开启透传，后续参数全部原样交给底层子进程。查看 tf 对该 harness 的包装帮助请写在命令名前（如 `tf --help opencode`）。
+2. 对 `claude`、`codex`、`opencode`、`pi` 等透传命令，首个非内置参数开启透传；写在 harness 名后的 `-h`/`--help` 也开启透传，后续参数全部原样交给底层子进程。查看 tf 对该 harness 的包装帮助请写在命令名前（如 `tf --help opencode` 或 `tf --help pi`）。
 3. `--` 之后的内容无条件全量透传。
 4. harness 命令中的 `--model` 由 `tf` 解析并转换，处理模型补全、前缀匹配及格式适配后注入。普通管理命令遇到未知 Flag 会报错，不会透传。
 

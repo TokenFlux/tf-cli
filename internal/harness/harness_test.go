@@ -1,13 +1,17 @@
 package harness
 
 import (
+	"encoding/json"
+	"os"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
 
 // 别名要能命中，未知名字要落空。
 func TestLookup(t *testing.T) {
-	for _, name := range []string{"claude", "cc", "claude-code", "codex", "cx", "opencode"} {
+	for _, name := range []string{"claude", "cc", "claude-code", "codex", "cx", "opencode", "pi"} {
 		if _, ok := Lookup(name); !ok {
 			t.Errorf("Lookup(%q) missed", name)
 		}
@@ -93,7 +97,7 @@ func TestDetectMissingBinary(t *testing.T) {
 
 // 只有 Claude Code 需要把强度编码进模型 ID；其他 harness 有自己的旋钮。
 func TestEffortUsesModelVariantsOnlyForClaude(t *testing.T) {
-	want := map[string]bool{"claude": true, "codex": false, "opencode": false}
+	want := map[string]bool{"claude": true, "codex": false, "opencode": false, "pi": false}
 	for name, wantModelID := range want {
 		h, ok := Lookup(name)
 		if !ok {
@@ -141,6 +145,19 @@ func TestEffortReachesArgs(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(plan.Args, " "), "--variant high") {
 		t.Errorf("opencode args missing variant: %v", plan.Args)
+	}
+
+	pi, _ := Lookup("pi")
+	plan, err = pi.BuildPlan(Input{
+		Host: "https://example.com", Key: "k",
+		Slots: map[string]string{"default": "gpt-5.6-sol"}, Effort: "high",
+		Protocol: ProtoOpenAIResponses,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(plan.Args, " "), "--thinking high") {
+		t.Errorf("pi args missing thinking level: %v", plan.Args)
 	}
 }
 
@@ -225,6 +242,13 @@ func TestOpencodeSpeaksBothProtocols(t *testing.T) {
 	if cl.Speaks("openai_responses") {
 		t.Error("Claude Code speaks only anthropic_messages")
 	}
+
+	pi, _ := Lookup("pi")
+	for _, proto := range []string{"anthropic_messages", "openai_responses", "openai_chat_completions"} {
+		if !pi.Speaks(proto) {
+			t.Errorf("pi should speak %s, got %v", proto, pi.Protocols)
+		}
+	}
 }
 
 // 走 anthropic 协议时必须覆盖 anthropic provider，且用不带 /v1 的根地址。
@@ -279,33 +303,131 @@ func TestOpencodeOpenAIRecipe(t *testing.T) {
 	}
 }
 
-// Plan 必须报出自己设了哪些环境变量。
-//
-// 启动前的冲突检查靠它判断「相撞」—— 拿不到这份名单就只能按前缀猜，
-// 猜宽了会对着不相干的键报警，猜窄了会漏掉真冲突。
-func TestPlanReportsManagedEnv(t *testing.T) {
-	for _, h := range All {
-		in := Input{Host: "https://x", Key: "k", Protocol: h.Protocols[0],
-			Slots: map[string]string{"default": "m", "small": "s", "review": "r"}}
-		p, err := h.BuildPlan(in)
-		if err != nil {
-			t.Fatalf("%s: %v", h.Name, err)
-		}
-		if len(p.Managed) == 0 {
-			t.Errorf("%s reported no managed env vars", h.Name)
-		}
-		// 名单里的每一个都必须真的出现在 Env 里。
-		for _, k := range p.Managed {
-			found := false
-			for _, kv := range p.Env {
-				if strings.HasPrefix(kv, k+"=") {
-					found = true
-					break
-				}
+func TestPiRecipesUseProcessPrivateProvider(t *testing.T) {
+	pi, _ := Lookup("pi")
+	for _, tc := range []struct {
+		name     string
+		protocol Protocol
+		api      string
+		baseURL  string
+	}{
+		{name: "anthropic", protocol: ProtoAnthropicMessages, api: "anthropic-messages", baseURL: "https://tokenflux.dev"},
+		{name: "responses", protocol: ProtoOpenAIResponses, api: "openai-responses", baseURL: "https://tokenflux.dev/v1"},
+		{name: "chat", protocol: ProtoOpenAIChat, api: "openai-completions", baseURL: "https://tokenflux.dev/v1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const secret = "sk-must-not-reach-argv-or-file"
+			plan, err := pi.BuildPlan(Input{
+				Host: "https://tokenflux.dev/", Key: secret,
+				Slots:    map[string]string{"default": "model/id"},
+				Protocol: tc.protocol, Effort: "high",
+				Args: []string{"--print", "hello"},
+			})
+			if err != nil {
+				t.Fatal(err)
 			}
-			if !found {
-				t.Errorf("%s claims to manage %s but it is not in Env", h.Name, k)
+
+			var cfg piProviderConfig
+			if err := json.Unmarshal([]byte(envOf(plan.Env, "TF_PI_PROVIDER_CONFIG")), &cfg); err != nil {
+				t.Fatal(err)
 			}
+			if cfg.API != tc.api || cfg.BaseURL != tc.baseURL || cfg.Model != "model/id" || !cfg.Reasoning {
+				t.Errorf("provider config = %+v", cfg)
+			}
+			if !strings.HasPrefix(cfg.Provider, "tf-") || len(cfg.Provider) == len("tf-") {
+				t.Errorf("ephemeral provider id = %q", cfg.Provider)
+			}
+			wantArgs := []string{
+				"--extension", "", "--model", cfg.Provider + "/model/id",
+				"--thinking", "high", "--print", "hello",
+			}
+			if !slices.Equal(plan.Args, wantArgs) {
+				t.Errorf("args = %q, want %q", plan.Args, wantArgs)
+			}
+			if strings.Contains(strings.Join(plan.Args, " "), secret) ||
+				strings.Contains(envOf(plan.Env, "TF_PI_PROVIDER_CONFIG"), secret) {
+				t.Fatal("pi key leaked outside its dedicated environment variable")
+			}
+			if got := envOf(plan.Env, "TF_UPSTREAM_KEY"); got != secret {
+				t.Errorf("injected key = %q", got)
+			}
+		})
+	}
+}
+
+func TestPiExtensionIsTemporaryAndContainsNoKey(t *testing.T) {
+	pi, _ := Lookup("pi")
+	const secret = "sk-file-secret"
+	plan, err := pi.BuildPlan(Input{
+		Host: "https://tokenflux.dev", Key: secret,
+		Slots: map[string]string{"default": "gpt-5.4"}, Protocol: ProtoOpenAIResponses,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg piProviderConfig
+	if err := json.Unmarshal([]byte(envOf(plan.Env, "TF_PI_PROVIDER_CONFIG")), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Reasoning {
+		t.Error("pi must not add a separate thinking control without an explicit effort")
+	}
+	args, cleanup, err := plan.Prepare()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	path := args[1]
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), secret) {
+		t.Fatal("temporary extension contains the API key")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Errorf("temporary extension mode = %o, want 600", got)
+		}
+	}
+	cleanup()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("temporary extension still exists after cleanup: %v", err)
+	}
+}
+
+func TestPiRejectsIncompleteRecipe(t *testing.T) {
+	pi, _ := Lookup("pi")
+	if _, err := pi.BuildPlan(Input{Protocol: ProtoOpenAIResponses}); err == nil {
+		t.Error("pi should require a default model")
+	}
+	if _, err := pi.BuildPlan(Input{
+		Slots: map[string]string{"default": "m"}, Protocol: Protocol("unknown"),
+	}); err == nil {
+		t.Error("pi should reject an unknown protocol")
+	}
+}
+
+// 只有 Claude Code 有经过实测的配置覆盖路径，因此也只有它需要维护冲突键名单。
+func TestClaudePlanReportsManagedEnv(t *testing.T) {
+	h, _ := Lookup("claude")
+	p, err := h.BuildPlan(Input{
+		Host: "https://x", Key: "k", Protocol: ProtoAnthropicMessages,
+		Slots: map[string]string{"default": "m"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Managed) == 0 {
+		t.Fatal("claude reported no managed environment variables")
+	}
+	for k := range p.Managed {
+		if envOf(p.Env, k) == "" && k != "ANTHROPIC_API_KEY" {
+			t.Errorf("claude claims to manage %s but it is not in Env", k)
 		}
 	}
 }

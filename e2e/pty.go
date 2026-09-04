@@ -242,7 +242,7 @@ func writeConfig(t *testing.T, host string, models []string) fixture {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"claude", "codex", "opencode"} {
+	for _, name := range []string{"claude", "codex", "opencode", "pi"} {
 		body := "#!/bin/sh\necho \"FAKE-" + name + " args:$*\"\nexit 0\n"
 		if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0o755); err != nil {
 			t.Fatal(err)

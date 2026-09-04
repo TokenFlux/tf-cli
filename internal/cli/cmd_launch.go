@@ -97,9 +97,15 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	if err != nil {
 		return ui.Errf(ui.CodeUsage, err.Error())
 	}
+	args, cleanup, err := plan.Prepare()
+	if err != nil {
+		return ui.Errf(ui.CodeInternal,
+			fmt.Sprintf(c.UI.T("准备 %s 启动配置失败", "failed to prepare %s launch configuration"), h.Name)).WithCause(err)
+	}
+	defer cleanup()
 
 	// 横幅之前先说冲突：横幅之后用户的注意力就交给 harness 了。
-	warnOverrides(c, h, plan.Managed)
+	warnOverrides(c, plan.Managed)
 
 	// 启动横幅：用户必须知道自己正在用什么，但只占一行。
 	//
@@ -122,7 +128,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	}
 	c.UI.Logf("%s", banner)
 
-	res, err := launch.Run(plan.Bin, plan.Args, plan.Env)
+	res, err := launch.Run(plan.Bin, args, plan.Env)
 	if err != nil {
 		return ui.Errf(ui.CodeInternal,
 			fmt.Sprintf(c.UI.T("启动 %s 失败", "failed to launch %s"), h.Name)).WithCause(err)
@@ -362,24 +368,17 @@ func commonPrefix(a, b string) int {
 // http://127.0.0.1:9，tf claude 连的是那个死地址而不是网关。
 // settings.json 赢过进程环境。CC-Switch 这类工具正是往那里写东西的。
 //
-// 只报真正相撞的键。harness 的配置文件里有别的 env 是它自己的事，
-// 与本次注入无关的一律不提。
-func warnOverrides(c *Context, h *harness.Harness, managed []string) {
-	if h.Name != "claude" {
-		// 只有 Claude Code 的 settings.json 经过实测。
-		// codex 与 opencode 有没有同类机制还没验，没验过的不猜。
+// 只报真正相撞的键。当前只有 planClaude 提供 managed；其它 harness
+// 没有经过同类覆盖实测，不猜测其配置优先级。
+func warnOverrides(c *Context, managed map[string]string) {
+	if len(managed) == 0 {
 		return
-	}
-
-	mine := make(map[string]bool, len(managed))
-	for _, k := range managed {
-		mine[k] = true
 	}
 
 	for _, path := range claudeSettingsFiles() {
 		var hit []string
 		for _, k := range settingsEnvKeys(path) {
-			if mine[k] {
+			if _, ok := managed[k]; ok {
 				hit = append(hit, k)
 			}
 		}
