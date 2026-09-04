@@ -64,7 +64,7 @@
 - **v0.7.0** 新增 Pi coding agent harness（覆盖三协议、纯进程环境与动态临时 Extension 注入、不修改 `~/.pi` 持久配置）与保守独立卸载脚本 `uninstall.sh`（支持 `--purge`）
 
 仓库改名后，旧 GitHub URL 会自动重定向，现有二进制的自更新和 `install.sh` 均已实测可用。
-`go install github.com/tokenflux/tf-cli/cmd/tf@latest` 原生支持；v0.6.0 发布后复核 Go proxy 的 @latest 传播。
+`go install github.com/tokenflux/tf-cli/cmd/tf@latest` 原生支持；已验证 Go proxy `@latest=v0.7.0` 传播正常（注：`go install ...@latest` 二进制仍显示 `dev/unknown`，待做 build-info fallback）。
 
 ## 四、实测得到的事实
 
@@ -111,9 +111,9 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 ### npm 发布与分发实测
 
-1. **发布与来源证明**：主包及 5 个平台二进制包均由 GitHub Actions 经 OIDC 发布并附带 SLSA provenance（六个 npm 包均为 `latest=0.6.0` 且保留首发 `bootstrap=0.5.3-bootstrap.0`；GitHub Release 与工作流运行见 [Release v0.6.0](https://github.com/TokenFlux/tf-cli/releases/tag/v0.6.0) 与 [Workflow run 33860769841](https://github.com/TokenFlux/tf-cli/actions/runs/33860769841)）。隔离 npm 安装的两个实际包通过 registry signature 与 attestation audit 校验。
-2. **发布重试与幂等性**：首次 workflow 的 `linux-x64` publish 返回成功后 package document / tag 传播超过原有约 60 秒窗口，导致 npm job 失败；额外约 65 秒后可见，failed-job 幂等重跑跳过已存在版本并成功创建 Release。
-3. **安装与产物验证**：干净环境下 `npx @tokenflux/tf@latest` 与 `pnpx @tokenflux/tf@latest` 均运行出 version 0.6.0、commit 47d06b6；官方 install.sh 安装出 0.6.0/47d06b6；Go proxy/module `@latest=v0.6.0` 传播解析正常（注：`go install ...@latest` 生成的二进制因无 release ldflags 显示为 `dev/unknown`，列为分发限制待修项）；官方五个资产 SHA256SUMS 和内嵌版本核对一致。主包安装路径下继续受自更新保护并提示 npm 升级命令。完整流程与机制见 [`distribution/npm.md`](distribution/npm.md)。
+1. **工作流与发布**：GitHub Actions 工作流 [33889822298](https://github.com/TokenFlux/tf-cli/actions/runs/33889822298) 首次全绿（Go 交叉编译、npm 打包发布、Release 创建）无需重跑，见 [Release v0.7.0](https://github.com/TokenFlux/tf-cli/releases/tag/v0.7.0)。
+2. **包状态与来源证明**：主包及 5 个平台二进制包 `latest=0.7.0`，保留首发 `bootstrap=0.5.3-bootstrap.0`；全部 6 个包均具备 SLSA provenance v1；隔离安装 audit 验证 2 signatures + 2 attestations。
+3. **安装与端到端实测**：干净环境下 `npx @tokenflux/tf@latest` 与 `pnpx @tokenflux/tf@latest` 均输出 version 0.7.0、commit 768d9a5；官方 install.sh 安装出 0.7.0/768d9a5，默认 uninstall.sh 删除二进制并保留配置；Go proxy `@latest=v0.7.0` 解析正常（`go install ...@latest` 仍因缺少 ldflags 显示 `dev/unknown`）；5 个平台发布归档及 SHA256SUMS 核对一致；GitHub Release 官方资产直接运行真实 `tf pi` 对话返回 `V070_PI_OK` 且退出后无残留临时文件。完整流程与机制见 [`distribution/npm.md`](distribution/npm.md)。
 
 ## 五、还缺什么
 

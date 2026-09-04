@@ -2,7 +2,7 @@
 
 本文档记录 `tf-cli` 的 npm 平台包分发架构、本地验证流程、历史首发 Bootstrap 记录、GitHub Actions OIDC Trusted Publishing 信任配置及常态发布流程。
 
-> **当前状态**：v0.7.0 发布目标，当前已验证稳定版仍为 v0.6.0；tag 工作流后复核。六个 npm 包当前 `latest=0.6.0` 且保留 `bootstrap=0.5.3-bootstrap.0`。工作流记录见 [Workflow run 33860769841](https://github.com/TokenFlux/tf-cli/actions/runs/33860769841)，发布见 [Release v0.6.0](https://github.com/TokenFlux/tf-cli/releases/tag/v0.6.0)。
+> **当前状态**：v0.7.0 已完成发布验证。六个 npm 包当前 `latest=0.7.0` 且保留 `bootstrap=0.5.3-bootstrap.0`。工作流记录见 [Workflow run 33889822298](https://github.com/TokenFlux/tf-cli/actions/runs/33889822298)，发布见 [Release v0.7.0](https://github.com/TokenFlux/tf-cli/releases/tag/v0.7.0)。
 
 ---
 
@@ -150,7 +150,8 @@ npm trust github @tokenflux/tf-win32-x64 --repo TokenFlux/tf-cli --file release.
    - Go proxy 传播完成，Go module `@latest` 已解析到 `v0.6.0`；但 `go install github.com/tokenflux/tf-cli/cmd/tf@latest` 产物因无 release ldflags 注入，当前二进制版本输出显示为 `dev/unknown`（分发限制/待修项）；
    - GitHub Release 中的 5 个平台归档资产 `SHA256SUMS` 和内嵌二进制版本核对一致。
 
-### 5. v0.7.0 发布目标（待工作流执行后复核）
+### 5. v0.7.0 发布实测与验证记录
 
-1. **发布目标**：主包 `@tokenflux/tf` 与 5 个平台二进制包全部发布 `0.7.0`，目标为六包 `latest=0.7.0` 并附带 GitHub Actions OIDC SLSA provenance。
-2. **待验证项目**：待 tag 推送并触发 release 工作流完成后，复核 npm dist-tags 指向、`npm audit signatures` 签名与 attestation、`npx`/`pnpx` 干净缓存安装运行、官方 `install.sh` / `uninstall.sh` 流程及 Go proxy 传播情况。本节当前仅记录发布目标，上述项目尚待验证。
+1. **工作流执行与 Release 发布**：release workflow 33889822298 首次全部成功无需重跑，Release v0.7.0 指向 annotated tag/commit `768d9a5`。
+2. **npm 分发与包签名校验**：六包 `latest=0.7.0`、`bootstrap` 保持 `0.5.3-bootstrap.0`、六包具备 SLSA provenance v1，隔离 npm/pnpm 仅安装主包与 `darwin-arm64`，`npm audit signatures` 验证 2 signatures 和 2 attestations 通过，`npx`/`pnpx` 显式 `@0.7.0` 输出 `0.7.0/768d9a5`。
+3. **产物校验、脚本与真实调用**：Release 五归档加 `SHA256SUMS` 全部校验且 build revision 一致，官方 `install.sh` 安装 `0.7.0/768d9a5`，默认 `uninstall.sh` 保留配置，Go proxy `@latest=v0.7.0`，官方 `darwin-arm64` 资产真实 `tf pi` Responses 对话返回 `V070_PI_OK` 且无临时 Extension 残留。

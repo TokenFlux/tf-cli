@@ -71,7 +71,7 @@ scripts/
 
 ### 中期：分发与代码结构
 
-5. ~~npm 平台包分发~~ 已完成：`@tokenflux/tf` 及 5 个平台包已完成 0.5.3-bootstrap.0 预发布与 registry 验证，GitHub Actions OIDC Trusted Publishing 绑定已配置；已验证稳定版 v0.6.0 已公开发布。操作手册见 [`distribution/npm.md`](distribution/npm.md)。
+5. ~~npm 平台包分发~~ 已完成：`@tokenflux/tf` 及 5 个平台包已完成 0.5.3-bootstrap.0 预发布与 registry 验证，GitHub Actions OIDC Trusted Publishing 绑定已配置；已验证稳定版 v0.7.0 已公开发布。操作手册见 [`distribution/npm.md`](distribution/npm.md)。
 6. ~~拆出 Key 与协议准入、shell 补全逻辑~~ 已完成（`internal/access`、`internal/completions`）；继续拆分仍与命令 I/O 耦合的部分。
 7. ~~完善 `CHANGELOG.md`~~ 已完成；`README.en.md` 待补。
 8. ~~决定 `InstallRecord` 的消费者~~ 已停止写入并删除；安装记录没有消费者，且外部升级后会失真。
