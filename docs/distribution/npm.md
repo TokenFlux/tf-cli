@@ -2,7 +2,7 @@
 
 本文档记录 `tf-cli` 的 npm 平台包分发架构、本地验证流程、历史首发 Bootstrap 记录、GitHub Actions OIDC Trusted Publishing 信任配置及常态发布流程。
 
-> **当前状态**：稳定版 `v0.5.3` 已公开发布，GitHub Release 已创建。全部 6 个包均包含 `bootstrap=0.5.3-bootstrap.0` 与 `latest=0.5.3`。
+> **当前状态**：本次发布目标是 v0.6.0，现有已验证稳定版仍为 v0.5.3；tag 工作流完成后再更新 latest/Release 实测状态。历史首发全部 6 个包均包含 `bootstrap=0.5.3-bootstrap.0`。
 
 ---
 
@@ -57,7 +57,7 @@ make npm-check NPM_VERSION=0.5.3-test.0
 3. 子进程异常退出码能被完整保留；
 4. 终止信号能被正确捕获并转发给二进制。
 
-另行实测：当前 main 分支以 `0.5.3-bootstrap.0` 构建并在 npm `node_modules` 路径中运行，能正确识别稳定版 `0.5.3` 为更新版本，自更新拦截返回 `TF_USAGE` 并提示 `npm install -g @tokenflux/tf@latest` 且不执行自替换。该 SemVer 修复在 `v0.5.3` tag 之后合入 main 分支，不属于已打 tag 的稳定版二进制。
+另行实测：当前 main 分支以 `0.5.3-bootstrap.0` 构建并在 npm `node_modules` 路径中运行，能正确识别稳定版 `0.5.3` 为更新版本，自更新拦截返回 `TF_USAGE` 并提示 `npm install -g @tokenflux/tf@latest` 且不执行自替换。该 SemVer 修复在 `v0.5.3` tag 之后合入 main 分支，纳入 `v0.6.0`。
 
 ---
 
@@ -124,7 +124,7 @@ npm trust github @tokenflux/tf-win32-x64 --repo TokenFlux/tf-cli --file release.
 
 1. **不可变版本跳过**：已存在的版本无法覆盖，重跑时脚本会自动跳过已发布的 tarball。
 2. **E404 传播降级检测**：若新版本的 package document 尚未完成传播而返回 E404，脚本会回退读取 dist-tags 列表确认版本是否存在，避免重试时误判未发布而重复上传。
-3. **目标 Tag 读取退避重试**：发布完成后校验目标 dist-tag 时，脚本使用 `0/1/2/4/8/15/30` 秒有界退避重试等待 registry 传播一致。该机制于 `v0.5.3` tag 发布后合入 `main` 分支，不属于该 tag 发行版本。
+3. **目标 Tag 读取退避重试**：发布完成后校验目标 dist-tag 时，脚本使用 `0/1/2/4/8/15/30` 秒有界退避重试等待 registry 传播一致。该机制于 `v0.5.3` tag 发布后合入 `main` 分支，纳入 `v0.6.0`。
 
 ### 3. v0.5.3 发布实测与历史记录
 

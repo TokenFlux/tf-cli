@@ -23,6 +23,12 @@
 
 ## [未发布]
 
+（暂无）
+
+---
+
+## [0.6.0] — 2026-09-04
+
 ### 改进
 
 - 对 `claude`、`codex`、`opencode` 这类透传命令，harness 名后的 `-h` / `--help` 改为透传给底层工具（如 `tf opencode --help` 查看 OpenCode 帮助）；查看 tf 包装层对此 harness 的帮助改用 `tf --help opencode`。
@@ -196,7 +202,8 @@
 - 方向键选择器，支持输入过滤。
 - 中英双语，跟随系统 locale，`TKR_LANG` 可覆盖。
 
-[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.5.3...HEAD
+[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/TokenFlux/tf-cli/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/TokenFlux/tf-cli/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/TokenFlux/tf-cli/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/TokenFlux/tf-cli/compare/v0.5.0...v0.5.1

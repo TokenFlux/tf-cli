@@ -1,6 +1,6 @@
 # tf-cli 现状
 
-对应 main 分支（含 v0.5.3 后未发布改动）。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 main 分支（v0.6.0）。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
@@ -21,7 +21,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。对 `claude`/`codex`/`opencode` 透传命令，写在 harness 名后的 `-h`/`--help` 交给底层工具，`tf --help <harness>` 用于查看 tf 包装帮助。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 8,300 行生产代码（7,729 Go + 586 npm）；约 4,700 行测试（4,370 Go + 305 Node）；158 个 Go 测试函数；8 个 Node 用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
+约 8,300 行生产代码（7,729 Go + 586 npm）；约 4,700 行测试（4,370 Go + 305 Node）；158 个 Go 测试函数；8 个 Node 用例，九个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
 
 ## 二、里程碑
 
@@ -60,9 +60,10 @@
 - **v0.5.2** 落地网页 Key 导入与可选会话证明、归档早期设计稿，并新增前端接入文档；
   GitHub 仓库改名为 `TokenFlux/tf-cli`，Go module 改为 `github.com/tokenflux/tf-cli`，命令名仍为 `tf`
 - **v0.5.3** 支持 npm 平台包分发（`@tokenflux/tf` 及 5 个平台二进制包）并完成正式发布。详见 [`distribution/npm.md`](distribution/npm.md)
+- **v0.6.0** 修正 harness 透传 `-h`/`--help` 语义、重构模型目录先于协议探测的自愈刷新顺序、修复预发布版本 SemVer 比较与 npm 升级拦截、增加 npm dist-tags 校验有界退避重试，并完成全项目结构与冗余字段消融
 
 仓库改名后，旧 GitHub URL 会自动重定向，现有二进制的自更新和 `install.sh` 均已实测可用。
-`go install github.com/tokenflux/tf-cli/cmd/tf@latest` 原生支持（已实测验证 `@latest` 解析至 `v0.5.3`）。
+`go install github.com/tokenflux/tf-cli/cmd/tf@latest` 原生支持；v0.6.0 发布后复核 Go proxy 的 @latest 传播。
 
 ## 四、实测得到的事实
 
@@ -109,7 +110,7 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 ### npm 发布与分发实测
 
-1. **发布与来源证明**：主包及 5 个平台二进制包均由 GitHub Actions 经 OIDC 发布并附带 provenance（`latest=0.5.3`，`bootstrap=0.5.3-bootstrap.0`），本地已清理 npm login 状态；`npm audit signatures` 校验全部通过。
+1. **发布与来源证明**：主包及 5 个平台二进制包均由 GitHub Actions 经 OIDC 发布并附带 provenance（当前已验证稳定版为 `latest=0.5.3`，历史首发 `bootstrap=0.5.3-bootstrap.0`；v0.6.0 的目标是将 latest 更新为 0.6.0，待发布工作流后复核），本地已清理 npm login 状态；v0.5.3 的 `npm audit signatures` 校验全部通过。
 2. **发布重试与幂等性**：首次发布由于读取到陈旧的 `linux-x64` tag 导致首个 npm job 失败，随后触发幂等重跑已完全成功。
 3. **安装与产物验证**：干净环境下的 `npx`、`pnpx` 及隔离全局升级均可正确拉取并运行对应平台二进制；GitHub release assets 及其校验和（checksums）核对一致；主分支当前构建以 `0.5.3-bootstrap.0` 版本运行时已可正确识别稳定版 `0.5.3` 并返回 npm 升级提示而非自我替换。完整流程与机制见 [`distribution/npm.md`](distribution/npm.md)。
 
