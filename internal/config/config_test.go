@@ -144,21 +144,6 @@ func TestBindingsArePerHarness(t *testing.T) {
 	}
 }
 
-// 未探测过的 Key 视为支持一切：预检只能证伪，没有证据就不拦。
-func TestSupportsWithoutProbe(t *testing.T) {
-	var unknown *KeyMeta
-	if !unknown.Supports("openai_responses") {
-		t.Error("an unprobed key must not be filtered out")
-	}
-	probed := &KeyMeta{Protocols: map[string][]string{GroupScope: {"anthropic_messages"}}}
-	if probed.Supports("openai_responses") {
-		t.Error("a probed key must be filtered by its protocols")
-	}
-	if !probed.Supports("anthropic_messages") {
-		t.Error("allowed protocol should pass")
-	}
-}
-
 // 凭据按名字分开存：删一把不能影响另一把。
 func TestCredentialsRemoveIsPerName(t *testing.T) {
 	paths := testPaths(t)
@@ -218,14 +203,6 @@ func TestProtocolsArePerGroupPrefix(t *testing.T) {
 	}
 	if !m.SupportsIn("Claude", "anthropic_messages") {
 		t.Error("Claude should allow messages")
-	}
-
-	// 筛选 Key 候选时，只要有一个分组支持就算这把 Key 可用。
-	if !m.Supports("openai_responses") || !m.Supports("anthropic_messages") {
-		t.Error("Supports should be true if any prefix qualifies")
-	}
-	if m.Supports("gemini_generate_content") {
-		t.Error("no prefix allows gemini; Supports should be false")
 	}
 
 	// 没探到的前缀不拦。

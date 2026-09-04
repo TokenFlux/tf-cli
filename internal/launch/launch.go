@@ -19,22 +19,15 @@ type Result struct {
 	Duration time.Duration
 }
 
-// Spec 描述要启动的进程。
-type Spec struct {
-	Bin  string
-	Args []string
-	Env  []string
-}
-
 // Run 启动子进程并等待它结束。
 //
 // 子进程完全继承当前终端（stdin/stdout/stderr 直连），因此 TUI、
 // 颜色、窗口大小变化都与直接运行 harness 无异。
-func Run(s Spec) (Result, error) {
+func Run(bin string, args, env []string) (Result, error) {
 	start := time.Now()
 
-	cmd := exec.Command(s.Bin, s.Args...)
-	cmd.Env = s.Env
+	cmd := exec.Command(bin, args...)
+	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

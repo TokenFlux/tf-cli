@@ -32,24 +32,27 @@ func New(host, key string) *Client {
 	}
 }
 
-// Model 是 /v1/models 返回的一项。
-type Model struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"display_name"`
-}
-
-// Models 返回当前 Key 可见的模型列表。
+// Models 返回当前 Key 可见的模型 ID，顺序与网关响应一致。
 //
 // 这是唯一一个用 API Key 就能读到的目录接口：分组能力、用量、Key 详情
 // 都需要用户 JWT。见 docs/research/tokenflux-api-probe.md。
-func (c *Client) Models(ctx context.Context) ([]Model, error) {
+func (c *Client) Models(ctx context.Context) ([]string, error) {
 	var out struct {
-		Data []Model `json:"data"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	if err := c.getJSON(ctx, "/v1/models", &out); err != nil {
 		return nil, err
 	}
-	return out.Data, nil
+	if out.Data == nil {
+		return nil, nil
+	}
+	ids := make([]string, len(out.Data))
+	for i, model := range out.Data {
+		ids[i] = model.ID
+	}
+	return ids, nil
 }
 
 // Usage 是 /v1/usage 的应答里 tf 用得上的部分。
@@ -171,10 +174,4 @@ func classify(status int, body []byte) error {
 		e.Message = strings.TrimSpace(string(body))
 	}
 	return e
-}
-
-// readBodySnippet 读一小段响应体用于错误分类。
-func readBodySnippet(resp *http.Response) string {
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-	return string(b)
 }

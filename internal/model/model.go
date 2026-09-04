@@ -4,10 +4,7 @@
 // provider 前缀），必须集中在一处，否则一定写乱。
 package model
 
-import (
-	"sort"
-	"strings"
-)
+import "strings"
 
 // 思考强度档位，由弱到强。
 //
@@ -28,16 +25,6 @@ func isEffort(s string) bool {
 		}
 	}
 	return false
-}
-
-// EffortRank 返回强度序号，用于排序；未知档位排在最后。
-func EffortRank(e string) int {
-	for i, v := range efforts {
-		if v == e {
-			return i
-		}
-	}
-	return len(efforts)
 }
 
 // Ref 是拆开后的模型 ID。
@@ -99,72 +86,48 @@ func Prefixes(ids []string) []string {
 	return out
 }
 
-// Family 是同一分组、同一基名下的一组强度变体。
-//
-// 分组必须参与分组键：同一个模型可能同时存在于多个分组，
-// 且倒率差异巨大（claude-opus-5 在两个分组里相差 4 倍），
-// 合并掉会让用户无法选便宜的那个。
-type Family struct {
-	Prefix  string
-	Base    string
-	Efforts []string          // 已按强度排序；无变体时为空
-	byEfort map[string]string // 强度 → 完整模型 ID
-	plain   string            // 无强度后缀的原始 ID
-}
-
-// ID 返回指定强度对应的完整模型 ID。effort 为空时返回默认 ID。
-func (f Family) ID(effort string) (string, bool) {
-	if effort == "" {
-		if f.plain != "" {
-			return f.plain, true
-		}
-		// 无裸 ID 时取中间档，避免默认落到最贵或最弱的一端。
-		if len(f.Efforts) > 0 {
-			return f.byEfort[f.Efforts[len(f.Efforts)/2]], true
-		}
-		return "", false
-	}
-	id, ok := f.byEfort[effort]
-	return id, ok
-}
-
-// HasVariants 报告该族是否需要额外的强度选择。
-func (f Family) HasVariants() bool { return len(f.Efforts) > 1 }
-
-// Group 把模型列表折叠成族。
-//
-// 折叠的意义在选择器上很直接：Google 分组的 6 个模型其实只是 3 个模型
-// 各带强度变体，摊平展示会让用户在重复基名里翻找。
-func Group(ids []string) []Family {
+// Efforts 返回模型列表实际包含的强度，保持旧选择器的顺序：
+// 每个族按强弱排序，族按首次出现顺序合并。
+func Efforts(ids []string) []string {
+	families := map[string][]string{}
 	order := []string{}
-	acc := map[string]*Family{}
-
 	for _, id := range ids {
 		r := Parse(id)
 		key := r.Prefix + "\x00" + r.Base
-		f, ok := acc[key]
-		if !ok {
-			f = &Family{Prefix: r.Prefix, Base: r.Base, byEfort: map[string]string{}}
-			acc[key] = f
+		if _, ok := families[key]; !ok {
 			order = append(order, key)
 		}
-		if r.Effort == "" {
-			f.plain = id
-			continue
+		if r.Effort != "" {
+			families[key] = append(families[key], r.Effort)
 		}
-		f.byEfort[r.Effort] = id
-		f.Efforts = append(f.Efforts, r.Effort)
 	}
 
-	out := make([]Family, 0, len(order))
+	seen := map[string]bool{}
+	out := []string{}
 	for _, key := range order {
-		f := acc[key]
-		sort.Slice(f.Efforts, func(i, j int) bool {
-			return EffortRank(f.Efforts[i]) < EffortRank(f.Efforts[j])
-		})
-		out = append(out, *f)
+		values := families[key]
+		for i := 1; i < len(values); i++ {
+			for j := i; j > 0 && effortRank(values[j]) < effortRank(values[j-1]); j-- {
+				values[j], values[j-1] = values[j-1], values[j]
+			}
+		}
+		for _, effort := range values {
+			if !seen[effort] {
+				seen[effort] = true
+				out = append(out, effort)
+			}
+		}
 	}
 	return out
+}
+
+func effortRank(effort string) int {
+	for i, known := range efforts {
+		if known == effort {
+			return i
+		}
+	}
+	return len(efforts)
 }
 
 // 档位关键字，用于把模型按用途归位。

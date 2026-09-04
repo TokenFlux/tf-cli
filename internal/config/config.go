@@ -81,21 +81,6 @@ func (m *KeyMeta) SupportsIn(prefix, proto string) bool {
 	return false
 }
 
-// Supports 报告这把 Key **至少有一个分组**允许该协议。
-//
-// 用于筛选 Key 候选；具体能用哪些模型要再用 SupportsIn 逐个判。
-func (m *KeyMeta) Supports(proto string) bool {
-	if m == nil || !m.Probed() {
-		return true
-	}
-	for _, prefix := range m.Scopes() {
-		if m.SupportsIn(prefix, proto) {
-			return true
-		}
-	}
-	return false
-}
-
 // Scopes 列出该 Key 的全部作用域：复合 Key 是各分组前缀，普通 Key 是单个空串。
 func (m *KeyMeta) Scopes() []string {
 	if m == nil {
@@ -103,26 +88,19 @@ func (m *KeyMeta) Scopes() []string {
 	}
 	seen := map[string]bool{}
 	var out []string
-	for _, set := range []map[string]bool{boolKeys(m.Protocols), m.ClaudeCodeOnly} {
-		for p := range set {
-			if !seen[p] {
-				seen[p] = true
-				out = append(out, p)
-			}
+	for p := range m.Protocols {
+		seen[p] = true
+		out = append(out, p)
+	}
+	for p := range m.ClaudeCodeOnly {
+		if !seen[p] {
+			out = append(out, p)
 		}
 	}
 	if len(out) == 0 {
 		return []string{GroupScope}
 	}
 	sort.Strings(out)
-	return out
-}
-
-func boolKeys(m map[string][]string) map[string]bool {
-	out := make(map[string]bool, len(m))
-	for k := range m {
-		out[k] = true
-	}
 	return out
 }
 
@@ -258,7 +236,7 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(c.paths.ConfigFile(), append(data, '\n'), 0o644)
+	return writeAtomic(c.paths.ConfigFile(), append(data, '\n'), configFilePerm)
 }
 
 // writeAtomic 先写临时文件再改名，避免中断留下半个文件。

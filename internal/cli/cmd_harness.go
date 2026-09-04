@@ -121,7 +121,11 @@ func EnsureInstalled(c *Context, h *harness.Harness) error {
 
 	items := make([]ui.Item, 0, len(options)+1)
 	for _, o := range options {
-		items = append(items, ui.Item{Label: o.Command(), Detail: o.Manager})
+		detail := ""
+		if len(o.Args) > 0 {
+			detail = o.Args[0]
+		}
+		items = append(items, ui.Item{Label: o.Command(), Detail: detail})
 	}
 	items = append(items, ui.Item{Label: c.UI.T("退出", "quit")})
 
@@ -167,10 +171,10 @@ func notInstalledErr(c *Context, h *harness.Harness, options []harness.InstallOp
 	hint := ""
 	if len(options) > 0 {
 		hint = options[0].Command()
-		if !available {
+		if !available && len(options[0].Args) > 0 {
 			hint = fmt.Sprintf(c.UI.T("本机没有 %s，装上它再运行：%s",
 				"%s is not on this machine; install it, then run: %s"),
-				options[0].Manager, hint)
+				options[0].Args[0], hint)
 		}
 	}
 	return ui.Errf(ui.CodeHarnessNotInstalled,

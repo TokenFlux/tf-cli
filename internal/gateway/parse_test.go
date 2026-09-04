@@ -46,17 +46,9 @@ func TestModelsParsesRealResponse(t *testing.T) {
 	// 顺序必须原样保留。网关把 codex-auto-review 这类专用模型放在末尾，
 	// 而选择器默认高亮第一项 —— 重排会把一个当主模型必定失败的模型
 	// 顶到回车就能选中的位置。
-	if got[0].ID != "gpt-5.4" || got[4].ID != "codex-auto-review" {
-		t.Errorf("顺序被改了：%v", ids(got))
+	if got[0] != "gpt-5.4" || got[4] != "codex-auto-review" {
+		t.Errorf("顺序被改了：%v", got)
 	}
-}
-
-func ids(ms []Model) []string {
-	out := make([]string, len(ms))
-	for i, m := range ms {
-		out[i] = m.ID
-	}
-	return out
 }
 
 func TestUsageParsesRealResponse(t *testing.T) {

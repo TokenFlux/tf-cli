@@ -23,8 +23,7 @@ type Slot struct {
 
 // InstallOption 是一条候选安装命令。
 type InstallOption struct {
-	Manager string   // 包管理器名，同时也是待探测的可执行文件名
-	Args    []string // 完整 argv，第一项即 Manager
+	Args []string // 完整 argv；第一项是包管理器名
 }
 
 // Command 返回可展示、可复制的完整命令。
@@ -38,22 +37,6 @@ const (
 	ProtoAnthropicMessages Protocol = "anthropic_messages"
 	ProtoOpenAIResponses   Protocol = "openai_responses"
 	ProtoOpenAIChat        Protocol = "openai_chat_completions"
-)
-
-// EffortKnob 表示该 harness 如何接受思考强度。
-//
-// 强度与模型槽是正交的两个维度，但 TokenFlux 上它们有时被混在一起：
-// 部分分组把强度编进模型 ID（gemini-3.1-pro-high），此时换强度就是换
-// 模型；另一些分组只能靠 harness 自己的旋钮。
-type EffortKnob int
-
-const (
-	// EffortViaModelID 只支持模型 ID 内含的强度变体，没有独立旋钮。
-	EffortViaModelID EffortKnob = iota
-	// EffortViaConfig 通过配置项传递（codex 的 model_reasoning_effort）。
-	EffortViaConfig
-	// EffortViaFlag 通过命令行传递（opencode 的 --variant）。
-	EffortViaFlag
 )
 
 // Harness 是一个可被 tf 启动的工具。
@@ -74,8 +57,8 @@ type Harness struct {
 	IsClaudeCode bool
 	Slots        []Slot
 	Installs     []InstallOption
-	EffortKnob   EffortKnob
-	DocsURL      string
+	// EffortViaModelID 表示强度只能编码在模型 ID 中，没有独立旋钮。
+	EffortViaModelID bool
 }
 
 func zhen(zh, en string) func(bool) string {
@@ -103,13 +86,12 @@ var All = []*Harness{
 			{Name: "fast", Purpose: zhen("后台任务：标题、文件摘要", "background tasks: titles, file summaries")},
 			{Name: "heavy", Purpose: zhen("/model 切到最强档时", "when /model picks the strongest tier")},
 		},
-		EffortKnob: EffortViaModelID,
+		EffortViaModelID: true,
 		Installs: []InstallOption{
-			{Manager: "npm", Args: []string{"npm", "install", "-g", "@anthropic-ai/claude-code"}},
-			{Manager: "pnpm", Args: []string{"pnpm", "add", "-g", "@anthropic-ai/claude-code"}},
-			{Manager: "bun", Args: []string{"bun", "add", "-g", "@anthropic-ai/claude-code"}},
+			{Args: []string{"npm", "install", "-g", "@anthropic-ai/claude-code"}},
+			{Args: []string{"pnpm", "add", "-g", "@anthropic-ai/claude-code"}},
+			{Args: []string{"bun", "add", "-g", "@anthropic-ai/claude-code"}},
 		},
-		DocsURL: "https://docs.tokenflux.dev/docs/agents/claude-code",
 	},
 	{
 		Name:    "codex",
@@ -121,13 +103,11 @@ var All = []*Harness{
 			{Name: "default", Purpose: zhen("主对话", "main conversation"), Required: true},
 			{Name: "review", Purpose: zhen("代码审查", "code review")},
 		},
-		EffortKnob: EffortViaConfig,
 		Installs: []InstallOption{
-			{Manager: "npm", Args: []string{"npm", "install", "-g", "@openai/codex"}},
-			{Manager: "pnpm", Args: []string{"pnpm", "add", "-g", "@openai/codex"}},
-			{Manager: "brew", Args: []string{"brew", "install", "codex"}},
+			{Args: []string{"npm", "install", "-g", "@openai/codex"}},
+			{Args: []string{"pnpm", "add", "-g", "@openai/codex"}},
+			{Args: []string{"brew", "install", "codex"}},
 		},
-		DocsURL: "https://docs.tokenflux.dev/docs/agents/codex",
 	},
 	{
 		Name: "opencode",
@@ -139,12 +119,10 @@ var All = []*Harness{
 			// 不注入 small 会回落到内置的 gpt-5.4-nano，标题生成静默失败。
 			{Name: "small", Purpose: zhen("后台任务：标题、摘要", "background tasks: titles, summaries"), Required: true},
 		},
-		EffortKnob: EffortViaFlag,
 		Installs: []InstallOption{
-			{Manager: "npm", Args: []string{"npm", "install", "-g", "opencode-ai"}},
-			{Manager: "brew", Args: []string{"brew", "install", "sst/tap/opencode"}},
+			{Args: []string{"npm", "install", "-g", "opencode-ai"}},
+			{Args: []string{"brew", "install", "sst/tap/opencode"}},
 		},
-		DocsURL: "https://docs.tokenflux.dev/docs/agents/opencode",
 	},
 }
 
@@ -214,8 +192,10 @@ func probeVersion(path string) string {
 func (h *Harness) AvailableInstalls() []InstallOption {
 	var out []InstallOption
 	for _, o := range h.Installs {
-		if _, err := exec.LookPath(o.Manager); err == nil {
-			out = append(out, o)
+		if len(o.Args) > 0 {
+			if _, err := exec.LookPath(o.Args[0]); err == nil {
+				out = append(out, o)
+			}
 		}
 	}
 	return out

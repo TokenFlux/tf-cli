@@ -1,6 +1,6 @@
 # tf-cli 现状
 
-对应 v0.5.3。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 main 分支（含 v0.5.3 后未发布改动）。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
@@ -21,7 +21,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 8,500 行生产代码（7,935 行 Go + 586 行 npm 启动器及打包脚本）、约 4,600 行测试（4,280 行 Go + 305 行 Node 测试），156 个 Go 测试函数、8 个 Node 测试用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
+约 8,300 行生产代码（7,711 行 Go + 586 行 npm 启动器及打包脚本）、约 4,500 行测试（4,230 行 Go + 305 行 Node 测试），156 个 Go 测试函数、8 个 Node 测试用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
 
 ## 二、里程碑
 
@@ -31,7 +31,7 @@
 | M1 目录 | 放弃 | 见下 |
 | M2 认证 | 完成 | `login`、`login --from-web`、`logout`、`keys`、`status`（含额度） |
 | M3 启动 | 完成 | fork+wait、信号转发、退出码穿透、终端复位。三个 harness 均已实测 |
-| M4 模型 | 完成 | ID 解析、族折叠、方向键选择器、按 harness 分开的模型槽 |
+| M4 模型 | 完成 | 模型 ID 与强度后缀解析、补全顺序、方向键选择器、按 harness 分开的模型槽 |
 | M5 预检 | 完成 | 零 token 协议探测、按分组前缀的准入记录、隐藏原因说明 |
 | M6 harness | 完成 | claude 2.1.251、codex 0.151.0、opencode 1.18.20 均真实对话通过 |
 | M7 分发 | 完成 | GitHub Actions + install.sh + `tf update`（5 组平台二进制）；npm 平台包已正式发布（1 个主包 + 5 个平台二进制包，详见 [`distribution/npm.md`](distribution/npm.md)） |

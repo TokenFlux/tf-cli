@@ -30,7 +30,6 @@ type UI struct {
 	Lang  Lang
 	JSON  bool
 	Color bool
-	TTY   bool
 
 	// JSON 模式下的旁路输出收在这里，随信封一起发出。
 	// “凭据权限已收紧”“模型列表沿用旧的”这类信息直接丢掉，
@@ -49,7 +48,6 @@ func New(jsonMode bool) *UI {
 		Lang:  detectLang(),
 		JSON:  jsonMode,
 		Color: tty && os.Getenv("NO_COLOR") == "" && !jsonMode,
-		TTY:   tty,
 	}
 }
 

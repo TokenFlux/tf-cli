@@ -18,7 +18,7 @@ func TestRestoreUndoesRawMode(t *testing.T) {
 	f.Close()
 
 	term := captureTerm()
-	if !term.valid {
+	if term.tty == nil {
 		t.Fatal("captureTerm should succeed when /dev/tty is open")
 	}
 
@@ -79,7 +79,7 @@ func TestHomeColumnEmitsCarriageReturn(t *testing.T) {
 		t.Skip("no controlling terminal")
 	}
 	term := captureTerm()
-	if !term.valid {
+	if term.tty == nil {
 		t.Skip("cannot open the terminal")
 	}
 	defer term.restore(false)

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -121,7 +122,7 @@ func runLaunch(c *Context, h *harness.Harness) error {
 	}
 	c.UI.Logf("%s", banner)
 
-	res, err := launch.Run(launch.Spec{Bin: plan.Bin, Args: plan.Args, Env: plan.Env})
+	res, err := launch.Run(plan.Bin, plan.Args, plan.Env)
 	if err != nil {
 		return ui.Errf(ui.CodeInternal,
 			fmt.Sprintf(c.UI.T("启动 %s 失败", "failed to launch %s"), h.Name)).WithCause(err)
@@ -183,7 +184,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	}
 
 	// 快路径：绑定仍然有效且槽位齐全，直接走，不联网也不提问。
-	if !explicitPick && override == "" && contains(keys, keyName) && slotsComplete(h, slots) {
+	if !explicitPick && override == "" && slices.Contains(keys, keyName) && slotsComplete(h, slots) {
 		return keyName, slots, nil
 	}
 
@@ -269,7 +270,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	// 绑定可能压根不存在（tf model --set 只写槽位，它无从知道该绑谁），
 	// 也可能指向一把已经 logout 的 Key。两种都是合法状态，
 	// 之前会一路把空名字带到 creds.Get 那里去崩掉。
-	if !contains(keys, keyName) {
+	if !slices.Contains(keys, keyName) {
 		k, ok := ownerOf(cands, slots[config.SlotDefault])
 		if !ok {
 			return "", nil, ui.Errf(ui.CodeKeyNotFound, fmt.Sprintf(
@@ -577,7 +578,7 @@ func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots confi
 	// 那是分组真正支持的形式，比指望 harness 转发参数可靠。
 	if ids := cfg.KeyMetaOf(keyName).Models; len(ids) > 0 {
 		variant := model.Ref{Base: base, Effort: effort}.String()
-		if contains(ids, variant) {
+		if slices.Contains(ids, variant) {
 			slots[config.SlotDefault] = variant
 			return "", nil
 		}
@@ -595,22 +596,13 @@ func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots confi
 		}
 	}
 
-	if h.EffortKnob == harness.EffortViaModelID {
+	if h.EffortViaModelID {
 		return "", ui.Errf(ui.CodeUsage,
 			fmt.Sprintf(c.UI.T("%s 没有独立的思考强度开关", "%s has no reasoning-effort switch"), h.Name)).
 			WithHint(c.UI.T("改选带强度后缀的模型，如 -m gemini-3.1-pro-high",
 				"pick a model variant instead, e.g. -m gemini-3.1-pro-high"))
 	}
 	return effort, nil
-}
-
-func contains(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
 }
 
 // exitCodeError 把子进程的退出码原样带回顶层。

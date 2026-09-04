@@ -14,9 +14,8 @@ import (
 //
 // 这正是当初选 fork + wait 而不是 exec 的理由 —— 有人得负责收尾。
 type termState struct {
-	tty   *os.File
-	stty  string
-	valid bool
+	tty  *os.File
+	stty string
 }
 
 // captureTerm 记下当前终端设置。不是终端时返回一个空壳。
@@ -30,7 +29,7 @@ func captureTerm() *termState {
 		f.Close()
 		return &termState{}
 	}
-	return &termState{tty: f, stty: out, valid: true}
+	return &termState{tty: f, stty: out}
 }
 
 // restore 把终端恢复到启动前。
@@ -39,13 +38,12 @@ func captureTerm() *termState {
 // 才需要额外发那串 ANSI 复位。正常退出时不发 —— 子进程已经清理过，
 // 再发一遍是多余的噪音。
 func (t *termState) restore(killed bool) {
-	if !t.valid {
+	if t.tty == nil {
 		return
 	}
 	defer func() {
 		t.tty.Close()
 		t.tty = nil
-		t.valid = false
 	}()
 
 	_ = sttyRun(t.tty, t.stty)
@@ -70,7 +68,7 @@ func (t *termState) restore(killed bool) {
 //
 // 只发一个 \r，不清屏也不换行 —— 已经在行首时它什么都不做。
 func (t *termState) homeColumn() {
-	if !t.valid {
+	if t.tty == nil {
 		return
 	}
 	_, _ = t.tty.WriteString("\r")

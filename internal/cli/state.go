@@ -38,21 +38,3 @@ func loadState(c *Context) (*state, error) {
 	}
 	return &state{paths: paths, cfg: cfg, creds: creds}, nil
 }
-
-// saveConfig 包装配置写入的错误。
-func (s *state) saveConfig(c *Context) error {
-	if err := s.cfg.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite,
-			c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
-	}
-	return nil
-}
-
-// saveCredentials 包装凭据写入的错误。
-func (s *state) saveCredentials(c *Context) error {
-	if err := s.creds.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite,
-			c.UI.T("凭据文件无法写入", "cannot write the credentials file")).WithCause(err)
-	}
-	return nil
-}

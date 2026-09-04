@@ -152,7 +152,7 @@ func complete(words []string) []string {
 	rest := words[1:]
 
 	if h, ok := harness.Lookup(cmdName); ok {
-		return filter(completeLaunch(h, rest, cur), cur)
+		return filter(completeLaunch(h, rest), cur)
 	}
 
 	switch cmdName {
@@ -183,7 +183,7 @@ func complete(words []string) []string {
 // completeLaunch 处理 `tf claude ...`。
 //
 // 一旦越过透传边界就返回空：那之后的参数属于 harness，tf 无从知晓。
-func completeLaunch(h *harness.Harness, rest []string, cur string) []string {
+func completeLaunch(h *harness.Harness, rest []string) []string {
 	for i := 0; i < len(rest); i++ {
 		w := rest[i]
 		if w == "--" {
@@ -237,16 +237,7 @@ func dedupe(in []string) []string {
 // effortNames 优先给出缓存模型里真实存在的强度变体，
 // 没有时才回落到通用档位。
 func effortNames(harnessName string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, f := range model.Group(cachedModels(harnessName)) {
-		for _, e := range f.Efforts {
-			if !seen[e] {
-				seen[e] = true
-				out = append(out, e)
-			}
-		}
-	}
+	out := model.Efforts(cachedModels(harnessName))
 	if len(out) > 0 {
 		return out
 	}

@@ -28,39 +28,38 @@ func TestParse(t *testing.T) {
 	}
 }
 
-// 折叠后，带变体的族要按强弱排序，无变体的族保持独立。
-func TestGroup(t *testing.T) {
-	fams := Group([]string{
-		"gemini-3.1-pro-low", "gemini-3.1-pro-high",
+// 补全只需要模型列表里实际出现的强度名，不需要构造族对象。
+func TestEfforts(t *testing.T) {
+	ids := []string{
+		"gemini-3.1-pro-high", "gemini-3.1-pro-low",
 		"gemini-3.6-flash-high", "gemini-3.6-flash-low", "gemini-3.6-flash-medium",
-		"claude-opus-5",
+		"gemini-3.7-flash-tiered", "claude-opus-5",
+	}
+	got := Efforts(ids)
+	want := []string{"low", "high", "medium", "tiered"}
+	if len(got) != len(want) {
+		t.Fatalf("Efforts() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Efforts()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// 族顺序由任意成员首次出现的位置决定，包括不带强度的裸 ID。
+func TestEffortsUsesPlainModelToOrderFamilies(t *testing.T) {
+	got := Efforts([]string{
+		"alpha", "beta-high", "alpha-low", "beta-medium",
 	})
-	if len(fams) != 3 {
-		t.Fatalf("got %d families, want 3", len(fams))
+	want := []string{"low", "medium", "high"}
+	if len(got) != len(want) {
+		t.Fatalf("Efforts() = %v, want %v", got, want)
 	}
-
-	if !fams[0].HasVariants() {
-		t.Error("gemini-3.1-pro should have variants")
-	}
-	if got := fams[0].Efforts; got[0] != "low" || got[1] != "high" {
-		t.Errorf("efforts not ordered weak→strong: %v", got)
-	}
-	if got := fams[1].Efforts; len(got) != 3 || got[0] != "low" || got[2] != "high" {
-		t.Errorf("flash efforts = %v", got)
-	}
-	if fams[2].HasVariants() {
-		t.Error("claude-opus-5 should have no variants")
-	}
-
-	if id, ok := fams[1].ID("high"); !ok || id != "gemini-3.6-flash-high" {
-		t.Errorf("ID(high) = %q", id)
-	}
-	// 没有裸 ID 时应落到中间档，而不是最弱或最贵的一端。
-	if id, _ := fams[1].ID(""); id != "gemini-3.6-flash-medium" {
-		t.Errorf("default ID = %q, want medium", id)
-	}
-	if id, _ := fams[2].ID(""); id != "claude-opus-5" {
-		t.Errorf("plain family default = %q", id)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Efforts()[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 
@@ -104,21 +103,10 @@ func TestParseCompositePrefix(t *testing.T) {
 	}
 }
 
-// 同一模型出现在多个分组时不能被合并 —— 倍率可能差好几倍。
-func TestSameModelInDifferentGroups(t *testing.T) {
+// 同一模型出现在多个分组时，前缀都必须保留。
+func TestPrefixes(t *testing.T) {
 	ids := []string{"Max/claude-opus-5", "Kiro/claude-opus-5"}
-	fams := Group(ids)
-	if len(fams) != 2 {
-		t.Fatalf("got %d families, want 2 (one per group)", len(fams))
-	}
-	if fams[0].Prefix != "Max" || fams[1].Prefix != "Kiro" {
-		t.Errorf("prefixes lost: %+v", fams)
-	}
-	if id, _ := fams[1].ID(""); id != "Kiro/claude-opus-5" {
-		t.Errorf("ID() = %q, want the prefixed form", id)
-	}
-
-	if got := Prefixes(ids); len(got) != 2 || got[0] != "Max" {
+	if got := Prefixes(ids); len(got) != 2 || got[0] != "Max" || got[1] != "Kiro" {
 		t.Errorf("Prefixes() = %v", got)
 	}
 }

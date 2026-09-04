@@ -61,13 +61,7 @@ func runStatus(c *Context) error {
 	}
 	cfg, creds := st.cfg, st.creds
 
-	paths, err := config.DefaultPaths()
-	if err != nil {
-		return ui.Errf(ui.CodeConfigRead,
-			c.UI.T("无法定位配置目录", "cannot locate the config directory")).WithCause(err)
-	}
-
-	out := statusOut{ConfigDir: paths.ConfigDir, Keys: creds.Names()}
+	out := statusOut{ConfigDir: st.paths.ConfigDir, Keys: creds.Names()}
 	for _, h := range harness.All {
 		d := h.Detect()
 		hc := cfg.Harness(h.Name)
@@ -77,7 +71,7 @@ func runStatus(c *Context) error {
 		})
 	}
 	out.Usage = fetchUsage(cfg, creds)
-	out.Problems = checkEnvironment(c, paths)
+	out.Problems = checkEnvironment(c)
 
 	c.UI.Emit("status", out, func() { printStatus(c, cfg, creds, out) })
 	return nil
@@ -223,7 +217,7 @@ func trimNum(f float64) string {
 //
 // 只报确定的事实，不猜。每一条都说清「是什么」和「后果是什么」，
 // 说不出后果的检查不值得做 —— 用户没法据以行动。
-func checkEnvironment(c *Context, paths config.Paths) []string {
+func checkEnvironment(c *Context) []string {
 	var out []string
 
 	// settings.json 的 env 段会赢过 tf 注入的环境变量。

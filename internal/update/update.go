@@ -8,6 +8,7 @@ package update
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -372,7 +373,7 @@ func verify(archive, sums []byte, name string) error {
 // extract 从归档里取出 tf 可执行文件。
 func extract(archive []byte) ([]byte, error) {
 	if runtime.GOOS == "windows" {
-		zr, err := zip.NewReader(newByteReader(archive), int64(len(archive)))
+		zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 		if err != nil {
 			return nil, err
 		}
@@ -390,7 +391,7 @@ func extract(archive []byte) ([]byte, error) {
 		return nil, errors.New("archive contains no tf.exe")
 	}
 
-	gz, err := gzip.NewReader(newByteReader(archive))
+	gz, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return nil, err
 	}
@@ -444,31 +445,6 @@ func replace(exe string, data []byte) error {
 		}
 	}
 	return os.Rename(tmp.Name(), exe)
-}
-
-// newByteReader 让 []byte 满足 io.ReaderAt。
-func newByteReader(b []byte) *byteReader { return &byteReader{b} }
-
-type byteReader struct{ b []byte }
-
-func (r *byteReader) Read(p []byte) (int, error) {
-	if len(r.b) == 0 {
-		return 0, io.EOF
-	}
-	n := copy(p, r.b)
-	r.b = r.b[n:]
-	return n, nil
-}
-
-func (r *byteReader) ReadAt(p []byte, off int64) (int, error) {
-	if off >= int64(len(r.b)) {
-		return 0, io.EOF
-	}
-	n := copy(p, r.b[off:])
-	if n < len(p) {
-		return n, io.EOF
-	}
-	return n, nil
 }
 
 // DefaultClient 是带超时的客户端。下载可能较慢，但不能无限等。

@@ -29,7 +29,6 @@ type Plan struct {
 	Bin  string
 	Args []string
 	Env  []string // 完整环境，已在父进程环境基础上增删
-	Note string   // 启动横幅里的补充说明
 
 	// Managed 是 tf 显式设定的环境变量名。
 	//

@@ -322,17 +322,3 @@ func (s *selector) clear() {
 	fmt.Fprintf(s.tty.f, "\033[%dA\033[J", s.drawn)
 	s.drawn = 0
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

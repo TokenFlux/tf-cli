@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -18,9 +19,6 @@ const (
 	ProtoOpenAIResponses   Protocol = "openai_responses"
 	ProtoOpenAIChat        Protocol = "openai_chat_completions"
 )
-
-// AllProtocols 的顺序与网关返回集合一致，便于比对。
-var AllProtocols = []Protocol{ProtoAnthropicMessages, ProtoOpenAIResponses, ProtoOpenAIChat}
 
 var probeTargets = map[Protocol]string{
 	ProtoAnthropicMessages: "/v1/messages",
@@ -85,7 +83,9 @@ func (c *Client) ProbeProtocols(ctx context.Context, prefixes []string) (map[str
 	admissions := map[string]Admission{}
 	for _, prefix := range prefixes {
 		var a Admission
-		for _, want := range AllProtocols {
+		for _, want := range [...]Protocol{
+			ProtoAnthropicMessages, ProtoOpenAIResponses, ProtoOpenAIChat,
+		} {
 			for _, r := range out {
 				if r.prefix != prefix || r.proto != want {
 					continue
@@ -155,7 +155,8 @@ func (c *Client) probeOne(ctx context.Context, path, prefix string) verdict {
 	}
 	defer resp.Body.Close()
 
-	return verdictOf(resp.StatusCode, readBodySnippet(resp))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	return verdictOf(resp.StatusCode, string(body))
 }
 
 // verdictOf 由 (状态码, 文案) 断出准入结论。

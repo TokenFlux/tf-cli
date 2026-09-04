@@ -1,6 +1,9 @@
 package ui
 
-import "unicode"
+import (
+	"strings"
+	"unicode"
+)
 
 // Width 返回字符串在终端里占的列数。
 //
@@ -22,19 +25,7 @@ func Pad(s string, w int) string {
 	if n <= 0 {
 		return s
 	}
-	return s + spaces(n)
-}
-
-func spaces(n int) string {
-	const blanks = "                                                                "
-	if n <= len(blanks) {
-		return blanks[:n]
-	}
-	out := make([]byte, n)
-	for i := range out {
-		out[i] = ' '
-	}
-	return string(out)
+	return s + strings.Repeat(" ", n)
 }
 
 // wide 是占两列的码位区间（East Asian Wide / Fullwidth，以及常见 emoji）。

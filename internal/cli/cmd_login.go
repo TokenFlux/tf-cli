@@ -105,10 +105,10 @@ func runLogin(c *Context) error {
 
 	// 当场校验：/v1/models 是唯一能用 API Key 读到的目录接口。
 	client := gateway.New(host, key)
-	models, err := client.Models(context.Background())
+	ids, err := client.Models(context.Background())
 	if err != nil {
-		var apiErr *gateway.APIError
-		if ok := asAPIError(err, &apiErr); ok && apiErr.InvalidKey() {
+		apiErr, ok := err.(*gateway.APIError)
+		if ok && apiErr.InvalidKey() {
 			return ui.Errf(ui.CodeNotLoggedIn,
 				c.UI.T("API Key 无效或未被网关接受", "the gateway rejected this key")).
 				WithHint(host + "/keys").WithCause(err)
@@ -121,11 +121,6 @@ func runLogin(c *Context) error {
 			WithHint(c.UI.T("请检查网络连接，或使用 --host 指定其他网关地址",
 				"check your connection, or point --host elsewhere")).
 			WithCause(err)
-	}
-
-	ids := make([]string, 0, len(models))
-	for _, m := range models {
-		ids = append(ids, m.ID)
 	}
 
 	if imported != nil && !explicit && !c.Flags.Bool("force") {
@@ -472,12 +467,4 @@ func normalizeHost(h string) string {
 	}
 	h = strings.TrimRight(h, "/")
 	return strings.TrimSuffix(h, "/v1")
-}
-
-func asAPIError(err error, target **gateway.APIError) bool {
-	if e, ok := err.(*gateway.APIError); ok {
-		*target = e
-		return true
-	}
-	return false
 }

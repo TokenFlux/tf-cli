@@ -1,6 +1,6 @@
 # 反向流：页面主导的「导入 tf」
 
-> 状态：CLI 侧已实现，网页前端待接入。当前接入契约见 [`../integrations/web-import.md`](../integrations/web-import.md)。
+> 状态：CLI 侧已实现，TokenRouter Keys 页前端集成已在开放 PR [TokenFlux/TokenRouter#1956](https://github.com/TokenFlux/TokenRouter/pull/1956) 中实现（状态为开放、待人工审查合并、尚未正式上线）。当前接入契约见 [`../integrations/web-import.md`](../integrations/web-import.md)。
 > 早期文稿里的“v0.5”指过渡阶段，不对应已发布的 SemVer `v0.5.0`。
 
 问题：既然 CLI→浏览器的授权流要改后端、要过 Cloudflare，为什么不反过来：**在网页上放一个「导入 tf」按钮，把 Key 推给本地 CLI**？
@@ -102,7 +102,7 @@ CLI 收到 → 终端预览并确认 → 回应 202 → 关闭监听
 ## 落地顺序（修订）
 
 1. **v0**：`tf login --with-key`，页面上「复制 Key」，终端隐藏输入粘贴。零改动，所有场景可用，也是 SSH 场景的永久兜底。
-2. **过渡版（CLI 侧已落地）**：CLI 已实现 localhost 通道和可选会话证明；Keys 页按钮、状态展示与联调仍待前端接入，不改 TokenRouter 后端。接入字段和响应见 [`../integrations/web-import.md`](../integrations/web-import.md)。
+2. **过渡版（CLI 侧已落地）**：CLI 已实现 localhost 通道和可选会话证明；TokenRouter Keys 页前端集成已在开放 PR [TokenFlux/TokenRouter#1956](https://github.com/TokenFlux/TokenRouter/pull/1956) 中实现（状态为开放、待人工审查合并、尚未正式上线），不改 TokenRouter 后端。接入字段和响应见 [`../integrations/web-import.md`](../integrations/web-import.md)。
 3. **v1（可选）**：如果哪天真出了带 GUI 的桌面端，再顺手注册 `tf://`；单独为 CLI 做 scheme 不划算。
 4. PKCE 那套授权服务器，留到「要让第三方工具也能接入」时再谈，那时它的价值不再是省事，而是开放能力。
 

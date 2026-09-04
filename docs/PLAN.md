@@ -78,10 +78,11 @@ scripts/
 9. ~~决定无生产读写方的 `CacheDir` 去留~~ v0 保留 `tf config` 的 `cache_dir` 兼容字段，但不创建或读写目录；不静默删除旧 `models.json`，v1 再评估移除字段。
 10. ~~明确 `tf keys` 与绑定展示的职责~~ `tf keys` 专注 Key 来源与分组能力；harness 绑定统一由 `tf status` / `tf model` 展示，不重复维护。
 11. ~~迁移并归档根目录临时 TODO~~ 开放项已并入本文件或 STATUS，原清单移至 `docs/archive/`。
+12. ~~全项目结构与冗余字段消融（v0.5.3 后未发布）~~ 在保持命令、协议、JSON、持久化、终端、安装与 npm 行为既有契约的前提下，删除无消费者字段、包装与中间结构，并改用标准库实现。
 
-### 过渡版：网页导入（已落地）
+### 过渡版：网页导入（CLI 已落地，前端待合并）
 
-这里的“过渡版”是阶段名，不对应 SemVer 的 `v0.5.0`。CLI 侧已实现 localhost 回环、终端链接 challenge/HMAC、可选导入证明与 Origin 预览确认，不改 TokenRouter 后端；TokenFlux 网页前端仍需按接入文档接线并联调。前端可不实现会话证明，但未验证连接必须显示警告，不强制阻断。
+这里的“过渡版”是阶段名，不对应 SemVer 的 `v0.5.0`。CLI 侧已实现 localhost 回环、终端链接 challenge/HMAC、可选导入证明与 Origin 预览确认，不改 TokenRouter 后端；TokenRouter Keys 页前端集成已在开放 PR [TokenFlux/TokenRouter#1956](https://github.com/TokenFlux/TokenRouter/pull/1956) 中实现，状态为开放、待人工审查合并、尚未正式上线。前端可不实现会话证明，但未验证连接必须显示警告，不强制阻断。
 
 普通入口 `tf login [名字]` 默认高亮网页导入，确认后打开 Keys 页面；`--from-web` 保留为显式直达方式。完整字段与浏览器示例见 [`integrations/web-import.md`](integrations/web-import.md)。
 

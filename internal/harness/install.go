@@ -15,7 +15,10 @@ import (
 //   - 绝不替用户挑包管理器，候选项由调用方展示、用户选定。
 //   - 失败时原样返回底层错误，不包装 —— 用户要能直接拿去搜索。
 func Install(opt InstallOption, stdout, stderr io.Writer) error {
-	if strings.EqualFold(opt.Manager, "sudo") {
+	if len(opt.Args) == 0 {
+		return fmt.Errorf("empty install command")
+	}
+	if strings.EqualFold(opt.Args[0], "sudo") {
 		return fmt.Errorf("refusing to run a privileged install command")
 	}
 

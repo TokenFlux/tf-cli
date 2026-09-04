@@ -165,8 +165,8 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 		bindKey(c, st.cfg, h, cands[choice].Key)
 	}
 
-	if err := st.saveConfig(c); err != nil {
-		return err
+	if err := st.cfg.Save(); err != nil {
+		return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 	}
 	return showHarnessSlots(c, st.cfg, h)
 }

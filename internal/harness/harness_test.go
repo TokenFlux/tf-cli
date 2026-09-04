@@ -74,9 +74,6 @@ func TestInstallOptionsAreSane(t *testing.T) {
 				t.Errorf("%s: empty install argv", h.Name)
 				continue
 			}
-			if o.Args[0] != o.Manager {
-				t.Errorf("%s: argv[0]=%q does not match manager %q", h.Name, o.Args[0], o.Manager)
-			}
 			for _, a := range o.Args {
 				if a == "sudo" {
 					t.Errorf("%s: install command must never use sudo: %s", h.Name, o.Command())
@@ -94,21 +91,16 @@ func TestDetectMissingBinary(t *testing.T) {
 	}
 }
 
-// 强度机制必须和各 harness 的真实能力对应：
-// claude 没有外部旋钮，codex 用 model_reasoning_effort，opencode 用 --variant。
-func TestEffortKnobs(t *testing.T) {
-	want := map[string]EffortKnob{
-		"claude":   EffortViaModelID,
-		"codex":    EffortViaConfig,
-		"opencode": EffortViaFlag,
-	}
-	for name, knob := range want {
+// 只有 Claude Code 需要把强度编码进模型 ID；其他 harness 有自己的旋钮。
+func TestEffortUsesModelVariantsOnlyForClaude(t *testing.T) {
+	want := map[string]bool{"claude": true, "codex": false, "opencode": false}
+	for name, wantModelID := range want {
 		h, ok := Lookup(name)
 		if !ok {
 			t.Fatalf("%s missing", name)
 		}
-		if h.EffortKnob != knob {
-			t.Errorf("%s effort knob = %v, want %v", name, h.EffortKnob, knob)
+		if h.EffortViaModelID != wantModelID {
+			t.Errorf("%s EffortViaModelID = %v, want %v", name, h.EffortViaModelID, wantModelID)
 		}
 	}
 }

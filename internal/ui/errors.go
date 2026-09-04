@@ -54,12 +54,6 @@ func (e *Error) WithHint(hint string) *Error {
 	return e
 }
 
-// HintPath 把一个路径作为提示，方便用户直接去看。
-func (e *Error) HintPath(path string) *Error {
-	e.Hint = path
-	return e
-}
-
 // WithCause 附加底层错误，便于 --log-level=debug 时展开。
 func (e *Error) WithCause(err error) *Error {
 	e.Cause = err

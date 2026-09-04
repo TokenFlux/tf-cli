@@ -98,7 +98,7 @@ func runLogout(c *Context) error {
 	if err != nil {
 		return err
 	}
-	paths, creds := st.paths, st.creds
+	cfg, creds := st.cfg, st.creds
 
 	stored := creds.Names()
 	if len(stored) == 0 {
@@ -142,7 +142,7 @@ func runLogout(c *Context) error {
 	// 免得补全继续泄露「这把 Key 能看到哪些模型」。
 
 	host := config.DefaultHost
-	if cfg, err := config.Load(paths); err == nil && len(removed) > 0 {
+	if len(removed) > 0 {
 		host = cfg.HostOf(removed[0])
 		// 同时清掉元数据与指向它的绑定，避免留下悬空引用。
 		for _, name := range removed {

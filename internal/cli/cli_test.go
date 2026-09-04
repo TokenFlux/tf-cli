@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -272,7 +273,7 @@ func TestCompletionNeverReturnsNothing(t *testing.T) {
 		t.Errorf("past the passthrough boundary should yield nothing, got %v", got)
 	}
 
-	if got := complete([]string{"login", "--f"}); !contains(got, "--from-web") {
+	if got := complete([]string{"login", "--f"}); !slices.Contains(got, "--from-web") {
 		t.Errorf("login completion must include --from-web, got %v", got)
 	}
 }
@@ -399,7 +400,7 @@ func TestLogoutRefusesToRemoveSilently(t *testing.T) {
 		t.Errorf("hint = %q, want the --force command", got)
 	}
 
-	c.Flags.Set("force", "true")
+	c.Flags.set["force"] = "true"
 	if err := confirm(c, []string{"work", "personal"}); err != nil {
 		t.Errorf("--force should go through, got %v", err)
 	}
