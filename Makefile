@@ -16,7 +16,7 @@ ifneq ($(HOST),)
 LDFLAGS += -X $(PKG)/internal/config.DefaultHost=$(HOST)
 endif
 
-.PHONY: build test fmt vet check cross clean install npm-test npm-pack npm-check
+.PHONY: build test fmt vet check cross clean install shell-test npm-test npm-pack npm-check
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./cmd/tf
@@ -37,8 +37,12 @@ vet:
 # 错误既不以 FAIL 也不以 --- 开头 —— 筛掉之后，一次编译不过的测试
 # 一路过了本地、进了提交、红在 CI 上。结论要由命令自己说，不该靠
 # 调用者挑着看。
-check: fmt vet test
+check: fmt vet test shell-test
 	@echo "check ok"
+
+shell-test:
+	sh -n install.sh uninstall.sh scripts/uninstall-test.sh
+	sh scripts/uninstall-test.sh
 
 # pty 测试用真的伪终端驱动真的二进制。
 #

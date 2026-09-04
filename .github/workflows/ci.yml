@@ -31,6 +31,7 @@ jobs:
 
       - run: go vet ./...
       - run: go test ./...
+      - run: make shell-test
 
       # 发布矩阵里的每个目标都要能编译。
       #

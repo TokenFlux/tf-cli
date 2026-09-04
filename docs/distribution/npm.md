@@ -2,7 +2,7 @@
 
 本文档记录 `tf-cli` 的 npm 平台包分发架构、本地验证流程、历史首发 Bootstrap 记录、GitHub Actions OIDC Trusted Publishing 信任配置及常态发布流程。
 
-> **当前状态**：本次发布目标是 v0.6.0，现有已验证稳定版仍为 v0.5.3；tag 工作流完成后再更新 latest/Release 实测状态。历史首发全部 6 个包均包含 `bootstrap=0.5.3-bootstrap.0`。
+> **当前状态**：v0.6.0 Release 与 npm 分发已完成发布验证。六个 npm 包均为 `latest=0.6.0` 且保留历史首发 `bootstrap=0.5.3-bootstrap.0`。全部 6 个包均附带 SLSA provenance 元数据。工作流记录见 [Workflow run 33860769841](https://github.com/TokenFlux/tf-cli/actions/runs/33860769841)，发布见 [Release v0.6.0](https://github.com/TokenFlux/tf-cli/releases/tag/v0.6.0)。
 
 ---
 
@@ -138,3 +138,14 @@ npm trust github @tokenflux/tf-win32-x64 --repo TokenFlux/tf-cli --file release.
 3. **凭据与生态记录**：
    - 维护者本地已执行登出，`npm whoami` 校验失败，`~/.npmrc` 中无 npmjs 认证 token；
    - Go proxy 传播已完成，全新查询与无缓存请求下 `@latest` 均已正确解析并返回 `v0.5.3`（tag 指向 `59ef0c8`）。
+
+### 4. v0.6.0 发布实测与验证记录
+
+1. **工作流执行与传播恢复**：`v0.6.0` 触发 release 工作流时，首次 workflow 的 `linux-x64` publish 返回成功后，package document / tag 传播耗时超过了原有约 60 秒窗口，导致首个 npm job 报错失败。随后约 65 秒远端版本可见，触发 failed-job 重跑后发布脚本幂等跳过已存在版本并顺利通过 tag 校验，最终成功创建 GitHub Release（工作流：[Run 33860769841](https://github.com/TokenFlux/tf-cli/actions/runs/33860769841)，Release：[v0.6.0](https://github.com/TokenFlux/tf-cli/releases/tag/v0.6.0)）。
+2. **实测校验结果**：
+   - 全部 6 个 npm 包的 `latest` tag 均已指向 `0.6.0`，且均附带 SLSA provenance 元数据；
+   - 隔离环境下的 npm 安装（包含主包与平台二进制包）通过 `npm audit signatures` 校验（registry 签名与 attestation 均通过）；
+   - 清理缓存测试 `npx @tokenflux/tf@latest --json version` 与 `pnpx @tokenflux/tf@latest --json version`，均正确输出 `0.6.0` 与 commit `47d06b6`；
+   - 官方 install.sh 安装出 0.6.0/47d06b6；
+   - Go proxy 传播完成，Go module `@latest` 已解析到 `v0.6.0`；但 `go install github.com/tokenflux/tf-cli/cmd/tf@latest` 产物因无 release ldflags 注入，当前二进制版本输出显示为 `dev/unknown`（分发限制/待修项）；
+   - GitHub Release 中的 5 个平台归档资产 `SHA256SUMS` 和内嵌二进制版本核对一致。

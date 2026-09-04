@@ -110,9 +110,9 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 ### npm 发布与分发实测
 
-1. **发布与来源证明**：主包及 5 个平台二进制包均由 GitHub Actions 经 OIDC 发布并附带 provenance（当前已验证稳定版为 `latest=0.5.3`，历史首发 `bootstrap=0.5.3-bootstrap.0`；v0.6.0 的目标是将 latest 更新为 0.6.0，待发布工作流后复核），本地已清理 npm login 状态；v0.5.3 的 `npm audit signatures` 校验全部通过。
-2. **发布重试与幂等性**：首次发布由于读取到陈旧的 `linux-x64` tag 导致首个 npm job 失败，随后触发幂等重跑已完全成功。
-3. **安装与产物验证**：干净环境下的 `npx`、`pnpx` 及隔离全局升级均可正确拉取并运行对应平台二进制；GitHub release assets 及其校验和（checksums）核对一致；主分支当前构建以 `0.5.3-bootstrap.0` 版本运行时已可正确识别稳定版 `0.5.3` 并返回 npm 升级提示而非自我替换。完整流程与机制见 [`distribution/npm.md`](distribution/npm.md)。
+1. **发布与来源证明**：主包及 5 个平台二进制包均由 GitHub Actions 经 OIDC 发布并附带 SLSA provenance（六个 npm 包均为 `latest=0.6.0` 且保留首发 `bootstrap=0.5.3-bootstrap.0`；GitHub Release 与工作流运行见 [Release v0.6.0](https://github.com/TokenFlux/tf-cli/releases/tag/v0.6.0) 与 [Workflow run 33860769841](https://github.com/TokenFlux/tf-cli/actions/runs/33860769841)）。隔离 npm 安装的两个实际包通过 registry signature 与 attestation audit 校验。
+2. **发布重试与幂等性**：首次 workflow 的 `linux-x64` publish 返回成功后 package document / tag 传播超过原有约 60 秒窗口，导致 npm job 失败；额外约 65 秒后可见，failed-job 幂等重跑跳过已存在版本并成功创建 Release。
+3. **安装与产物验证**：干净环境下 `npx @tokenflux/tf@latest` 与 `pnpx @tokenflux/tf@latest` 均运行出 version 0.6.0、commit 47d06b6；官方 install.sh 安装出 0.6.0/47d06b6；Go proxy/module `@latest=v0.6.0` 传播解析正常（注：`go install ...@latest` 生成的二进制因无 release ldflags 显示为 `dev/unknown`，列为分发限制待修项）；官方五个资产 SHA256SUMS 和内嵌版本核对一致。主包安装路径下继续受自更新保护并提示 npm 升级命令。完整流程与机制见 [`distribution/npm.md`](distribution/npm.md)。
 
 ## 五、还缺什么
 
@@ -120,6 +120,7 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 | 缺口 | 影响 |
 |---|---|
+| `go install ...@latest` 可安装，但二进制显示 `dev/unknown` | 版本展示与更新判断缺少 release 元数据，后续应从 Go build info 回退读取模块版本 |
 | `internal/cli` 仍有约 4000 行，命令 I/O 尚未完全拆分 | `access`、`completions` 与网页导入已接入，剩余部分覆盖率仍需继续提升 |
 | ~~`gateway` 覆盖 3%，而它承担最微妙的判断~~ | 已用真实应答建立固件测试，覆盖率提升至 38.3% |
 | ~~终端四条防线只在 macOS 验证过~~ | 已在 Linux 6.8 上全部跑通，`scripts/linux-check.sh` 可重跑 |

@@ -44,6 +44,7 @@ jobs:
           fi
           go vet ./...
           go test ./...
+          make shell-test
           make npm-test
           if [ -s go.sum ]; then
             echo "go.sum 非空，引入了第三方依赖"

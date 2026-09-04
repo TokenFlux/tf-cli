@@ -56,16 +56,28 @@ cd tf-cli
 make build
 ```
 
-### 更新与卸载
+### 更新
 
 - **检查更新**：`tf update --check`
-- **自动升级**：`tf update`（下载最新 Release 并校验 SHA256 后执行原子替换）
-- **卸载**：删除配置将永久清除本机保存的 Key。默认安装和默认配置路径可执行：
+- **自动升级**：`tf update`（独立脚本安装支持自动校验并替换；npm 安装请运行 `npm install -g @tokenflux/tf@latest`）
+
+### 卸载
+
+- **npm 安装**：
   ```sh
-  rm ~/.local/bin/tf
-  rm -rf ~/.tf
+  npm uninstall -g @tokenflux/tf
   ```
-  若安装时设置了 `TF_INSTALL_DIR`，二进制路径为 `$TF_INSTALL_DIR/tf`。若使用 XDG 路径，请先运行 `tf config` 确认配置与缓存目录，再删除对应目录。
+- **install.sh 安装**：
+  ```sh
+  # 默认仅删除 tf 二进制，保留当前配置与凭据
+  curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | sh
+
+  # 同时删除 ~/.tf 或 XDG 对应的配置、凭据与缓存
+  curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | sh -s -- --purge
+  ```
+  若安装时指定了自定义目录，请在管道右侧传入环境变量（例如 `curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | TF_INSTALL_DIR=/原安装目录 sh`）。
+- **源码 / go install 安装**：
+  删除安装时设置的 GOBIN 中的 tf；若 GOBIN 为空，则位置为 `$(go env GOPATH)/bin`。若需清理配置与凭据，再按需删除配置目录（默认 `~/.tf`，或 `tf config` 显示的路径）。
 
 > **操作系统支持**：支持 Linux 与 macOS 全交互特性。Windows 当前仅支持非交互模式（支持通过管道传入 Key 及使用 `--set` 预设参数）。
 

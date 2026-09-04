@@ -36,8 +36,7 @@ fi
 printf '## tf v%s\n\n本版由 GitHub Actions 构建，产物与校验和见下。\n\n' "$VER"
 printf '%s\n' "$BODY"
 
-# 该下哪个文件 —— 发布页上摆着六个产物，不说明就得让人自己猜。
-# 一行装的写法放最前面：多数人要的是这个，而不是手动挑架构。
+# 模板正文按安装方式（npm / 独立脚本）、手动资产和卸载组织。
 #
 # 不写 macOS 隔离属性那一段：实测打上 com.apple.quarantine 之后
 # 从终端跑照样成功（Go 会给 macOS 二进制打临时签名，spctl 虽然判
@@ -45,34 +44,65 @@ printf '%s\n' "$BODY"
 # 复现不出来的问题不写进说明，而且教人反射性敲 xattr -d 是坏习惯。
 sed "s/<版本>/$VER/g" <<'ARTIFACTS'
 
-## 下载
+## 安装
 
-一行装（自动挑架构，装到 `~/.local/bin`，不需要 sudo）：
+### npm（跨平台，需 Node.js 18+）
 
+```sh
+npm install -g @tokenflux/tf
 ```
+
+升级请运行 `npm install -g @tokenflux/tf@latest`（`tf update` 不会直接修改 npm 托管的文件）。
+
+### macOS / Linux（独立脚本，无 Node 依赖）
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh
 ```
 
-已经装过的话直接 `tf update`。
+默认安装到 `~/.local/bin/tf`（可通过 `TF_INSTALL_DIR` 自定义）。升级直接运行 `tf update`。
 
-手动下载：
+## 手动下载
 
 | 系统 | 文件 |
 | --- | --- |
-| macOS（Apple 芯片） | `tf_<版本>_darwin_arm64.tar.gz` |
+| macOS（Apple Silicon） | `tf_<版本>_darwin_arm64.tar.gz` |
 | macOS（Intel） | `tf_<版本>_darwin_amd64.tar.gz` |
 | Linux x86_64 | `tf_<版本>_linux_amd64.tar.gz` |
 | Linux ARM64 | `tf_<版本>_linux_arm64.tar.gz` |
-| Windows | `tf_<版本>_windows_amd64.zip` |
+| Windows x64 | `tf_<版本>_windows_amd64.zip` |
 
-解开就是单个可执行文件，没有依赖，放进 PATH 即可。
+macOS 与 Linux 产物解压后将 `tf` 放入 PATH 即可。
 
-**Windows 目前只能非交互使用**：选择器与登录提问需要终端交互，
-Windows 上尚未实现，请用 `--no-input` 配合 `-m`、`-k` 明确指定。
+Windows 产物解压后将 `tf.exe` 放入 PATH。当前仅支持非交互模式，请使用 `--no-input` 配合 `-m`、`-k` 参数明确指定。
+
+## 卸载
+
+### npm
+
+```sh
+npm uninstall -g @tokenflux/tf
+```
+
+### 独立脚本
+
+仅删除 `tf` 二进制，保留配置、凭据与缓存：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | sh
+```
+
+同时清理配置、凭据与缓存目录：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | sh -s -- --purge
+```
+
+若安装时指定了 `TF_INSTALL_DIR`，可在管道右侧传入对应环境变量：`curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | TF_INSTALL_DIR=/原安装目录 sh`。
 
 ## 校验
 
-```
+```sh
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 ARTIFACTS
