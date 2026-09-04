@@ -23,6 +23,12 @@
 
 ## [未发布]
 
+（暂无）
+
+---
+
+## [0.7.0] — 2026-09-04
+
 ### 新增
 
 - 新增 Pi coding agent 支持（命令 `tf pi`，进程名 `pi`）：
@@ -209,7 +215,8 @@
 - 方向键选择器，支持输入过滤。
 - 中英双语，跟随系统 locale，`TKR_LANG` 可覆盖。
 
-[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.6.0...HEAD
+[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/TokenFlux/tf-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/TokenFlux/tf-cli/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/TokenFlux/tf-cli/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/TokenFlux/tf-cli/compare/v0.5.1...v0.5.2

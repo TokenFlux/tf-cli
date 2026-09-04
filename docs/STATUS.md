@@ -1,6 +1,6 @@
 # tf-cli 现状
 
-对应 main 分支（v0.6.0 之后）。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 main 分支（v0.7.0）。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
@@ -21,7 +21,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。对 `claude`/`codex`/`opencode`/`pi` 透传命令，写在 harness 名后的 `-h`/`--help` 交给底层工具，`tf --help <harness>` 用于查看 tf 包装帮助。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 8,400 行生产代码（7,846 Go + 586 npm）；约 4,800 行测试（4,519 Go + 305 Node）；162 个 Go 测试函数；8 个 Node 用例，九个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
+约 8,400 行生产代码（7,846 Go + 586 npm）；约 4,800 行测试（4,519 Go + 305 Node）；162 个 Go 测试函数；8 个 Node 用例，十个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
 
 ## 二、里程碑
 
@@ -61,6 +61,7 @@
   GitHub 仓库改名为 `TokenFlux/tf-cli`，Go module 改为 `github.com/tokenflux/tf-cli`，命令名仍为 `tf`
 - **v0.5.3** 支持 npm 平台包分发（`@tokenflux/tf` 及 5 个平台二进制包）并完成正式发布。详见 [`distribution/npm.md`](distribution/npm.md)
 - **v0.6.0** 修正 harness 透传 `-h`/`--help` 语义、重构模型目录先于协议探测的自愈刷新顺序、修复预发布版本 SemVer 比较与 npm 升级拦截、增加 npm dist-tags 校验有界退避重试，并完成全项目结构与冗余字段消融
+- **v0.7.0** 新增 Pi coding agent harness（覆盖三协议、纯进程环境与动态临时 Extension 注入、不修改 `~/.pi` 持久配置）与保守独立卸载脚本 `uninstall.sh`（支持 `--purge`）
 
 仓库改名后，旧 GitHub URL 会自动重定向，现有二进制的自更新和 `install.sh` 均已实测可用。
 `go install github.com/tokenflux/tf-cli/cmd/tf@latest` 原生支持；v0.6.0 发布后复核 Go proxy 的 @latest 传播。

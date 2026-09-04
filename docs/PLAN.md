@@ -71,7 +71,7 @@ scripts/
 
 ### 中期：分发与代码结构
 
-5. ~~npm 平台包分发~~ 已完成：`@tokenflux/tf` 及 5 个平台包已完成 0.5.3-bootstrap.0 预发布与 registry 验证，GitHub Actions OIDC Trusted Publishing 绑定已配置；稳定版 v0.5.3 已公开发布。操作手册见 [`distribution/npm.md`](distribution/npm.md)。
+5. ~~npm 平台包分发~~ 已完成：`@tokenflux/tf` 及 5 个平台包已完成 0.5.3-bootstrap.0 预发布与 registry 验证，GitHub Actions OIDC Trusted Publishing 绑定已配置；已验证稳定版 v0.6.0 已公开发布。操作手册见 [`distribution/npm.md`](distribution/npm.md)。
 6. ~~拆出 Key 与协议准入、shell 补全逻辑~~ 已完成（`internal/access`、`internal/completions`）；继续拆分仍与命令 I/O 耦合的部分。
 7. ~~完善 `CHANGELOG.md`~~ 已完成；`README.en.md` 待补。
 8. ~~决定 `InstallRecord` 的消费者~~ 已停止写入并删除；安装记录没有消费者，且外部升级后会失真。
@@ -80,6 +80,7 @@ scripts/
 11. ~~迁移并归档根目录临时 TODO~~ 开放项已并入本文件或 STATUS，原清单移至 `docs/archive/`。
 12. ~~全项目结构与冗余字段消融（v0.6.0）~~ 在保持命令、协议、JSON、持久化、终端、安装与 npm 行为既有契约的前提下，删除无消费者字段、包装与中间结构，并改用标准库实现。
 13. ~~独立分发安装与卸载闭环~~ 已完成：新增 `uninstall.sh` 并补齐 shell 测试（默认保留配置凭据、`--purge` 显式清理、目录保护与幂等验证），发布说明与文档对齐 npm / install.sh 分流。
+14. ~~Pi coding agent 支持（v0.7.0）~~ 已完成：新增 `tf pi` 支持（覆盖三协议映射、临时 Extension 动态注册 provider、进程内 Key 隔离不改 `~/.pi`），完成本地流式与真实 Responses 对话验证。
 
 ### 过渡版：网页导入（CLI 已落地，前端待合并）
 
