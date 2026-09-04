@@ -148,6 +148,13 @@ func parse(cmd *Command, args []string) (*Context, error) {
 			return ctx, nil
 		}
 
+		// harness 名后的帮助参数按位置归底层工具。tf 自己的帮助写在
+		// harness 名之前：tf --help opencode。
+		if cmd.Passthrough && (a == "--help" || a == "-h") {
+			ctx.Passthr = append(ctx.Passthr, args[i:]...)
+			return ctx, nil
+		}
+
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			// 位置参数。透传型命令从这里开始交给 harness。
 			if cmd.Passthrough {

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +57,16 @@ func TestParsePassthrough(t *testing.T) {
 			name:        "-- 之后无条件透传，即使与 tf 同名",
 			args:        []string{"--", "-m", "claude-opus-4"},
 			wantPassthr: []string{"-m", "claude-opus-4"},
+		},
+		{
+			name:        "harness 后的 help 属于底层工具",
+			args:        []string{"--help"},
+			wantPassthr: []string{"--help"},
+		},
+		{
+			name:        "harness 后的短 help 属于底层工具",
+			args:        []string{"-h"},
+			wantPassthr: []string{"-h"},
 		},
 		{
 			name:        "陌生 flag 之后的同名 flag 不再被 tf 解析",
@@ -140,6 +151,51 @@ func TestGlobalFlagsAvailableEverywhere(t *testing.T) {
 	}
 	if got := ctx.Flags.String("key"); got != "work" {
 		t.Errorf("key = %q, want work", got)
+	}
+}
+
+func TestHarnessHelpBelongsToItsPosition(t *testing.T) {
+	app := NewApp()
+	var passed []string
+	app.Register(&Command{
+		Name: "tool", Passthrough: true, Usage: "tf tool [args...]",
+		Summary: func(*ui.UI) string { return "tool summary" },
+		Run: func(c *Context) error {
+			passed = append([]string{}, c.Passthr...)
+			return nil
+		},
+	})
+
+	if code := app.Run([]string{"tool", "--help"}); code != 0 {
+		t.Fatalf("post-command help exited %d", code)
+	}
+	if !reflect.DeepEqual(passed, []string{"--help"}) {
+		t.Fatalf("post-command help passed %v, want [--help]", passed)
+	}
+
+	passed = nil
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+	code := app.Run([]string{"--help", "tool"})
+	os.Stdout = oldStdout
+	_ = w.Close()
+	out, readErr := io.ReadAll(r)
+	_ = r.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if code != 0 {
+		t.Fatalf("pre-command help exited %d", code)
+	}
+	if passed != nil {
+		t.Fatalf("pre-command help reached tool with %v", passed)
+	}
+	if !strings.Contains(string(out), "tool summary") {
+		t.Fatalf("pre-command help did not show tf wrapper help:\n%s", out)
 	}
 }
 
@@ -268,9 +324,11 @@ func TestCompletionNeverReturnsNothing(t *testing.T) {
 		}
 	}
 
-	// 唯一该返回空的地方：越过透传边界之后，那些参数属于 harness。
-	if got := complete([]string{"codex", "exec", ""}); len(got) != 0 {
-		t.Errorf("past the passthrough boundary should yield nothing, got %v", got)
+	// 越过透传边界之后，那些参数属于 harness。
+	for _, words := range [][]string{{"codex", "exec", ""}, {"opencode", "--help", ""}} {
+		if got := complete(words); len(got) != 0 {
+			t.Errorf("past the passthrough boundary complete(%q) = %v, want nothing", words, got)
+		}
 	}
 
 	if got := complete([]string{"login", "--f"}); !slices.Contains(got, "--from-web") {

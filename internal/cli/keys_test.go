@@ -2,8 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/tokenflux/tf-cli/internal/access"
@@ -302,6 +306,84 @@ func TestAllDeniedIsTreatedAsUnknown(t *testing.T) {
 	claude, _ := harness.Lookup("claude")
 	if !access.CanRun(meta, config.GroupScope, claude) {
 		t.Error("without evidence tf must not filter the key out")
+	}
+}
+
+func TestKeysRefreshesModelsBeforeProtocols(t *testing.T) {
+	var modelsFetched atomic.Bool
+	var probes, badOrder, badPrefix atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
+		modelsFetched.Store(true)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":"Fresh/new-model"}]}`)
+	})
+	for _, path := range []string{"/v1/messages", "/v1/responses", "/v1/chat/completions"} {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			probes.Add(1)
+			if !modelsFetched.Load() {
+				badOrder.Add(1)
+			}
+			body, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(body), `"model":"Fresh/__tf_probe__"`) {
+				badPrefix.Add(1)
+			}
+			http.Error(w, "model not found", http.StatusNotFound)
+		})
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	paths, err := config.DefaultPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := cfg.KeyMetaOf("work")
+	meta.Host = server.URL
+	meta.Models = []string{"Old/old-model"}
+	meta.Protocols = map[string][]string{"Old": {"openai_responses"}}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	creds, _, err := config.LoadCredentials(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds.Set("work", &config.Credential{Key: "sk-test", Source: config.SourcePaste})
+	if err := creds.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	flags := newValues()
+	flags.set["refresh"] = "true"
+	ctx := &Context{UI: &ui.UI{Out: &out, Err: &errOut, Lang: ui.LangEN, JSON: true}, Flags: flags}
+	if err := runKeys(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if probes.Load() != 3 || badOrder.Load() != 0 || badPrefix.Load() != 0 {
+		t.Fatalf("probes=%d bad order=%d bad prefix=%d", probes.Load(), badOrder.Load(), badPrefix.Load())
+	}
+
+	reloaded, err := config.Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := reloaded.KeyMetaOf("work")
+	if len(got.Models) != 1 || got.Models[0] != "Fresh/new-model" {
+		t.Fatalf("models = %v, want refreshed model", got.Models)
+	}
+	if len(got.Protocols["Fresh"]) != 3 {
+		t.Fatalf("protocols = %v, want Fresh admission", got.Protocols)
+	}
+	if _, stale := got.Protocols["Old"]; stale {
+		t.Fatalf("stale Old admission survived: %v", got.Protocols)
 	}
 }
 

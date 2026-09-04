@@ -18,7 +18,7 @@ func newKeysCommand() *Command {
 		},
 		Flags: []Flag{
 			{Name: "refresh", Kind: KindBool,
-				Desc: "重新探测各 Key 的准入情况||Re-probe what each key allows"},
+				Desc: "刷新各 Key 的模型与协议准入||Refresh each key's models and protocol admission"},
 		},
 		Run: runKeys,
 	}
@@ -33,7 +33,7 @@ func runKeys(c *Context) error {
 
 	names := creds.Names()
 	if len(names) > 0 && c.Flags.Bool("refresh") {
-		reprobe(c, cfg, creds, names)
+		refreshKeyMetadata(c, cfg, creds, names)
 	}
 	if len(names) == 0 {
 		return ui.Errf(ui.CodeNotLoggedIn, c.UI.T("本机没有保存任何 Key", "no keys are stored on this machine")).

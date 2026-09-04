@@ -19,9 +19,9 @@
 命令：`version` `status` `config` `login` `logout` `keys` `update` `harness`
 `model` `completions` + `claude` `codex` `opencode`。`tf login` 默认高亮网页导入，确认后打开 Keys 页面，也可选择粘贴；`--from-web` 可直接进入网页导入。
 
-全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
+全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。对 `claude`/`codex`/`opencode` 透传命令，写在 harness 名后的 `-h`/`--help` 交给底层工具，`tf --help <harness>` 用于查看 tf 包装帮助。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 8,300 行生产代码（7,711 行 Go + 586 行 npm 启动器及打包脚本）、约 4,500 行测试（4,230 行 Go + 305 行 Node 测试），156 个 Go 测试函数、8 个 Node 测试用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
+约 8,300 行生产代码（7,729 Go + 586 npm）；约 4,700 行测试（4,370 Go + 305 Node）；158 个 Go 测试函数；8 个 Node 用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
 
 ## 二、里程碑
 

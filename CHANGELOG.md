@@ -25,6 +25,8 @@
 
 ### 改进
 
+- 对 `claude`、`codex`、`opencode` 这类透传命令，harness 名后的 `-h` / `--help` 改为透传给底层工具（如 `tf opencode --help` 查看 OpenCode 帮助）；查看 tf 包装层对此 harness 的帮助改用 `tf --help opencode`。
+- `tf keys --refresh` 与启动筛选无可用 Key 时的自动自愈路径采用统一的先拉取各 Key `/v1/models`、再以最新模型分组前缀探测协议的刷新顺序；网络请求失败时继续沿用已有缓存。
 - npm 发布脚本为发布后的 dist-tags 校验增加有界重试（0、1、2、4、8、15、30 秒），解决成功发布后因注册表短时读取到旧 tag 导致流程误判失败的问题。
 - 自更新版本比较遵循 SemVer 预发布版本优先级规则，npm 安装的 0.5.3-bootstrap.0 能正确识别正式版 0.5.3 为新版本并给出包管理器升级命令，不再误报已是最新或执行自替换。
 

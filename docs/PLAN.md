@@ -14,7 +14,7 @@ M0–M7 已完成，见 [`STATUS.md`](STATUS.md)。这份文档现在只管往�
 | 进程模型 | fork + wait（信号转发自己写，换取确定性清理与终端收尾）|
 | 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA |
 | 认证 | `tf login` 默认高亮网页导入，确认后自动打开 Keys 页面，也可选择粘贴；管道和显式 flag 直达对应方式。网页导入使用 localhost 回环、可选会话证明与 Origin 预览确认，契约见 [`integrations/web-import.md`](integrations/web-import.md) |
-| 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；`--` 无条件透传 |
+| 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；写在 harness 名后的 `-h`/`--help` 交给底层工具，tf 包装帮助写在命令名前（`tf --help <harness>`）；`--` 无条件透传 |
 | 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；不用钥匙串 |
 | 文案 | 跟随 locale + `TF_LANG`；错误码保持英文常量 |
 | 输出 | 显式 `--json`，不因管道自动切换 |
@@ -106,6 +106,6 @@ Windows 交互需基于 `CONIN$` 与 `SetConsoleMode` 重写。待具备实际�
 | `claude_code_only` 识别在 tf 路径下失效 | **已处理** | 服务端基于客户端指纹校验，tf 保持真实客户端行为，不可用时在候选列表中明确提示原因 |
 | 用户配置文件覆盖 tf 注入参数 | **已处理** | `settings.json` 的 `env` 优先级更高，启动前执行检查并告警 |
 | harness 迭代导致注入 flag 失效 | 持续跟进 | 记录已验证版本，保持架构轻量与直接透传 |
-| 分组配置改动导致探测结果过期 | **已处理** | 启动失败后触发重探，支持 `tf keys --refresh` 刷新缓存 |
+| 分组配置改动导致探测结果过期 | **已处理** | 采用混合模型刷新策略：绑定和槽位完整正常启动只读缓存，无可用 Key 时自动触发先拉模型后探协议的自愈刷新，也可通过 `tf keys --refresh` 显式刷新 |
 | harness 隐式模型槽位引发异常 | **已处理** | 适配表穷举各 harness 槽位并做补齐约束 |
 | npm 平台包体积与发布复杂度 | **已处理** | 采用 5 个二进制可选依赖包加轻量 JS launcher，完成 Bootstrap 预发布与 6 个包的 OIDC 信任绑定，稳定版 v0.5.3 已公开发布 |

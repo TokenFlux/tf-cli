@@ -9,7 +9,7 @@
 
 - **非侵入式注入**：仅在子进程生命周期内通过环境变量与 CLI 参数注入配置，不修改 `~/.claude/settings.json` 或 `~/.codex/config.toml`；`~/.claude/settings.json` 的 `env` 可覆盖进程注入，`tf` 会在启动前检查并告警。
 - **全模型槽位管理**：自动配置主对话模型及后台任务模型（如 Claude 的 `fast` 摘要槽、Codex 的 `review` 审查槽、opencode 的 `small` 模型槽），避免因缺省配置导致静默调用失败。
-- **协议探测与路由过滤**：登录时会执行零 token 探测，`tf keys --refresh` 可显式重探；若启动筛选发现缓存中没有匹配的 Key，`tf` 会自动重探。探测结果用于过滤协议不兼容的模型，并识别 `claude_code_only`（如 Claude Max）等客户端限定分组。
+- **协议探测与路由过滤**：登录及需要模型候选或校验时刷新模型列表，通过零 token 探测过滤不兼容模型。绑定与槽位完整的启动和补全直接读取本地缓存。
 - **多凭据隔离**：按 harness 独立绑定 Key，支持单凭据跨分组前缀路由，无需切换全局环境。
 - **环境诊断与冲突预警**：内置状态检查与配置冲突检测，实时识别本地覆盖环境变量及配额耗尽状态。
 
@@ -134,6 +134,8 @@ tf claude -m              # 唤起模型交互选择器
 tf codex  -e high         # 调整推理思考强度（reasoning effort）
 tf codex  -k work         # 显式指定本次使用的 Key 别名
 tf claude -- --resume     # 双破折号 -- 后的所有参数将直接透传给底层工具
+tf opencode --help        # harness 命令后的 -h/--help 直接交给底层工具
+tf --help opencode        # 查看 tf 包装器对该 harness 的帮助
 ```
 
 ### 模型与槽位管理
@@ -171,6 +173,8 @@ work  sk-d61…5b1c
 personal  sk-9f2…a047
   ChatGPT/   codex opencode
 ```
+
+`tf keys --refresh` 先拉每把 Key 的 `/v1/models` 再按最新前缀探协议；启动筛选从缓存找不到可用 Key 时同样自动刷新；这些刷新路径网络失败时沿用已有缓存。
 
 ### 运行状态与诊断
 

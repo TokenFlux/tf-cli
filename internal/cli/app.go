@@ -73,6 +73,12 @@ func (a *App) Run(argv []string) int {
 		return 2
 	}
 
+	// harness 后的 -h/--help 属于底层工具；tf 自己的帮助放在命令名前。
+	if cmd.Passthrough && hasFlag(leading, "help", "h") {
+		a.printCommandHelp(u, cmd)
+		return 0
+	}
+
 	// 前置的全局 flag 当成写在子命令后面一样解析，两种写法因此等价。
 	tail := append(append([]string{}, leading...), argv[cmdIdx+1:]...)
 	ctx, err := parse(cmd, tail)
@@ -242,8 +248,8 @@ func (a *App) printCommandHelp(u *ui.UI, c *Command) {
 
 	if c.Passthrough {
 		u.Printf("\n%s\n", u.Dim(u.T(
-			"以上选项之后的参数全部原样传给 "+c.Name+"；用 -- 强制透传。",
-			"Everything after these flags is passed to "+c.Name+" untouched; use -- to force it.",
+			"命令后的 -h/--help 交给 "+c.Name+"；用 tf --help "+c.Name+" 查看本页，用 -- 强制透传其它同名选项。",
+			"-h/--help after the command goes to "+c.Name+"; use tf --help "+c.Name+" for this page, or -- to force other colliding flags through.",
 		)))
 	}
 }

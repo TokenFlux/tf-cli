@@ -195,7 +195,9 @@ func completeLaunch(h *harness.Harness, rest []string) []string {
 		switch strings.TrimLeft(strings.SplitN(w, "=", 2)[0], "-") {
 		case "m", "model", "e", "effort", "k", "key", "host":
 			i++ // 跳过其取值
-		case "json", "no-input", "yes", "y", "help", "h":
+		case "help", "h":
+			return nil // 帮助参数起已进入 harness 的参数空间
+		case "json", "no-input", "yes", "y":
 		default:
 			return nil // 陌生 flag 即透传起点
 		}

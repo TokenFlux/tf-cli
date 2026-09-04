@@ -50,10 +50,9 @@ func eligibleKeys(c *Context, cfg *config.Config, creds *config.Credentials, h *
 	if len(fit) == 0 {
 		// 探测结果会过期：用户在网页上改了分组绑定后，缓存的「不支持」
 		// 会让一把现在可用的 Key 凭空消失，而用户无从得知。
-		// 放在失败路径上重探：顺利时零开销，出事时自愈。
-		if reprobe(c, cfg, creds, names) {
-			fit = access.Fitting(cfg, names, h)
-		}
+		// 放在失败路径上刷新：顺利时零开销，出事时自愈。
+		refreshKeyMetadata(c, cfg, creds, names)
+		fit = access.Fitting(cfg, names, h)
 	}
 	if len(fit) == 0 {
 		return nil, noKeyFitsError(c, cfg, h, names)
@@ -197,9 +196,14 @@ func bindKey(c *Context, cfg *config.Config, h *harness.Harness, name string) {
 	}
 }
 
-// reprobe 重新探测所有 Key，报告是否有任何结果发生变化。
-func reprobe(c *Context, cfg *config.Config, creds *config.Credentials, names []string) bool {
-	before := fmt.Sprint(cfg.Keys)
+// refreshKeyMetadata 先刷新模型，再用模型 ID 中的最新分组前缀探测协议。
+func refreshKeyMetadata(c *Context, cfg *config.Config, creds *config.Credentials, names []string) {
+	refreshModels(c, cfg, creds, names)
+	reprobe(c, cfg, creds, names)
+}
+
+// reprobe 重新探测所有 Key。
+func reprobe(c *Context, cfg *config.Config, creds *config.Credentials, names []string) {
 	c.UI.Logf("%s", c.UI.Dim(c.UI.T("正在重新检查各 Key 可用性…", "re-checking each key…")))
 	for _, n := range names {
 		cred, ok := creds.Get(n)
@@ -209,7 +213,6 @@ func reprobe(c *Context, cfg *config.Config, creds *config.Credentials, names []
 		probeAndStore(cfg, n, cfg.HostOf(n), cred.Key)
 	}
 	_ = cfg.Save()
-	return fmt.Sprint(cfg.Keys) != before
 }
 
 // noKeyFitsError 解释为什么一把 Key 都用不了。
