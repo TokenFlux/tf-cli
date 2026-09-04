@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | 
 
 默认安装至 `~/.local/bin/tf`（可通过环境变量 `TF_INSTALL_DIR` 自定义安装路径），无需管理员权限。
 
-### npm（自 v0.5.3 起，当前未发布）
+### npm（自 v0.5.3 起）
 
 npm 官方包名为 `@tokenflux/tf`（未加 scope 的 `tf` 与 `tf-cli` 属于无关项目）。主包通过 optionalDependencies 分发平台对应的 Go 二进制，无 postinstall 外部下载脚本：
 

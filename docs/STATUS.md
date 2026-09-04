@@ -1,6 +1,6 @@
 # tf-cli 现状
 
-对应 v0.5.2。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 v0.5.3。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
@@ -10,6 +10,7 @@
 - `design/` — 当前设计决策及其依据
 - `archive/` — 已放弃或被替代的早期方案，仅供追溯
 - `integrations/web-import.md` — 网页前端接入 `tf login --from-web` 的协议契约
+- `distribution/npm.md` — npm 平台包分发架构、验证与发布操作手册
 
 ---
 
@@ -20,7 +21,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 8300 行生产代码（7821 行 Go + 525 行 npm 启动器及打包脚本）、4500 行测试（4270 行 Go + 244 行 Node 测试），156 个 Go 测试函数、8 个 Node 测试用例，七个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
+约 8,400 行生产代码（7,821 行 Go + 约 570 行 npm 启动器及打包脚本）、4,600 行测试（4,270 行 Go + 约 298 行 Node 测试），156 个 Go 测试函数、8 个 Node 测试用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
 
 ## 二、里程碑
 
@@ -33,7 +34,7 @@
 | M4 模型 | 完成 | ID 解析、族折叠、方向键选择器、按 harness 分开的模型槽 |
 | M5 预检 | 完成 | 零 token 协议探测、按分组前缀的准入记录、隐藏原因说明 |
 | M6 harness | 完成 | claude 2.1.251、codex 0.151.0、opencode 1.18.20 均真实对话通过 |
-| M7 分发 | 大部完成 | GitHub Actions + install.sh + `tf update`（5 组平台二进制）。npm 平台包已完成代码与离线安装测试，待首发 bootstrap、6 个包的 OIDC 绑定与 v0.5.3 正式发布（详见 [`distribution/npm.md`](distribution/npm.md)） |
+| M7 分发 | 完成 | GitHub Actions + install.sh + `tf update`（5 组平台二进制）；npm 平台包发布与 OIDC Trusted Publishing 绑定已就绪（详见 [`distribution/npm.md`](distribution/npm.md)） |
 
 **M1 目录（`tf models` / `tf groups`）已放弃。** 原计划走公开的
 `/api/v1/marketplace/models` 做未登录查询，`internal/catalog` 模块已移除。
@@ -58,6 +59,7 @@
 - **v0.5.1** 重写 README，统一中文 CLI 文案，规范发布说明
 - **v0.5.2** 落地网页 Key 导入与可选会话证明、归档早期设计稿，并新增前端接入文档；
   GitHub 仓库改名为 `TokenFlux/tf-cli`，Go module 改为 `github.com/tokenflux/tf-cli`，命令名仍为 `tf`
+- **v0.5.3** 支持 npm 平台包分发（`@tokenflux/tf` 及 5 个平台二进制包），完善 npm 发布传播重试与 dist-tags 校验
 
 仓库改名后，旧 GitHub URL 会自动重定向，现有二进制的自更新和 `install.sh` 均已实测可用。
 自 `v0.5.2` 起 module 路径已正式匹配，
@@ -115,7 +117,7 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 | `internal/cli` 仍有约 4000 行，命令 I/O 尚未完全拆分 | `access`、`completions` 与网页导入已接入，剩余部分覆盖率仍需继续提升 |
 | ~~`gateway` 覆盖 3%，而它承担最微妙的判断~~ | 已用真实应答建立固件测试，覆盖率提升至 38.3% |
 | ~~终端四条防线只在 macOS 验证过~~ | 已在 Linux 6.8 上全部跑通，`scripts/linux-check.sh` 可重跑 |
-| npm 平台包分发待正式首发 | 代码与离线安装测试已完成；待完成 npm 邮箱验证前置、bootstrap 预发布、6 个包的 OIDC 信任配置与 v0.5.3 正式发布（操作见 [`distribution/npm.md`](distribution/npm.md)） |
+| ~~npm 平台包分发~~ | 架构与本地离线验证已完成；Bootstrap 预发布与 GitHub OIDC 信任绑定已完成实测验证，支持 v0.5.3 发布 |
 | 英文 README 未做 | `README.en.md` 待补 |
 
 ### B. Windows

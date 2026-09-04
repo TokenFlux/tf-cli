@@ -23,6 +23,12 @@
 
 ## [未发布]
 
+（暂无）
+
+---
+
+## [0.5.3] — 2026-09-04
+
 ### 新增
 
 - 新增 npm 分发方式：发布主包 `@tokenflux/tf`（暴露 `tf` 命令）及 5 个平台二进制可选依赖包（`@tokenflux/tf-darwin-arm64`、`@tokenflux/tf-darwin-x64`、`@tokenflux/tf-linux-arm64`、`@tokenflux/tf-linux-x64`、`@tokenflux/tf-win32-x64`）。支持 `npm install -g @tokenflux/tf` 全局安装与 `npx @tokenflux/tf` / `pnpx @tokenflux/tf` 单次调用。
@@ -31,6 +37,7 @@
 ### 改进
 
 - `tf update` 自动识别 `node_modules` 下的安装路径，检测到更新时提示运行 `npm install -g @tokenflux/tf@latest`，避免自更新机制直接覆盖包管理器文件。
+- npm 发布脚本在远端 package 文档尚未完成传播时改用 dist-tags 识别已存在版本，自动跳过不可变的已发布版本并校验目标 tag，同时对预发布版本临时占据 `latest` 输出明确提示。
 
 ---
 
@@ -184,7 +191,8 @@
 - 方向键选择器，支持输入过滤。
 - 中英双语，跟随系统 locale，`TKR_LANG` 可覆盖。
 
-[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.5.2...HEAD
+[未发布]: https://github.com/TokenFlux/tf-cli/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/TokenFlux/tf-cli/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/TokenFlux/tf-cli/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/TokenFlux/tf-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/TokenFlux/tf-cli/compare/v0.4.0...v0.5.0

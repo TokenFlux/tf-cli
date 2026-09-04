@@ -1,14 +1,14 @@
 # npm 分发与发布操作手册
 
-本文档记录 `tf-cli` 的 npm 平台包分发架构、本地验证流程、首发 Bootstrap 与 GitHub Actions OIDC Trusted Publishing 信任配置。
+本文档记录 `tf-cli` 的 npm 平台包分发架构、本地验证流程、历史首发 Bootstrap 记录、GitHub Actions OIDC Trusted Publishing 信任配置及常态发布流程。
 
-> **当前状态**：npm 包分发代码与本地测试已全部就绪，但 npm 首发 Bootstrap、OIDC 信任绑定与 v0.5.3 正式发布尚未执行。首个正式 npm 版本为 `v0.5.3`。
+> **当前状态**：`@tokenflux/tf` 及 5 个平台包已成功完成 `0.5.3-bootstrap.0` 预发布并完成 OIDC 绑定。当前正准备发布首个正式稳定版本 `v0.5.3`（发布 tag 尚未创建）。
 
 ---
 
 ## 一、包架构与包名清单
 
-npm 分发包含 1 个公开主包和 5 个仅供内部引用的平台二进制包（均发布于 `@tokenflux` 组织下）：
+npm 分发包含 1 个公开主包和 5 个仅供内部引用的平台二进制包（均发布于 `@tokenflux` 组织下；未加 scope 的 `tf` 与 `tf-cli` 属于无关项目）：
 
 | 包名 | 包含文件 | 平台约束 (`os` / `cpu`) |
 | --- | --- | --- |
@@ -59,46 +59,32 @@ make npm-check NPM_VERSION=0.5.3-test.0
 
 ---
 
-## 三、前置准备与首发 Bootstrap
+## 三、历史首发 Bootstrap 记录（已完成）
 
-npm 实行版本不可变机制（已发布的版本无法重新上传或覆盖）。发布流程分为一次性的 Bootstrap 流程与后续的自动化 CI 发布。
+npm 实行版本不可变机制（已发布的版本无法重新上传或覆盖）。由于 npm OIDC 要求包必须已存在于 registry，项目通过一次性手动 Bootstrap 完成了 6 个包的首次发布。
 
-### 前置条件
+### 1. 组织与账号前置（已完成）
 
-1. npm organization `tokenflux` 已存在，所有者账号开启了 2FA（auth-and-writes）；
-2. 发布者账号已通过 npm 邮箱验证（外部前置条件）；
-3. 本机已通过 `npm login` 登录拥有该组织发布权限的维护者账号。**严禁在终端、配置文件或聊天记录中硬编码或复制长效 npm Token**。
+1. npm organization `tokenflux` 所有者账号完成 2FA（auth-and-writes）与邮箱验证；
+2. 维护者账号本地临时通过 `npm login` 认证，未硬编码或存储长效 Token。
 
-### Bootstrap 步骤（预发布 0.5.3-bootstrap.0）
+### 2. 首发预发布版本（已完成）
 
-由于 npm OIDC 必须对已存在的包配置信任关系，首次需要手动上传 6 个包的完整可运行预发布版本：
-
-1. **打包 Bootstrap 版本**：
+1. 本地打包 `0.5.3-bootstrap.0`（对应 commit `2b3c399`）；
+2. 使用 `--tag bootstrap` 发布至 registry：
    ```sh
-   make npm-pack NPM_VERSION=0.5.3-bootstrap.0
-   ```
-
-2. **发布至非默认 dist-tag**：
-   ```sh
-   # 必须使用非默认 tag bootstrap，防止用户意外安装该预发布版本；后续正式发版 v0.5.3 将默认写入 latest
    node scripts/publish-npm-packages.mjs dist/npm --tag bootstrap
    ```
-
-3. **核实所有 6 个包均已成功发布**：
-   ```sh
-   npm view @tokenflux/tf versions --json
-   npm view @tokenflux/tf-darwin-arm64 versions --json
-   npm view @tokenflux/tf-darwin-x64 versions --json
-   npm view @tokenflux/tf-linux-arm64 versions --json
-   npm view @tokenflux/tf-linux-x64 versions --json
-   npm view @tokenflux/tf-win32-x64 versions --json
-   ```
+3. **npm registry 实际行为记录**：全新包发布首个自定义 tag 版本时，npm registry 仍会同时将其分配给 `latest`（与 npm 文档描述不符），且当 registry 仅有这一个版本时拒绝通过 `npm dist-tag rm` 移除 `latest`。此为临时现象，后续正式稳定版本 `0.5.3` 发布时会自动接管覆盖 `latest`。
+4. **Registry 实测验证（已通过）**：
+   - 清理缓存测试 `pnpx @tokenflux/tf@bootstrap --json version` 与 `npx @tokenflux/tf@bootstrap --json version`，均正确返回版本 `0.5.3-bootstrap.0` 与 commit `2b3c399`；
+   - 隔离全局安装测试仅下载并安装了当前系统匹配的 `darwin-arm64` 平台包。
 
 ---
 
-## 四、配置 GitHub Actions OIDC 信任
+## 四、配置 GitHub Actions OIDC 信任（已完成）
 
-在所有 6 个包完成首发后，维护者在本地对每个包配置 GitHub Actions Trusted Publishing：
+在 6 个包完成首发后，维护者已完成 GitHub Actions Trusted Publishing 绑定：
 
 ```sh
 npm trust github @tokenflux/tf --repo TokenFlux/tf-cli --file release.yml --allow-publish
@@ -109,29 +95,40 @@ npm trust github @tokenflux/tf-linux-x64 --repo TokenFlux/tf-cli --file release.
 npm trust github @tokenflux/tf-win32-x64 --repo TokenFlux/tf-cli --file release.yml --allow-publish
 ```
 
-配置完成后，GitHub Actions 中的 `.github/workflows/release.yml` 即可在发版流程中通过短期 OIDC Token (`id-token: write`) 自动发布并生成 `--provenance` 签名，无需在 GitHub 仓库中配置任何静态 npm Token 或 Secret。
-
-> **安全清理**：完成信任配置后，在本地终端运行 `npm logout` 退出临时登录会话，确保本机不留存活跃的发布凭据，也不使用任何长效发布 Token。
+`npm trust list` 已确认 6 个包均具备 `createPackage` 与 `createStagedPackage` 权限。工作流 `release.yml` 自身仅需运行标准的 `npm publish`。
 
 ---
 
-## 五、正式版本发布与重试机制
+## 五、常态化稳定版本发布流程
 
-### 发布流程
+首发及信任绑定完成后，后续稳定版本（如 `v0.5.3`）走自动化 CI 流程。
 
-推送版本 tag（如 `v0.5.3`）后，`.github/workflows/release.yml` 自动执行以下阶段：
+### 1. 发布触发与执行阶段
+
+推送版本 tag（如 `v0.5.3`）后，`.github/workflows/release.yml` 自动执行：
 
 1. **check**：代码格式、测试、发版前校验；
 2. **build**：交叉编译 5 组二进制产物；
 3. **npm**：
-   - 依赖 Node 24 与 OIDC 权限；
+   - 依赖 Node 24 与 GitHub OIDC 权限（`id-token: write`）；
    - 调用 `scripts/build-npm-packages.mjs` 构建 6 个 tarball；
    - 调用 `scripts/check-npm-packages.mjs` 进行离线安装校验；
    - 调用 `scripts/publish-npm-packages.mjs` **优先发布 5 个平台包，最后发布主包 `@tokenflux/tf`**，并附加 `--provenance`；
 4. **release**：创建 GitHub Release 并上传归档与 `SHA256SUMS`。
 
-### 部分发布失败后的重试与恢复
+### 2. 传播重试与防冲突机制
 
-若发布流水线在部分平台包发布后中断（例如网络超时）：
-- `scripts/publish-npm-packages.mjs` 内置防重复发布逻辑：发布前会检查 npm 远端是否存在对应 `package@version`；若已存在则直接输出跳过信息；
-- 维护者只需在 GitHub Actions 界面重新运行失败的 Job，发布脚本会自动跳过已发布的包，继续发布未完成的包。
+- **元数据传播重试**：当 npm 远端 package 文档尚未完成传播时，发布脚本通过 `dist-tags` 确认已发布版本，跳过不可变的已存在版本，并校验目标 tag 正确性；
+- **重试幂等**：若流水线因网络中断，重新运行 GitHub Actions Job 时会自动跳过已发布的包，继续发布未完成的包。
+
+### 3. 稳定发布后验证与凭据清理
+
+在首个稳定版本（`v0.5.3`）发布并验证完成后，维护者在本机执行凭据清理：
+
+```sh
+# 验证稳定版
+npx @tokenflux/tf@latest --json version
+
+# 验证通过后退出本地 npm 登录
+npm logout
+```
