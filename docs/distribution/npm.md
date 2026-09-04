@@ -57,6 +57,8 @@ make npm-check NPM_VERSION=0.5.3-test.0
 3. 子进程异常退出码能被完整保留；
 4. 终止信号能被正确捕获并转发给二进制。
 
+另行实测：当前 main 分支以 `0.5.3-bootstrap.0` 构建并在 npm `node_modules` 路径中运行，能正确识别稳定版 `0.5.3` 为更新版本，自更新拦截返回 `TF_USAGE` 并提示 `npm install -g @tokenflux/tf@latest` 且不执行自替换。该 SemVer 修复在 `v0.5.3` tag 之后合入 main 分支，不属于已打 tag 的稳定版二进制。
+
 ---
 
 ## 三、历史首发 Bootstrap 记录（已完成）

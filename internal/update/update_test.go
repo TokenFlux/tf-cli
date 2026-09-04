@@ -62,9 +62,19 @@ func TestNewer(t *testing.T) {
 		{"0.9.0", "0.10.0", true}, // 数值比较，不是字典序
 		{"1.0.0", "0.99.9", false},
 		{"0.1.0", "0.1.1", true},
-		{"dev", "0.1.0", true},         // 开发版一律认为需要更新
-		{"", "0.1.0", true},            // 版本缺失同理
-		{"0.1.0-rc.1", "0.1.0", false}, // 预发布后缀被忽略
+		{"dev", "0.1.0", true},                      // 开发版一律认为需要更新
+		{"", "0.1.0", true},                         // 版本缺失同理
+		{"invalid", "0.1.0", true},                  // 其他非法本地版本同理
+		{"0.1.0", "invalid", false},                 // 非法远端 tag 不能触发自替换
+		{"0.5.3-bootstrap.0", "0.5.3", true},        // 同版本的 stable 高于预发布
+		{"0.1.0-rc.1", "0.1.0", true},               // rc 应升级到 stable
+		{"0.1.0", "0.1.0-rc.1", false},              // stable 不降到 rc
+		{"0.1.0-rc.1", "0.1.0-rc.2", true},          // 数字标识符按数值排序
+		{"0.1.0-beta.11", "0.1.0-beta.2", false},    // 11 高于 2
+		{"0.1.0-alpha", "0.1.0-alpha.1", true},      // 相同前缀下更长者更高
+		{"0.1.0-alpha.1", "0.1.0-alpha.beta", true}, // 数字标识符低于文本
+		{"0.1.0+build.1", "0.1.0+build.2", false},   // build metadata 不参与排序
+		{"v0.1.0", "v0.2.0", true},                  // 接受 release tag 的 v 前缀
 	}
 	for _, c := range cases {
 		if got := Newer(c.local, c.remote); got != c.want {

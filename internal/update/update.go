@@ -143,37 +143,151 @@ func AssetName(version string) string {
 
 // Newer 报告 remote 是否比 local 新。
 //
-// 只做语义化版本的数值比较。local 不是正式版本号（dev 等）时一律认为需要更新。
+// local 不是正式版本号（dev 等）时，只要 remote 合法就认为需要更新；
+// remote 非法时拒绝更新，避免从异常 release tag 下载并替换自身。
 func Newer(local, remote string) bool {
-	if local == "" || local == "dev" {
+	rp, ok := parseSemanticVersion(remote)
+	if !ok {
+		return false
+	}
+	lp, ok := parseSemanticVersion(local)
+	if !ok {
 		return true
 	}
-	lp, rp := splitVersion(local), splitVersion(remote)
-	for i := 0; i < 3; i++ {
-		if lp[i] != rp[i] {
-			return rp[i] > lp[i]
-		}
-	}
-	return false
+	return compareSemanticVersions(rp, lp) > 0
 }
 
-func splitVersion(v string) [3]int {
-	var out [3]int
-	// 丢掉 -rc.1 之类的后缀再比。
-	if i := strings.IndexAny(v, "-+"); i >= 0 {
-		v = v[:i]
+type semanticVersion struct {
+	core       [3]int
+	prerelease []string
+}
+
+func parseSemanticVersion(v string) (semanticVersion, bool) {
+	var out semanticVersion
+	v = strings.TrimPrefix(v, "v")
+	if base, build, found := strings.Cut(v, "+"); found {
+		if !validIdentifiers(build, false) {
+			return out, false
+		}
+		v = base
 	}
-	for i, part := range strings.SplitN(strings.TrimPrefix(v, "v"), ".", 3) {
-		if i > 2 {
-			break
+
+	core, prerelease, hasPrerelease := strings.Cut(v, "-")
+	parts := strings.Split(core, ".")
+	if len(parts) != len(out.core) {
+		return out, false
+	}
+	for i, part := range parts {
+		if !validNumericIdentifier(part) {
+			return out, false
 		}
 		n, err := strconv.Atoi(part)
 		if err != nil {
-			return out
+			return out, false
 		}
-		out[i] = n
+		out.core[i] = n
 	}
-	return out
+
+	if hasPrerelease {
+		if !validIdentifiers(prerelease, true) {
+			return out, false
+		}
+		out.prerelease = strings.Split(prerelease, ".")
+	}
+	return out, true
+}
+
+func validIdentifiers(value string, rejectNumericLeadingZero bool) bool {
+	parts := strings.Split(value, ".")
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, r := range part {
+			if (r < '0' || r > '9') && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && r != '-' {
+				return false
+			}
+		}
+		if rejectNumericLeadingZero && len(part) > 1 && part[0] == '0' && isNumeric(part) {
+			return false
+		}
+	}
+	return true
+}
+
+func validNumericIdentifier(value string) bool {
+	return isNumeric(value) && (len(value) == 1 || value[0] != '0')
+}
+
+func isNumeric(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func compareSemanticVersions(a, b semanticVersion) int {
+	for i := range a.core {
+		if a.core[i] < b.core[i] {
+			return -1
+		}
+		if a.core[i] > b.core[i] {
+			return 1
+		}
+	}
+
+	if len(a.prerelease) == 0 {
+		if len(b.prerelease) == 0 {
+			return 0
+		}
+		return 1
+	}
+	if len(b.prerelease) == 0 {
+		return -1
+	}
+
+	limit := min(len(a.prerelease), len(b.prerelease))
+	for i := 0; i < limit; i++ {
+		if cmp := comparePrereleaseIdentifiers(a.prerelease[i], b.prerelease[i]); cmp != 0 {
+			return cmp
+		}
+	}
+	if len(a.prerelease) < len(b.prerelease) {
+		return -1
+	}
+	if len(a.prerelease) > len(b.prerelease) {
+		return 1
+	}
+	return 0
+}
+
+func comparePrereleaseIdentifiers(a, b string) int {
+	aNumeric, bNumeric := isNumeric(a), isNumeric(b)
+	if aNumeric && bNumeric {
+		if len(a) < len(b) {
+			return -1
+		}
+		if len(a) > len(b) {
+			return 1
+		}
+	} else if aNumeric != bNumeric {
+		if aNumeric {
+			return -1
+		}
+		return 1
+	}
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
 }
 
 // Apply 下载归档、按 SHA256SUMS 校验、原子替换当前可执行文件。

@@ -21,7 +21,7 @@
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
-约 8,400 行生产代码（7,821 行 Go + 约 590 行 npm 启动器及打包脚本）、4,600 行测试（4,270 行 Go + 约 305 行 Node 测试），156 个 Go 测试函数、8 个 Node 测试用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
+约 8,500 行生产代码（7,935 行 Go + 586 行 npm 启动器及打包脚本）、约 4,600 行测试（4,280 行 Go + 305 行 Node 测试），156 个 Go 测试函数、8 个 Node 测试用例，八个已发布版本，零第三方 Go 依赖及运行时 JS 依赖。
 
 ## 二、里程碑
 
@@ -111,7 +111,7 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 1. **发布与来源证明**：主包及 5 个平台二进制包均由 GitHub Actions 经 OIDC 发布并附带 provenance（`latest=0.5.3`，`bootstrap=0.5.3-bootstrap.0`），本地已清理 npm login 状态；`npm audit signatures` 校验全部通过。
 2. **发布重试与幂等性**：首次发布由于读取到陈旧的 `linux-x64` tag 导致首个 npm job 失败，随后触发幂等重跑已完全成功。
-3. **安装与产物验证**：干净环境下的 `npx`、`pnpx` 及隔离全局升级均可正确拉取并运行对应平台二进制；GitHub release assets 及其校验和（checksums）核对一致。完整流程与机制见 [`distribution/npm.md`](distribution/npm.md)。
+3. **安装与产物验证**：干净环境下的 `npx`、`pnpx` 及隔离全局升级均可正确拉取并运行对应平台二进制；GitHub release assets 及其校验和（checksums）核对一致；主分支当前构建以 `0.5.3-bootstrap.0` 版本运行时已可正确识别稳定版 `0.5.3` 并返回 npm 升级提示而非自我替换。完整流程与机制见 [`distribution/npm.md`](distribution/npm.md)。
 
 ## 五、还缺什么
 
