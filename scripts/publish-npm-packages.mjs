@@ -45,7 +45,7 @@ for (const entry of index.packages) {
   }
 
   const spec = `${entry.name}@${index.version}`
-  if (!dryRun && packageExists(spec)) {
+  if (!dryRun && packageExists(entry.name, index.version)) {
     console.log(`${spec} already exists; skipping`)
     continue
   }
@@ -56,13 +56,58 @@ for (const entry of index.packages) {
   runNpm(publishArgs, `publishing ${spec}`)
 }
 
-function packageExists(spec) {
+if (!dryRun) {
+  for (const entry of index.packages) {
+    const tags = distTags(entry.name)
+    if (tags[tag] !== index.version) {
+      fail(`${entry.name} tag ${tag} is ${tags[tag] || 'missing'}; expected ${index.version}`)
+    }
+  }
+
+  // npm currently adds latest while creating a package even when the first
+  // publish uses another tag, and rejects removing it while it is the only
+  // version. Surface that temporary state until the first stable release.
+  if (index.version.includes('-') && tag !== 'latest') {
+    for (const entry of index.packages) {
+      if (distTags(entry.name).latest === index.version) {
+        console.warn(`warning: latest temporarily points to ${entry.name}@${index.version}`)
+      }
+    }
+  }
+}
+
+function packageExists(name, version) {
+  const spec = `${name}@${version}`
   const result = npm(['view', spec, 'version', '--json'])
   if (result.status === 0) return true
   const output = `${result.stdout}\n${result.stderr}`
-  if (output.includes('E404')) return false
-  process.stderr.write(result.stderr || result.stdout)
-  fail(`cannot check whether ${spec} exists`)
+  if (!output.includes('E404')) {
+    process.stderr.write(result.stderr || result.stdout)
+    fail(`cannot check whether ${spec} exists`)
+  }
+
+  // A new package's dist-tags endpoint can become readable before its package
+  // document. This fallback keeps an immediate retry from republishing a version.
+  return Object.values(distTags(name, true)).includes(version)
+}
+
+function distTags(name, allowMissing = false) {
+  const result = npm(['dist-tag', 'ls', name, '--color=false'])
+  if (result.status !== 0) {
+    const output = `${result.stdout}\n${result.stderr}`
+    if (allowMissing && output.includes('E404')) return {}
+    process.stderr.write(result.stderr || result.stdout)
+    fail(`cannot read dist-tags for ${name}`)
+  }
+
+  const tags = {}
+  for (const line of result.stdout.trim().split('\n')) {
+    if (!line) continue
+    const separator = line.indexOf(': ')
+    if (separator < 1) fail(`invalid dist-tag output for ${name}: ${line}`)
+    tags[line.slice(0, separator)] = line.slice(separator + 2)
+  }
+  return tags
 }
 
 function runNpm(npmArgs, action) {

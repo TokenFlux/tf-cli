@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -83,4 +83,58 @@ test('builds five platform packages and the main shim package', (t) => {
 
   const dryRun = runNode([publishScript, output, '--tag', 'bootstrap', '--dry-run'])
   assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout)
+
+  const fakeBin = join(root, 'fake-bin')
+  const fakeState = join(root, 'registry.json')
+  mkdirSync(fakeBin)
+  writeFileSync(fakeState, JSON.stringify({
+    calls: [],
+    packages: Object.fromEntries(index.packages.map((entry) => [entry.name, {
+      bootstrap: version,
+      latest: version,
+    }])),
+  }))
+  const fakeNpm = join(fakeBin, 'npm')
+  writeFileSync(fakeNpm, `#!/usr/bin/env node
+const fs = require('node:fs')
+const stateFile = process.env.FAKE_NPM_STATE
+const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
+const args = process.argv.slice(2)
+state.calls.push(args)
+if (args[0] === 'view') {
+  fs.writeFileSync(stateFile, JSON.stringify(state))
+  console.error('E404')
+  process.exit(1)
+}
+if (args[0] === 'dist-tag' && args[1] === 'ls') {
+  const tags = state.packages[args[2]] || {}
+  fs.writeFileSync(stateFile, JSON.stringify(state))
+  for (const [tag, value] of Object.entries(tags)) console.log(tag + ': ' + value)
+  process.exit(0)
+}
+if (args[0] === 'dist-tag' && args[1] === 'rm') {
+  delete state.packages[args[2]][args[3]]
+  fs.writeFileSync(stateFile, JSON.stringify(state))
+  process.exit(0)
+}
+fs.writeFileSync(stateFile, JSON.stringify(state))
+process.exit(args[0] === 'publish' ? 90 : 91)
+`)
+  chmodSync(fakeNpm, 0o755)
+
+  const recovered = runNode([publishScript, output, '--tag', 'bootstrap'], {
+    env: {
+      ...process.env,
+      FAKE_NPM_STATE: fakeState,
+      PATH: `${fakeBin}${delimiter}${process.env.PATH}`,
+    },
+  })
+  assert.equal(recovered.status, 0, recovered.stderr || recovered.stdout)
+  const state = JSON.parse(readFileSync(fakeState, 'utf8'))
+  assert.equal(state.calls.filter((args) => args[0] === 'publish').length, 0)
+  assert.equal(state.calls.filter((args) => args[0] === 'dist-tag' && args[1] === 'rm').length, 0)
+  assert.match(recovered.stderr, /latest temporarily points to @tokenflux\/tf@1\.2\.3-test\.0/)
+  for (const tags of Object.values(state.packages)) {
+    assert.deepEqual(tags, { bootstrap: version, latest: version })
+  }
 })
