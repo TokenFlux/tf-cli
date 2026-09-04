@@ -23,7 +23,14 @@
 
 ## [未发布]
 
-（暂无）
+### 新增
+
+- 新增 npm 分发方式：发布主包 `@tokenflux/tf`（暴露 `tf` 命令）及 5 个平台二进制可选依赖包（`@tokenflux/tf-darwin-arm64`、`@tokenflux/tf-darwin-x64`、`@tokenflux/tf-linux-arm64`、`@tokenflux/tf-linux-x64`、`@tokenflux/tf-win32-x64`）。支持 `npm install -g @tokenflux/tf` 全局安装与 `npx @tokenflux/tf` / `pnpx @tokenflux/tf` 单次调用。
+- 主包采用平台二进制分发架构，仅需 Node >=18 启动轻量 JS launcher，无 postinstall 外部下载脚本且无运行时 JS 依赖；自动透传 stdio、信号与退出码。
+
+### 改进
+
+- `tf update` 自动识别 `node_modules` 下的安装路径，检测到更新时提示运行 `npm install -g @tokenflux/tf@latest`，避免自更新机制直接覆盖包管理器文件。
 
 ---
 

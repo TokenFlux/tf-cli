@@ -48,7 +48,7 @@ const (
 func (s Source) UpgradeCommand() string {
 	switch s {
 	case SourceNPM:
-		return "npm install -g tf@latest"
+		return "npm install -g @tokenflux/tf@latest"
 	case SourceHomebrew:
 		return "brew upgrade tf"
 	case SourceGoInstall:

@@ -11,7 +11,7 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check:
@@ -28,6 +28,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
 
       - name: 发版前检查
         run: |
@@ -40,6 +44,7 @@ jobs:
           fi
           go vet ./...
           go test ./...
+          make npm-test
           if [ -s go.sum ]; then
             echo "go.sum 非空，引入了第三方依赖"
             exit 1
@@ -80,6 +85,7 @@ jobs:
 
       # 交叉编译不需要 cgo，也不需要第三方 action —— 项目本身零依赖。
       - name: 编译
+        id: compile
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -94,6 +100,7 @@ jobs:
               -X github.com/tokenflux/tf-cli/internal/buildinfo.Version=${{ steps.v.outputs.version }} \
               -X github.com/tokenflux/tf-cli/internal/buildinfo.Commit=${{ steps.v.outputs.commit }}" \
             -o "dist/$name" ./cmd/tf
+          echo "binary=dist/$name" >> "$GITHUB_OUTPUT"
 
       # 归档名要与 internal/update 里的推导规则严格一致，否则自更新会找不到文件。
       - name: 打包
@@ -119,15 +126,57 @@ jobs:
           path: ${{ steps.pack.outputs.asset }}
           if-no-files-found: error
 
-  release:
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ steps.compile.outputs.binary }}
+          if-no-files-found: error
+
+  npm:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: npm-*
+          path: dist/npm-binaries
+
+      - name: 准备 npm 包
+        run: |
+          set -eu
+          npm install --global npm@11.19.0 pnpm@9.15.9
+          version=${TAG#v}
+          node scripts/build-npm-packages.mjs "$version" dist/npm-binaries dist/npm
+          node scripts/check-npm-packages.mjs dist/npm --require-pnpm
+
+      - name: 发布 npm 包
+        run: node scripts/publish-npm-packages.mjs dist/npm --provenance
+
+  release:
+    needs: [build, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
       - uses: actions/download-artifact@v8
         with:
+          pattern: tf_*
           path: staging
           merge-multiple: true
 

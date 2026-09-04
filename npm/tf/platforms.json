@@ -1,0 +1,32 @@
+{
+  "darwin-arm64": {
+    "package": "@tokenflux/tf-darwin-arm64",
+    "binary": "bin/tf",
+    "goos": "darwin",
+    "goarch": "arm64"
+  },
+  "darwin-x64": {
+    "package": "@tokenflux/tf-darwin-x64",
+    "binary": "bin/tf",
+    "goos": "darwin",
+    "goarch": "amd64"
+  },
+  "linux-arm64": {
+    "package": "@tokenflux/tf-linux-arm64",
+    "binary": "bin/tf",
+    "goos": "linux",
+    "goarch": "arm64"
+  },
+  "linux-x64": {
+    "package": "@tokenflux/tf-linux-x64",
+    "binary": "bin/tf",
+    "goos": "linux",
+    "goarch": "amd64"
+  },
+  "win32-x64": {
+    "package": "@tokenflux/tf-win32-x64",
+    "binary": "bin/tf.exe",
+    "goos": "windows",
+    "goarch": "amd64"
+  }
+}

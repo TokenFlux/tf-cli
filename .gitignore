@@ -1,4 +1,6 @@
 bin/
+!npm/tf/bin/
+!npm/tf/bin/tf.js
 dist/
 *.test
 .DS_Store

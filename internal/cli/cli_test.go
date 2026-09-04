@@ -700,8 +700,24 @@ func TestReleaseWorkflowNotes(t *testing.T) {
 	text := string(body)
 
 	const checkoutRef = "ref: ${{ inputs.tag || github.ref }}"
-	if got := strings.Count(text, checkoutRef); got != 3 {
-		t.Errorf("check/build/release 都必须检出输入 tag：找到 %d 处，期望 3", got)
+	checkoutJobs := make(map[string]int)
+	currentJob := ""
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && strings.HasSuffix(line, ":") {
+			currentJob = strings.TrimSuffix(strings.TrimSpace(line), ":")
+		}
+		if strings.TrimSpace(line) == checkoutRef {
+			checkoutJobs[currentJob]++
+		}
+	}
+	for _, job := range []string{"check", "build", "npm", "release"} {
+		if checkoutJobs[job] != 1 {
+			t.Errorf("%s 必须且只能检出一次输入 tag：找到 %d 处", job, checkoutJobs[job])
+		}
+		delete(checkoutJobs, job)
+	}
+	if len(checkoutJobs) != 0 {
+		t.Errorf("未知 job 检出了发布 tag：%v", checkoutJobs)
 	}
 	if !strings.Contains(text, "buildinfo.Commit=${{ steps.v.outputs.commit }}") {
 		t.Error("构建提交必须来自实际 checkout，不能用 workflow_dispatch 的 GITHUB_SHA")
@@ -732,5 +748,30 @@ func TestReleaseWorkflowNotes(t *testing.T) {
 	}
 	if !gen {
 		t.Error("缺少 --generate-notes：GitHub 应追加 PR 列表与完整变更链接")
+	}
+}
+
+// npm 发布只接受 workflow OIDC，不应退化成长效 registry token。
+func TestReleaseWorkflowNPMTrustedPublishing(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+
+	for _, required := range []string{
+		"  npm:\n    needs: build\n",
+		"id-token: write",
+		"pattern: npm-*",
+		"npm install --global npm@11.19.0 pnpm@9.15.9",
+		"node scripts/publish-npm-packages.mjs dist/npm --provenance",
+		"  release:\n    needs: [build, npm]\n",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("npm 发布流程缺少 %q", required)
+		}
+	}
+	if strings.Contains(text, "NPM_TOKEN") || strings.Contains(text, "NODE_AUTH_TOKEN") {
+		t.Error("npm 发布流程不得依赖长效 registry token")
 	}
 }

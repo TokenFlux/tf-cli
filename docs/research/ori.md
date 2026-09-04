@@ -1,9 +1,10 @@
 # Ori 调研 + tf 设计草案
 
 > 状态：Ori 调研记录仍供参考；其中关于 tf 的认证与分发内容是早期草案，
-> 不是当前功能说明。PKCE/grant/exchange 已由 localhost 网页导入路线替代，
-> GoReleaser、npm 平台包、Homebrew 与 Scoop 尚未实现。当前状态见
-> [`../STATUS.md`](../STATUS.md) 和 [`../PLAN.md`](../PLAN.md)。
+> 不是当前功能说明。PKCE/grant/exchange 已由 localhost 网页导入路线替代；
+> 分发采用 Go 原生交叉编译加独立脚本构建 5 个平台二进制包与 1 个主包（`@tokenflux/tf`），
+> 代码实现与离线测试已完成，首发 bootstrap、6 个包的 OIDC 信任绑定与 v0.5.3 正式发布待执行。
+> 当前状态见 [`../STATUS.md`](../STATUS.md)、[`../PLAN.md`](../PLAN.md) 与 [`../distribution/npm.md`](../distribution/npm.md)。
 
 调研对象：`ori`（OpenRouter 官方 CLI，2026-08 发布）
 目标：为 TokenFlux（托管）与 TokenRouter（自托管）做一个同类工具 `tf`。
@@ -219,42 +220,40 @@ tf login
 
 ---
 
-## 四、分发：Go 二进制 + npm 平台包（`pnpx tf` 照样能用）
+## 四、分发：Go 二进制 + npm 平台包（`npx @tokenflux/tf` 照样能用）
 
 用 Go 不等于放弃 npx/pnpx。业界标准做法（esbuild、biome、swc、turbo 都是这个结构）：**主包是纯 JS shim，二进制放在按平台切分的 optionalDependencies 里**。
 
 ```
-tf                          (主包，~5KB)
-├─ bin/tf.js                shim：resolve 平台包里的二进制并 exec，透传 argv/stdio/退出码
+@tokenflux/tf                   (主包，~5KB)
+├─ bin/tf.js                    shim：resolve 平台包里的二进制并 spawn，透传 argv/stdio/退出码与信号
 └─ optionalDependencies:
-   @tokenflux/tf-cli-darwin-arm64   { "os": ["darwin"], "cpu": ["arm64"] }
-   @tokenflux/tf-cli-darwin-x64
-   @tokenflux/tf-cli-linux-x64      { "os": ["linux"], "cpu": ["x64"], "libc": ["glibc"] }
-   @tokenflux/tf-cli-linux-x64-musl { ..., "libc": ["musl"] }
-   @tokenflux/tf-cli-linux-arm64
-   @tokenflux/tf-cli-win32-x64
+   @tokenflux/tf-darwin-arm64   { "os": ["darwin"], "cpu": ["arm64"] }
+   @tokenflux/tf-darwin-x64     { "os": ["darwin"], "cpu": ["x64"] }
+   @tokenflux/tf-linux-arm64    { "os": ["linux"], "cpu": ["arm64"] }
+   @tokenflux/tf-linux-x64      { "os": ["linux"], "cpu": ["x64"] }
+   @tokenflux/tf-win32-x64      { "os": ["win32"], "cpu": ["x64"] }
 ```
 
-包管理器按 `os`/`cpu`/`libc` 字段只装匹配的那一个，于是：
+包管理器按 `os`/`cpu` 字段只装匹配的那一个，于是：
 
-- `pnpx tf login` / `npx tf claude` 开箱即用，只下 ~10MB。
+- `pnpx @tokenflux/tf login` / `npx @tokenflux/tf claude` / `npm i -g @tokenflux/tf` 开箱即用，只下 ~10MB。
 - **没有 postinstall 下载脚本**，不受 `--ignore-scripts`、企业内网、离线 registry 镜像影响，这点比「postinstall 里 curl 二进制」的方案稳得多。
 - Go 二进制约 10–15MB，装进 npm 完全合理；对比 ori 的 Bun `--compile` 产物 80MB，**Go 在这条路上反而是优势**。
 
-shim 注意事项：`execFileSync(bin, process.argv.slice(2), { stdio: 'inherit' })` 保持 TTY（agent 是全屏 TUI，必须继承）；Windows 补 `.exe`；透传退出码与信号；平台包缺失时给出可读报错（提示 `--no-optional` 或不支持的平台）。
+shim 注意事项：`spawn(bin, args, { stdio: 'inherit', shell: false })` 保持 TTY（agent 是全屏 TUI，必须继承）；Windows 补 `.exe`；透传退出码与信号；平台包缺失时给出可读报错（提示 `--no-optional` / `--omit=optional` 或不支持的平台）。
 
-发布链路：goreleaser 已在仓库里（`.goreleaser.yaml`），交叉编译产物直接复用；再加一个 release 后的小脚本，把每个 `dist/` 产物塞进平台包目录并 `npm publish --provenance`。同时保留：
+发布链路：直接通过原生 Go 交叉编译产出 5 个目标平台的二进制，由无外部依赖的打包与校验脚本（`scripts/build-npm-packages.mjs`、`scripts/check-npm-packages.mjs`）生成并校验 6 个 tarball 和 SHA256SUMS，在 GitHub Actions 中通过 OIDC Trusted Publishing 免 Token 发布，详见 [`../distribution/npm.md`](../distribution/npm.md)。同时保留：
 
-- `curl -fsSL https://tokenflux.dev/install.sh | bash`（照抄 ori：探测平台 → 下载 → `SHA256SUMS` 校验 → 装 `~/.local/bin`）
-- Homebrew tap / Scoop（goreleaser 内建 `brews`、`scoops`）
-- `tf update`（自更新，stable/alpha 双通道可选）
+- `curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh`（探测平台 → 下载 → `SHA256SUMS` 校验 → 装 `~/.local/bin`）
+- `tf update`（自更新，检测到 `node_modules` 路径时提示 `npm install -g @tokenflux/tf@latest`）
 
 ### 与「纯 TS/Bun 实现」的取舍
 
 | 方案 | npx/pnpx | 体积 | 与 TokenRouter 工程栈 | 启动 |
 |---|---|---|---|---|
-| Go + npm 平台包 | ✅ | ~10MB | 一致（Go + goreleaser 已有） | 最快 |
+| Go + npm 平台包 | ✅ | ~10MB | 一致（Go 交叉编译） | 最快 |
 | Bun `--compile` 单文件 | 勉强（80MB 进 npm 不现实） | 80MB | 新增 Bun 工具链 | 快 |
 | 纯 TS 跑在 node 上 | ✅ 原生 | 最小 | 新增 Node 依赖，要求用户装 node | 慢，且依赖用户 node 版本 |
 
-**推荐 Go + npm 平台包**：既留住 `pnpx tf`，又没丢单文件、无运行时依赖、和后端同栈的好处。
+**推荐 Go + npm 平台包**：既留住 `pnpx @tokenflux/tf`，又没丢单文件、无运行时依赖、和后端同栈的好处。

@@ -19,8 +19,8 @@ func TestDetectSource(t *testing.T) {
 		path string
 		want Source
 	}{
-		{"/opt/homebrew/lib/node_modules/tf/bin/tf", SourceNPM},
-		{"/Users/x/.bun/install/global/node_modules/tf/bin/tf", SourceNPM},
+		{"/opt/homebrew/lib/node_modules/@tokenflux/tf/node_modules/@tokenflux/tf-darwin-arm64/bin/tf", SourceNPM},
+		{"/Users/x/.bun/install/global/node_modules/@tokenflux/tf-darwin-arm64/bin/tf", SourceNPM},
 		{"/opt/homebrew/Cellar/tf/0.1.0/bin/tf", SourceHomebrew},
 		{"/home/linuxbrew/.linuxbrew/Cellar/tf/0.1.0/bin/tf", SourceHomebrew},
 		{"/Users/x/go/bin/tf", SourceGoInstall},
@@ -37,12 +37,16 @@ func TestDetectSource(t *testing.T) {
 
 // 包管理器装的必须给出对应的升级命令，独立二进制才自替换。
 func TestUpgradeCommand(t *testing.T) {
-	if SourceBinary.UpgradeCommand() != "" {
-		t.Error("a standalone binary should self-replace, not defer to a manager")
+	cases := map[Source]string{
+		SourceBinary:    "",
+		SourceNPM:       "npm install -g @tokenflux/tf@latest",
+		SourceHomebrew:  "brew upgrade tf",
+		SourceGoInstall: "go install github.com/tokenflux/tf-cli/cmd/tf@latest",
+		SourceDevel:     "git pull && make build",
 	}
-	for _, s := range []Source{SourceNPM, SourceHomebrew, SourceGoInstall, SourceDevel} {
-		if s.UpgradeCommand() == "" {
-			t.Errorf("%s must provide an upgrade command", s)
+	for source, want := range cases {
+		if got := source.UpgradeCommand(); got != want {
+			t.Errorf("%s upgrade command = %q, want %q", source, got, want)
 		}
 	}
 }

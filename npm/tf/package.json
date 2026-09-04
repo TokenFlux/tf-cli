@@ -1,0 +1,42 @@
+{
+  "name": "@tokenflux/tf",
+  "version": "0.0.0-development",
+  "private": true,
+  "description": "Run AI coding clients with TokenFlux or TokenRouter credentials",
+  "keywords": [
+    "ai",
+    "cli",
+    "claude",
+    "codex",
+    "opencode",
+    "tokenflux"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TokenFlux/tf-cli.git",
+    "directory": "npm/tf"
+  },
+  "homepage": "https://github.com/TokenFlux/tf-cli#readme",
+  "bugs": {
+    "url": "https://github.com/TokenFlux/tf-cli/issues"
+  },
+  "bin": {
+    "tf": "bin/tf.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "platforms.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {},
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
