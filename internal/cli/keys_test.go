@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -545,18 +544,18 @@ func TestStaleModelClearsAllSlots(t *testing.T) {
 // 选择器默认高亮首项，回车就选中了一个当主模型必定失败的模型。
 // 上游的排序本身就是信息。
 func TestModelOrderIsNotResorted(t *testing.T) {
-	src, err := os.ReadFile("keys.go")
-	if err != nil {
-		t.Fatal(err)
+	want := []string{"gpt-5.6", "gpt-5.4", "codex-auto-review"}
+	cfg, creds := fixture(t, map[string][]string{"work": {"openai_responses"}})
+	cfg.KeyMetaOf("work").Host = modelServer(t, want...).URL
+	h, _ := harness.Lookup("codex")
+	got := gatherCandidates(testCtx(), cfg, creds, []string{"work"}, h)
+	if len(got) != len(want) {
+		t.Fatalf("candidates=%v", got)
 	}
-	body := string(src)
-	start := strings.Index(body, "func fetchModels(")
-	if start < 0 {
-		t.Fatal("fetchModels not found")
-	}
-	end := strings.Index(body[start:], "\n}\n")
-	if strings.Contains(body[start:start+end], "sort.") {
-		t.Error("fetchModels must not reorder what the gateway returned")
+	for i, id := range want {
+		if got[i].Model != id {
+			t.Fatalf("gateway order changed: %v", got)
+		}
 	}
 }
 

@@ -112,7 +112,7 @@ func refreshModels(c *Context, cfg *config.Config, creds *config.Credentials, ke
 		wg.Add(1)
 		go func(name, key string) {
 			defer wg.Done()
-			ids, err := fetchModels(ctx, cfg.HostOf(name), key)
+			ids, err := gateway.New(cfg.HostOf(name), key).Models(ctx)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -141,19 +141,6 @@ func refreshModels(c *Context, cfg *config.Config, creds *config.Credentials, ke
 			"could not refresh the model list, using the last known one: %s"), strings.Join(stale, " "))
 	}
 	return out
-}
-
-func fetchModels(ctx context.Context, host, key string) ([]string, error) {
-	ids, err := gateway.New(host, key).Models(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// 保持网关给的顺序，不要按字典序重排。
-	//
-	// 网关把 codex-auto-review 这类专用模型放在末尾，字典序却把它顶到
-	// 第一个 —— 选择器默认高亮首项，回车就选中了一个当主模型必定失败的
-	// 模型。上游的排序本身就是信息，重排等于把它扔掉。
-	return ids, nil
 }
 
 // candidateItems 把候选变成选择器条目。
