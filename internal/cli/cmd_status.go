@@ -182,17 +182,41 @@ func printUsage(c *Context, u *gateway.Usage) {
 		return
 	}
 
-	w := ui.Width(c.UI.T("额度", "quota"))
+	label := c.UI.T("额度", "quota")
+	quota := fmt.Sprintf("%s/%s", trimNum(u.Quota.Remaining), trimNum(u.Quota.Limit))
+	unit := u.Quota.Unit
+	exhausted := u.Exhausted()
+	if u.Quota.Limit <= 0 {
+		label = c.UI.T("可用额度", "available")
+		remaining := u.Billing.Remaining
+		unit = u.Billing.Unit
+		if remaining == nil {
+			remaining = u.Remaining
+		}
+		if unit == "" {
+			unit = u.Unit
+		}
+		switch {
+		case remaining == nil:
+			quota, unit = c.UI.T("未知", "unknown"), ""
+		case *remaining == -1 && u.Billing.Source != "balance":
+			quota, unit = c.UI.T("不限额", "unlimited"), ""
+		default:
+			quota = trimNum(*remaining)
+			exhausted = *remaining <= 0
+		}
+	}
+	if unit != "" {
+		quota += " " + unit
+	}
+
+	w := ui.Width(label)
 	if t := ui.Width(c.UI.T("今天", "today")); t > w {
 		w = t
 	}
 
-	quota := fmt.Sprintf("%s/%s", trimNum(u.Quota.Remaining), trimNum(u.Quota.Limit))
-	if u.Quota.Unit != "" {
-		quota += " " + u.Quota.Unit
-	}
-	line := "  " + c.UI.Dim(ui.Pad(c.UI.T("额度", "quota"), w)) + "  " + quota
-	if u.Exhausted() {
+	line := "  " + c.UI.Dim(ui.Pad(label, w)) + "  " + quota
+	if exhausted {
 		// 额度用完时 harness 只报一个 429。这句话是那个 429 的翻译。
 		line += "  " + c.UI.T("额度已耗尽，请求将被拒绝", "exhausted, requests will fail")
 	} else {

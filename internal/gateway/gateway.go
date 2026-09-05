@@ -85,18 +85,21 @@ func (c *Client) Models(ctx context.Context) ([]string, error) {
 // 只取会影响「下一次请求能不能成」的字段。接口还返回按模型、按日的
 // 明细和账单细节 —— 那些属于网页控制台，塞进命令行只会挤掉重点。
 type Usage struct {
-	Status string `json:"status"` // quota_exhausted 等
-	Quota  struct {
+	Status    string   `json:"status"` // quota_exhausted 等
+	Remaining *float64 `json:"remaining,omitempty"`
+	Unit      string   `json:"unit,omitempty"`
+	Quota     struct {
 		Limit     float64 `json:"limit"`
 		Used      float64 `json:"used"`
 		Remaining float64 `json:"remaining"`
 		Unit      string  `json:"unit"`
 	} `json:"quota"`
 	Billing struct {
-		Available bool    `json:"available"`
-		PlanName  string  `json:"plan_name"`
-		Remaining float64 `json:"remaining"`
-		Unit      string  `json:"unit"`
+		Available bool     `json:"available"`
+		PlanName  string   `json:"plan_name"`
+		Source    string   `json:"source,omitempty"`
+		Remaining *float64 `json:"remaining,omitempty"`
+		Unit      string   `json:"unit"`
 	} `json:"billing"`
 	Usage struct {
 		Today struct {
