@@ -7,6 +7,8 @@ import (
 	"strings"
 	"syscall"
 	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Item 是选择器里的一行。
@@ -98,6 +100,7 @@ type selector struct {
 	cursor int
 	offset int
 	drawn  int
+	inline bool
 	opt    SelectOpt
 }
 
@@ -233,12 +236,8 @@ func firstEnabledView(view []viewItem) int {
 }
 
 // window 计算可见区间，保证光标始终在视野内。
-func (s *selector) window(n int) (start, end int) {
-	rows, _ := s.tty.Size()
-	maxRows := rows - 4 // 标题、提示行、余量
-	if maxRows < 3 {
-		maxRows = 3
-	}
+func (s *selector) window(n, rows int) (start, end int) {
+	maxRows := max(1, rows-4) // title, footer, count and cursor margin
 	if n <= maxRows {
 		s.offset = 0
 		return 0, n
@@ -254,15 +253,35 @@ func (s *selector) window(n int) (start, end int) {
 
 func (s *selector) draw(view []viewItem) {
 	s.clear()
+	rows, cols := s.tty.Size()
+	frame := s.render(view, rows, cols)
+	s.drawn = strings.Count(frame, "\n")
+	s.inline = rows <= 1
+	fmt.Fprint(s.tty.f, frame)
+}
 
+func (s *selector) render(view []viewItem, rows, cols int) string {
+	clip := func(line string) string { return ansi.Truncate(line, max(0, cols-1), "…") }
+	if rows < 5 {
+		line := s.ui.T("无匹配项", "no matches")
+		if len(view) > 0 {
+			item := view[min(max(s.cursor, 0), len(view)-1)]
+			line = "❯ " + item.Label + "  " + item.Detail
+		}
+		if rows <= 1 {
+			return "\r\033[2K" + clip(line)
+		}
+		return clip(line) + "\r\n"
+	}
 	var b strings.Builder
+	writeLine := func(line string) { fmt.Fprintf(&b, "%s\r\n", clip(line)) }
 	title := s.title
 	if s.query != "" {
 		title += "  " + s.ui.Dim("/"+s.query)
 	}
-	fmt.Fprintf(&b, "%s\r\n", title)
+	writeLine(title)
 
-	start, end := s.window(len(view))
+	start, end := s.window(len(view), rows)
 	for i := start; i < end; i++ {
 		it := view[i]
 		marker := "  "
@@ -282,11 +301,11 @@ func (s *selector) draw(view []viewItem) {
 		if it.Note != "" {
 			line += "  " + it.Note
 		}
-		fmt.Fprintf(&b, "%s\r\n", line)
+		writeLine(line)
 	}
 
 	if len(view) == 0 {
-		fmt.Fprintf(&b, "  %s\r\n", s.ui.Dim(s.ui.T("无匹配项", "no matches")))
+		writeLine("  " + s.ui.Dim(s.ui.T("无匹配项", "no matches")))
 	}
 
 	// 截断时必须说出来。
@@ -295,7 +314,7 @@ func (s *selector) draw(view []viewItem) {
 	// 下面还有 —— 提示行只讲「↑↓ 移动」，没讲「移动能看到更多」。
 	// 找不到想要的模型时，人会以为它不在，而不是以为要往下翻。
 	if end-start < len(view) {
-		fmt.Fprintf(&b, "  %s\r\n", s.ui.Dim(fmt.Sprintf(
+		writeLine("  " + s.ui.Dim(fmt.Sprintf(
 			s.ui.T("第 %d-%d 个，共 %d 个", "showing %d-%d of %d"),
 			start+1, end, len(view))))
 	}
@@ -308,16 +327,19 @@ func (s *selector) draw(view []viewItem) {
 	if s.query != "" {
 		esc = s.ui.T("清掉过滤", "clear filter")
 	}
-	fmt.Fprintf(&b, "%s\r\n", s.ui.Dim(fmt.Sprintf(s.ui.T(
+	writeLine(s.ui.Dim(fmt.Sprintf(s.ui.T(
 		"↑↓ 移动   enter 确认   esc %s   直接输入可过滤",
 		"↑↓ move   enter select   esc %s   type to filter"), esc)))
 
-	s.drawn = strings.Count(b.String(), "\n")
-	fmt.Fprint(s.tty.f, b.String())
+	return b.String()
 }
 
 // clear 擦掉上一次绘制，避免刷屏时留下残影。
 func (s *selector) clear() {
+	if s.inline {
+		fmt.Fprint(s.tty.f, "\r\033[K")
+		s.inline = false
+	}
 	if s.drawn == 0 {
 		return
 	}
