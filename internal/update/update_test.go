@@ -163,13 +163,21 @@ func TestReplace(t *testing.T) {
 		t.Errorf("content = %q, want new", got)
 	}
 	st, _ := os.Stat(exe)
-	if st.Mode().Perm()&0o111 == 0 {
+	if runtime.GOOS != "windows" && st.Mode().Perm()&0o111 == 0 {
 		t.Errorf("replacement is not executable: %o", st.Mode().Perm())
 	}
 
 	// 临时文件必须落在同目录，否则跨文件系统改名会失败。
 	entries, _ := os.ReadDir(dir)
-	if len(entries) != 1 {
+	wantEntries := 1
+	if runtime.GOOS == "windows" {
+		wantEntries = 2
+		old, err := os.ReadFile(exe + ".old")
+		if err != nil || string(old) != "old" {
+			t.Fatalf("backup=%q err=%v", old, err)
+		}
+	}
+	if len(entries) != wantEntries {
 		t.Errorf("temp files left behind: %v", entries)
 	}
 }
@@ -184,10 +192,7 @@ func TestReplaceUnwritable(t *testing.T) {
 	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(dir, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chmod(dir, 0o700)
+	makeUnwritable(t, dir)
 
 	if err := replace(exe, []byte("new")); err == nil {
 		t.Error("expected an error when the directory is not writable")

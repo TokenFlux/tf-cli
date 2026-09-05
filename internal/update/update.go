@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -75,7 +76,7 @@ func DetectSource(exe string) Source {
 		return SourceNPM
 	case strings.Contains(p, "/Cellar/") || strings.Contains(p, "/homebrew/"):
 		return SourceHomebrew
-	case strings.Contains(p, "/pkg/mod/") || strings.HasSuffix(filepath.Dir(p), "/go/bin"):
+	case strings.Contains(p, "/pkg/mod/") || strings.HasSuffix(path.Dir(p), "/go/bin"):
 		return SourceGoInstall
 	// go run 会把二进制放进临时目录。
 	case strings.Contains(p, "/go-build"):
@@ -443,6 +444,10 @@ func replace(exe string, data []byte) error {
 		if err := os.Rename(exe, old); err != nil {
 			return err
 		}
+		if err := os.Rename(tmp.Name(), exe); err != nil {
+			return errors.Join(err, os.Rename(old, exe))
+		}
+		return nil
 	}
 	return os.Rename(tmp.Name(), exe)
 }
