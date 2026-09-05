@@ -628,12 +628,13 @@ func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots confi
 	}
 
 	cur := slots[config.SlotDefault]
-	base := model.Parse(cur).Base
+	ref := model.Parse(cur)
+	base := ref.Base
 
 	// 先看分组里有没有该强度的模型变体。有就直接换模型 ——
 	// 那是分组真正支持的形式，比指望 harness 转发参数可靠。
 	if ids := cfg.KeyMetaOf(keyName).Models; len(ids) > 0 {
-		variant := model.Ref{Base: base, Effort: effort}.String()
+		variant := model.Ref{Prefix: ref.Prefix, Base: base, Effort: effort}.String()
 		if slices.Contains(ids, variant) {
 			slots[config.SlotDefault] = variant
 			return "", nil
@@ -642,7 +643,7 @@ func applyEffort(c *Context, cfg *config.Config, h *harness.Harness, slots confi
 		if model.Parse(cur).Effort != "" {
 			available := []string{}
 			for _, id := range ids {
-				if r := model.Parse(id); r.Base == base && r.Effort != "" {
+				if r := model.Parse(id); r.Prefix == ref.Prefix && r.Base == base && r.Effort != "" {
 					available = append(available, r.Effort)
 				}
 			}
