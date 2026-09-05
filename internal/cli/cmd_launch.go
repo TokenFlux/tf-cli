@@ -187,8 +187,9 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	// 之前 -m 的注释写着不写盘、代码却存了盘 —— 用户改一次就再也回不去，
 	// 而他以为自己只是试一下。
 	override := c.Flags.String("model")
-	oneShot := c.Flags.Present("model")
-	explicitPick := oneShot && override == ""
+	oneShot := c.Flags.Present("model") || c.Flags.String("key") != "" ||
+		c.Flags.String("effort") != "" || c.Flags.String("host") != ""
+	explicitPick := c.Flags.Present("model") && override == ""
 	if override != "" {
 		slots[config.SlotDefault] = override
 	}
