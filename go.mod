@@ -3,6 +3,7 @@ module github.com/tokenflux/tf-cli
 go 1.27.0
 
 require (
+	github.com/UserExistsError/conpty v0.1.4
 	github.com/charmbracelet/x/ansi v0.8.0
 	github.com/gofrs/flock v0.12.1
 	golang.org/x/sys v0.22.0

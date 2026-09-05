@@ -2,10 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
@@ -68,24 +65,7 @@ func (u *UI) SelectWith(title string, items []Item, opt SelectOpt) (int, error) 
 		}
 	}
 
-	// 终端已进入 raw 模式，此时被信号打断会让终端处于不可用状态，
-	// 所以必须在信号处理里也恢复一次。
-	restore := make(chan os.Signal, 1)
-	signal.Notify(restore, os.Interrupt, syscall.SIGTERM)
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-restore:
-			tty.Restore()
-			os.Exit(130)
-		case <-done:
-		}
-	}()
-	defer func() {
-		close(done)
-		signal.Stop(restore)
-		tty.Restore()
-	}()
+	defer guardTerminal(tty)()
 
 	s := &selector{ui: u, tty: tty, title: title, all: items, cursor: firstEnabled(items), opt: opt}
 	return s.run()

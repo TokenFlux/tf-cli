@@ -570,7 +570,7 @@ func TestUsageUnitIsNotInlinedIntoSentence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := string(src)
+	body := strings.ReplaceAll(string(src), "\r\n", "\n")
 	start := strings.Index(body, "func printUsage(")
 	if start < 0 {
 		t.Fatal("printUsage not found")
@@ -673,7 +673,7 @@ func TestCompletionsAskedOnlyWhenSettled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := string(src)
+	body := strings.ReplaceAll(string(src), "\r\n", "\n")
 	start := strings.Index(body, "func offerCompletions(")
 	if start < 0 {
 		t.Fatal("offerCompletions not found")

@@ -1,14 +1,42 @@
 package ui
 
-// InteractiveSupported 在 Windows 上是 false。
-//
-// 交互栈整个建立在 /dev/tty 与 stty 之上，两者都是 Unix 专有：
-// 选择器要拿控制终端、隐藏输入要改行规程、子进程退出后要复位终端。
-// Windows 得走 CONIN$ 与 SetConsoleMode 重写一遍，还没做。
-//
-// 之前这里只是让 hasControllingTTY 恒为 false，于是 Windows 用户
-// 撞到的是「非交互，请用管道传 Key」—— 那句话在暗示是他的环境有问题，
-// 而其实是这个平台压根没有这条路。
-const InteractiveSupported = false
+import (
+	"golang.org/x/sys/windows"
+	"io"
+	"os"
+)
 
-func hasControllingTTY() bool { return false }
+type consoleWriter struct{ f *os.File }
+
+func ansiWriter(f *os.File) io.Writer { return consoleWriter{f: f} }
+
+func (w consoleWriter) Write(p []byte) (int, error) {
+	handle := windows.Handle(w.f.Fd())
+	var mode uint32
+	if err := windows.GetConsoleMode(handle, &mode); err != nil {
+		return 0, err
+	}
+	if err := windows.SetConsoleMode(handle, mode|windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING|windows.ENABLE_PROCESSED_OUTPUT); err != nil {
+		return 0, err
+	}
+	defer windows.SetConsoleMode(handle, mode)
+	return w.f.Write(p)
+}
+
+func isTerminal(f *os.File) bool {
+	var mode uint32
+	if windows.GetConsoleMode(windows.Handle(f.Fd()), &mode) != nil {
+		return false
+	}
+	return true
+}
+
+func hasControllingTTY() bool {
+	f, err := os.OpenFile("CONIN$", os.O_RDWR, 0)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var mode uint32
+	return windows.GetConsoleMode(windows.Handle(f.Fd()), &mode) == nil
+}

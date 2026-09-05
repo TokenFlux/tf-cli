@@ -2,92 +2,29 @@ package ui
 
 import (
 	"os"
-	"os/exec"
-	"strconv"
-	"strings"
+	"os/signal"
+	"syscall"
 	"unicode/utf8"
 )
 
-// rawTTY 是一个进入了 raw 模式的终端。
-//
-// 直接操作 /dev/tty 而非 stdin/stdout：这样即便 stdout 被重定向、
-// stdin 是管道，交互选择依然可用，而重定向出去的内容不会被界面污染。
-type rawTTY struct {
-	f     *os.File
-	saved string
-}
-
-// openRawTTY 进入 raw 模式。失败时调用方应降级为编号选择器，而不是报错。
-func openRawTTY() (*rawTTY, error) {
-	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		return nil, err
+// Restore console modes on external interruption as well as ordinary return.
+func guardTerminal(tty *rawTTY) func() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-signals:
+			tty.Restore()
+			os.Exit(130)
+		case <-done:
+		}
+	}()
+	return func() {
+		signal.Stop(signals)
+		close(done)
+		tty.Restore()
 	}
-
-	// 先存下当前设置，退出时原样恢复；不用 `stty sane`，
-	// 那会顺手改掉用户本来就自定义过的设置。
-	saved, err := sttyCapture(f, "-g")
-	if err != nil {
-		f.Close()
-		return nil, err
-	}
-	// min 0 time 1：读取最多阻塞 100ms 即可返回 0 字节。
-	// 这是区分「裸 ESC 键」与「方向键的转义序列」的唯一可靠办法：
-	// 两者首字节相同，只能看后续字节是否及时到达。
-	if err := sttyRun(f, "raw", "-echo", "min", "0", "time", "1"); err != nil {
-		f.Close()
-		return nil, err
-	}
-	return &rawTTY{f: f, saved: saved}, nil
-}
-
-// Restore 恢复终端设置。必须保证被调用，否则用户的终端会留在 raw 模式。
-func (t *rawTTY) Restore() {
-	if t == nil || t.f == nil {
-		return
-	}
-	if t.saved != "" {
-		_ = sttyRun(t.f, t.saved)
-	}
-	t.f.Close()
-	t.f = nil
-}
-
-// Size 返回终端行列数，取不到就给一个保守的默认值。
-func (t *rawTTY) Size() (rows, cols int) {
-	rows, cols = 24, 80
-	out, err := sttyCapture(t.f, "size")
-	if err != nil {
-		return
-	}
-	parts := strings.Fields(out)
-	if len(parts) != 2 {
-		return
-	}
-	if r, err := strconv.Atoi(parts[0]); err == nil && r > 0 {
-		rows = r
-	}
-	if c, err := strconv.Atoi(parts[1]); err == nil && c > 0 {
-		cols = c
-	}
-	return
-}
-
-func sttyRun(f *os.File, args ...string) error {
-	cmd := exec.Command("stty", args...)
-	cmd.Stdin = f
-	cmd.Stdout = os.Stderr
-	return cmd.Run()
-}
-
-func sttyCapture(f *os.File, args ...string) (string, error) {
-	cmd := exec.Command("stty", args...)
-	cmd.Stdin = f
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 // key 是一次按键的语义化结果。
@@ -104,6 +41,11 @@ const (
 	keyCancel
 	keyBackspace
 	keyClear
+	keyLeft
+	keyRight
+	keyHome
+	keyEnd
+	keyDelete
 	keyRune
 )
 
@@ -173,17 +115,34 @@ func (t *rawTTY) readKey() (k key, r rune) {
 		if !ok {
 			return keyNone, 0
 		}
+		params := ""
+		for final >= '0' && final <= '?' {
+			params += string(final)
+			if final, ok = t.readByteTimeout(); !ok {
+				return keyNone, 0
+			}
+		}
 		switch final {
 		case 'A':
 			return keyUp, 0
 		case 'B':
 			return keyDown, 0
-		}
-		// 其它序列（Home/PageUp 等）可能带参数，一直读到终结字节为止，
-		// 否则残留字节会被当成过滤输入。
-		for final >= '0' && final <= '?' {
-			if final, ok = t.readByteTimeout(); !ok {
-				break
+		case 'C':
+			return keyRight, 0
+		case 'D':
+			return keyLeft, 0
+		case 'H':
+			return keyHome, 0
+		case 'F':
+			return keyEnd, 0
+		case '~':
+			switch params {
+			case "3":
+				return keyDelete, 0
+			case "1", "7":
+				return keyHome, 0
+			case "4", "8":
+				return keyEnd, 0
 			}
 		}
 		return keyNone, 0

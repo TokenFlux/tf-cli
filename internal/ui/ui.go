@@ -68,15 +68,6 @@ func detectLang() Lang {
 	return LangEN
 }
 
-// isTerminal 不引入第三方依赖，直接看文件模式。
-func isTerminal(f *os.File) bool {
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
-}
-
 // T 在两种语言之间选择。文案与代码放在一起，避免维护一份易腐烂的目录。
 func (u *UI) T(zh, en string) string {
 	if u.Lang == LangZH {

@@ -46,5 +46,5 @@ func terminalWriter(f *os.File) io.Writer {
 	if !isTerminal(f) {
 		return f
 	}
-	return crlfWriter{w: f}
+	return crlfWriter{w: ansiWriter(f)}
 }

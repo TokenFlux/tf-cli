@@ -447,18 +447,15 @@ func readKey(c *Context) (string, error) {
 	}
 
 	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
-		// 分平台说：Windows 上不是「现在不能交互」，是这条路还不存在。
-		// 说成前者会让人以为换个终端就好了。
 		msg := c.UI.T("非交互模式请通过管道传入 Key", "pipe the key in when non-interactive")
-		if !ui.InteractiveSupported {
-			msg = c.UI.T("Windows 暂未支持交互界面，请通过管道传入 Key",
-				"interactive UI is not supported on Windows yet; pipe the key in")
-		}
 		return "", ui.Errf(ui.CodeUsage, msg).WithHint("echo $KEY | tf login")
 	}
 
 	key, err := c.UI.ReadSecret(c.UI.T("粘贴 API Key（输入不回显）：", "Paste API key (hidden):"))
 	if err != nil {
+		if ui.AsError(err).Code == ui.CodeCancelled {
+			return "", err
+		}
 		// ui 层的哨兵错误只有英文，是底层措辞；本地化只在命令层做，
 		// 直接抛上去会让中文界面顶着一句英文。
 		return "", ui.Errf(ui.CodeUsage,

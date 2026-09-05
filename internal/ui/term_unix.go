@@ -2,24 +2,87 @@
 
 package ui
 
-import "syscall"
+import (
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+)
 
-// rawRead 绕开 os.File.Read 直接调用 syscall.Read。
-//
-// 必须这么做：os.File.Read 在读到 0 字节时会报 io.EOF，而 termios 的
-// VTIME 超时恰好就是一次 0 字节读 —— 两者混淆的后果是：用户只要停顶
-// 超过 100ms，选择器就以为输入结束并自行取消。
-//
-// 返回：n > 0 有数据；n == 0 && ok 是超时；!ok 才是真的结束。
-func (t *rawTTY) rawRead(buf []byte) (n int, ok bool) {
-	// Fd() 会把文件置为阻塞模式并脱离 runtime 的轮询器，
-	// 这正是我们要的：让 VMIN/VTIME 真正生效。
-	n, err := syscall.Read(int(t.f.Fd()), buf)
+type rawTTY struct {
+	f     *os.File
+	saved string
+	once  sync.Once
+}
+
+func openRawTTY() (*rawTTY, error) {
+	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		if err == syscall.EINTR || err == syscall.EAGAIN {
-			return 0, true
-		}
-		return 0, false
+		return nil, err
 	}
-	return n, true
+	saved, err := sttyCapture(f, "-g")
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	if err := sttyRun(f, "raw", "-echo", "min", "0", "time", "1"); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return &rawTTY{f: f, saved: saved}, nil
+}
+
+func (t *rawTTY) Restore() {
+	if t == nil || t.f == nil {
+		return
+	}
+	t.once.Do(func() {
+		if t.saved != "" {
+			_ = sttyRun(t.f, t.saved)
+		}
+		_ = t.f.Close()
+	})
+}
+
+func (t *rawTTY) Size() (rows, cols int) {
+	rows, cols = 24, 80
+	out, err := sttyCapture(t.f, "size")
+	if err != nil {
+		return
+	}
+	parts := strings.Fields(out)
+	if len(parts) != 2 {
+		return
+	}
+	if r, err := strconv.Atoi(parts[0]); err == nil && r > 0 {
+		rows = r
+	}
+	if c, err := strconv.Atoi(parts[1]); err == nil && c > 0 {
+		cols = c
+	}
+	return
+}
+
+func sttyRun(f *os.File, args ...string) error {
+	cmd := exec.Command("stty", args...)
+	cmd.Stdin, cmd.Stdout = f, os.Stderr
+	return cmd.Run()
+}
+
+func sttyCapture(f *os.File, args ...string) (string, error) {
+	cmd := exec.Command("stty", args...)
+	cmd.Stdin = f
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+// VTIME expiry is a zero-byte read, not EOF. os.File.Read loses that distinction.
+func (t *rawTTY) rawRead(buf []byte) (n int, ok bool) {
+	n, err := syscall.Read(int(t.f.Fd()), buf)
+	if err == syscall.EINTR || err == syscall.EAGAIN {
+		return 0, true
+	}
+	return n, err == nil
 }

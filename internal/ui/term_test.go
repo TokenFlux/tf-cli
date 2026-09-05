@@ -61,6 +61,11 @@ func TestControlKeys(t *testing.T) {
 		{"down", []byte{0x1b, '[', 'B'}, keyDown},
 		{"enter", []byte{'\r'}, keyEnter},
 		{"backspace", []byte{0x7f}, keyBackspace},
+		{"left", []byte("\x1b[D"), keyLeft},
+		{"right", []byte("\x1b[C"), keyRight},
+		{"delete", []byte("\x1b[3~"), keyDelete},
+		{"home", []byte("\x1b[1~"), keyHome},
+		{"end", []byte("\x1b[4~"), keyEnd},
 	}
 	for _, c := range cases {
 		if k, _ := keyOf(t, c.in); k != c.want {

@@ -150,7 +150,7 @@ func TestChooseReadsControllingTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := string(src)
+	body := strings.ReplaceAll(string(src), "\r\n", "\n")
 	start := strings.Index(body, "func (u *UI) Choose(")
 	if start < 0 {
 		t.Fatal("Choose not found")
@@ -160,8 +160,8 @@ func TestChooseReadsControllingTerminal(t *testing.T) {
 	if strings.Contains(fn, "os.Stdin") {
 		t.Error("Choose 不能读 os.Stdin —— 管道会把它占掉")
 	}
-	if !strings.Contains(fn, `"/dev/tty"`) {
-		t.Error("Choose 应当读 /dev/tty")
+	if !strings.Contains(fn, `u.ReadLine(`) {
+		t.Error("Choose must use the controlling-terminal line reader")
 	}
 	// 输错要再问，不能一次就放弃。
 	if !strings.Contains(fn, "for attempt") {
