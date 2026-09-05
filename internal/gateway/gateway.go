@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,8 +29,32 @@ func New(host, key string) *Client {
 	return &Client{
 		Host: strings.TrimRight(host, "/"),
 		Key:  key,
-		HTTP: &http.Client{Timeout: 15 * time.Second},
+		HTTP: &http.Client{Timeout: 15 * time.Second, CheckRedirect: sameOriginRedirect},
 	}
+}
+
+// Authentication headers, including x-api-key, must never leave the original origin.
+func sameOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("too many gateway redirects")
+	}
+	if len(via) == 0 || originOf(req.URL) != originOf(via[0].URL) || req.URL.User != nil {
+		return fmt.Errorf("refusing gateway redirect to a different origin")
+	}
+	return nil
+}
+
+func originOf(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		switch u.Scheme {
+		case "https":
+			port = "443"
+		case "http":
+			port = "80"
+		}
+	}
+	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Hostname()) + ":" + port
 }
 
 // Models 返回当前 Key 可见的模型 ID，顺序与网关响应一致。
