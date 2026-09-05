@@ -17,6 +17,16 @@
 
 ### 预编译二进制（推荐）
 
+Windows PowerShell 5.1 / PowerShell 7：
+
+```powershell
+irm https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.ps1 | iex
+```
+
+安装为 `%USERPROFILE%\.local\bin\tf.exe`，不需要管理员权限、Git Bash、curl 或 Scoop。支持 `TF_INSTALL_DIR`，下载校验与安装使用 Windows 自带 API；脚本会提示如何配置 PATH，不自动修改系统设置。下载到本地后也可使用 `-InstallDir` 自定义目录、`-Proxy` 指定 HTTP 代理。
+
+macOS / Linux，或 Windows Git Bash：
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh
 ```
@@ -71,6 +81,15 @@ make build
   ```sh
   npm uninstall -g @tokenflux/tf
   ```
+- **PowerShell 脚本安装**：
+  ```powershell
+  # 默认保留凭据和配置
+  irm https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.ps1 | iex
+
+  # 同时清理凭据、配置和缓存
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.ps1))) -Purge
+  ```
+  自定义安装目录使用 `TF_INSTALL_DIR`，或下载脚本后传入 `-InstallDir`。`-Purge` 不遍历目录链接或 junction 指向的位置。
 - **install.sh 安装**：
   ```sh
   # 默认仅删除 tf 二进制，保留当前配置与凭据

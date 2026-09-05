@@ -54,6 +54,14 @@ npm install -g @tokenflux/tf
 
 升级请运行 `npm install -g @tokenflux/tf@latest`（`tf update` 不会直接修改 npm 托管的文件）。
 
+### Windows PowerShell（独立脚本，无 Git Bash / Node 依赖）
+
+```powershell
+irm https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.ps1 | iex
+```
+
+支持 Windows PowerShell 5.1 与 PowerShell 7，安装到 `%USERPROFILE%\.local\bin\tf.exe`，校验 SHA-256 后替换程序。无需管理员权限；按脚本提示配置 PATH。
+
 ### macOS / Linux / Windows Git Bash（独立脚本，无 Node 依赖）
 
 ```sh
@@ -77,6 +85,14 @@ macOS 与 Linux 产物解压后将 `tf` 放入 PATH 即可。
 Windows 产物解压后将 `tf.exe` 放入 PATH。建议在 Windows Terminal 的 Git Bash 中运行；经典 mintty 使用 `winpty tf.exe`。通过 npm/pnpm 安装的客户端需要 Git Bash 在 PATH 中。
 
 ## 卸载
+
+### Windows PowerShell
+
+```powershell
+irm https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.ps1 | iex
+```
+
+默认保留凭据；下载脚本后使用 `-Purge` 可同时清理配置与缓存，自定义安装目录使用 `-InstallDir` 或 `TF_INSTALL_DIR`。
 
 ### npm
 
