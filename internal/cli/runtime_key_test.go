@@ -44,7 +44,6 @@ func TestEnvironmentLaunchIsIsolatedAndDoesNotPersist(t *testing.T) {
 	c := testCtx()
 	c.Flags.set["host"] = server.URL
 	c.Flags.set["model"] = "gpt-test"
-	c.Flags.present["model"] = true
 	st, err := launchState(c)
 	if err != nil {
 		t.Fatal(err)

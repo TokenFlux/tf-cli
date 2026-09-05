@@ -31,7 +31,6 @@ func TestSwitchModelDiscardsForeignAuxiliarySlots(t *testing.T) {
 	cfg.KeyMetaOf("b").Host = modelServer(t, "b-main").URL
 	c := testCtx()
 	c.Flags.set["model"] = "b-main"
-	c.Flags.present["model"] = true
 	h, _ := harness.Lookup("codex")
 	key, slots, err := resolveTarget(c, cfg, creds, h)
 	if err != nil || key != "b" || slots["review"] != "b-main" {
@@ -61,7 +60,6 @@ func TestModelOverridePrefersExistingOwner(t *testing.T) {
 	}
 	c := testCtx()
 	c.Flags.set["model"] = "shared"
-	c.Flags.present["model"] = true
 	h, _ := harness.Lookup("codex")
 	key, _, err := resolveTarget(c, cfg, creds, h)
 	if err != nil || key != "b" {

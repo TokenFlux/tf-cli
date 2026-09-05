@@ -48,9 +48,8 @@ func (f Flag) names() []string {
 
 // Values 保存解析结果。
 type Values struct {
-	set     map[string]string
-	present map[string]bool
-	many    map[string][]string
+	set  map[string]string
+	many map[string][]string
 
 	// detached 记下哪些可选值 flag 的取值是分开写的（-m X 而非 -m=X）。
 	//
@@ -62,7 +61,7 @@ type Values struct {
 }
 
 func newValues() *Values {
-	return &Values{set: map[string]string{}, present: map[string]bool{}, detached: map[string]bool{}, many: map[string][]string{}}
+	return &Values{set: map[string]string{}, detached: map[string]bool{}, many: map[string][]string{}}
 }
 
 // Detached 报告这个 flag 的取值是否与 flag 分开写。
@@ -91,7 +90,10 @@ func (v *Values) Bool(name string) bool { return v.set[name] == "true" }
 
 // Present 报告该 flag 是否出现过。
 // 用于区分 `-m`（出现但无值）与完全没写 `-m`。
-func (v *Values) Present(name string) bool { return v.present[name] }
+func (v *Values) Present(name string) bool {
+	_, ok := v.set[name]
+	return ok
+}
 
 // Context 传给命令的执行上下文。
 type Context struct {
@@ -185,8 +187,6 @@ func parse(cmd *Command, args []string) (*Context, error) {
 				fmt.Sprintf("unknown flag: %s", a)).
 				WithHint(fmt.Sprintf("tf %s --help", cmd.Name))
 		}
-
-		vals.present[f.Name] = true
 
 		switch f.Kind {
 		case KindBool:
