@@ -1,11 +1,13 @@
 package harness
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/tokenflux/tf-cli/internal/process"
 )
 
 // Install 执行一条安装命令，输出直接串流给用户。
@@ -22,10 +24,9 @@ func Install(opt InstallOption, stdout, stderr io.Writer) error {
 		return fmt.Errorf("refusing to run a privileged install command")
 	}
 
-	cmd := exec.Command(opt.Args[0], opt.Args[1:]...)
+	cmd := process.CommandContext(context.Background(), opt.Args[0], opt.Args[1:], os.Environ())
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.Stdin = os.Stdin
-	cmd.Env = os.Environ()
 	return cmd.Run()
 }

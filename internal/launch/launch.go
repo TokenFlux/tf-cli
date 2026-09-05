@@ -5,12 +5,16 @@
 package launch
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/tokenflux/tf-cli/internal/process"
 )
 
 // Result 是一次启动的结果。
@@ -26,8 +30,7 @@ type Result struct {
 func Run(bin string, args, env []string) (Result, error) {
 	start := time.Now()
 
-	cmd := exec.Command(bin, args...)
-	cmd.Env = env
+	cmd := process.CommandContext(context.Background(), bin, args, env)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -54,6 +57,11 @@ func Run(bin string, args, env []string) (Result, error) {
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
+		if runtime.GOOS == "windows" && uint32(exitErr.ExitCode()) == 0xc000013a {
+			term.restore(true)
+			res.ExitCode = 130
+			return res, nil
+		}
 		// 被信号终止时按 shell 惯例返回 128+signal。
 		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
 			// 死于信号 = 没机会自己收尾，终端要由我们复位。
