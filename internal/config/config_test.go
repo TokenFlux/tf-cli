@@ -52,13 +52,7 @@ func TestFilePermissions(t *testing.T) {
 		{paths.CredentialsFile(), 0o600},
 		{paths.ConfigDir, 0o700},
 	} {
-		st, err := os.Stat(tc.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := st.Mode().Perm(); got != tc.want {
-			t.Errorf("%s mode = %o, want %o", tc.path, got, tc.want)
-		}
+		assertPermissions(t, tc.path, tc.want)
 	}
 }
 
@@ -70,9 +64,7 @@ func TestCredentialsPermissionRepair(t *testing.T) {
 	if err := creds.Save(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(paths.CredentialsFile(), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	loosenPermissions(t, paths.CredentialsFile())
 
 	_, repaired, err := LoadCredentials(paths)
 	if err != nil {
@@ -81,9 +73,10 @@ func TestCredentialsPermissionRepair(t *testing.T) {
 	if !repaired {
 		t.Fatal("loose permissions should be reported as repaired")
 	}
-	st, _ := os.Stat(paths.CredentialsFile())
-	if got := st.Mode().Perm(); got != 0o600 {
-		t.Errorf("mode after repair = %o, want 600", got)
+	assertPermissions(t, paths.CredentialsFile(), 0o600)
+	_, repaired, err = LoadCredentials(paths)
+	if err != nil || repaired {
+		t.Fatalf("permissions should stay repaired: repaired=%v err=%v", repaired, err)
 	}
 }
 

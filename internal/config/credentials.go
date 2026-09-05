@@ -55,7 +55,7 @@ func loadCredentials(p Paths) (*Credentials, bool, error) {
 	c := &Credentials{Version: 1, Items: map[string]*Credential{}, paths: p}
 
 	path := p.CredentialsFile()
-	info, err := os.Stat(path)
+	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return c, false, nil
 	}
@@ -63,12 +63,9 @@ func loadCredentials(p Paths) (*Credentials, bool, error) {
 		return nil, false, err
 	}
 
-	repaired := false
-	if info.Mode().Perm()&0o077 != 0 {
-		if err := os.Chmod(path, credsFilePerm); err != nil {
-			return nil, false, fmt.Errorf("tighten %s: %w", path, err)
-		}
-		repaired = true
+	repaired, err := ensurePermissions(path, credsFilePerm)
+	if err != nil {
+		return nil, false, fmt.Errorf("tighten %s: %w", path, err)
 	}
 
 	data, err := os.ReadFile(path)

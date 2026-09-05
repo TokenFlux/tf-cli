@@ -78,10 +78,7 @@ func TestRecoverInterruptedStateTransaction(t *testing.T) {
 	if err := writeAtomic(path, journal, credsFilePerm); err != nil {
 		t.Fatal(err)
 	}
-	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
-		t.Fatal("journal must be private")
-	}
+	assertPermissions(t, path, 0600)
 	// Simulate termination after only the credential replacement.
 	if err := writeAtomic(p.CredentialsFile(), credsData, credsFilePerm); err != nil {
 		t.Fatal(err)

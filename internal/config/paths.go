@@ -60,5 +60,6 @@ func ensureDir(dir string) error {
 		return err
 	}
 	// MkdirAll 受 umask 影响，显式收紧一次。
-	return os.Chmod(dir, dirPerm)
+	_, err := ensurePermissions(dir, dirPerm)
+	return err
 }
