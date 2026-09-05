@@ -552,4 +552,4 @@ Keys 路由初始化时应立即调用 `const tfImportSession = readTfImportSess
 5. **网页与网关目前必须同源**
    - CLI 从本次登录最终生效的网关地址推导允许的网页 Origin。若自托管部署把 Keys 页面与 API 网关放在不同 Origin，目前需要调整为同源入口，不能在请求体中另行指定一个前端 Origin。
 6. **Windows 交互环境限制**
-   - 开发版通过 Windows 原生控制台完成确认；需要 Windows Terminal、OpenSSH 分配的终端，或 mintty 中的 `winpty tf.exe`。无控制终端时 `--from-web` 仍拒绝执行，不绕过确认。已发布的 v0.8.0 尚无 Windows 交互支持。
+   - v0.9.0 起通过 Windows 原生控制台完成确认；需要 Windows Terminal、OpenSSH 分配的终端，或 mintty 中的 `winpty tf.exe`。无控制终端时 `--from-web` 仍拒绝执行，不绕过确认。v0.8.0 及更早版本没有 Windows 交互支持。

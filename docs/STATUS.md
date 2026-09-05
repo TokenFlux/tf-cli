@@ -130,13 +130,13 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 ### B. Windows
 
-开发版已接入 `CONIN$` / `CONOUT$`、原生控制台按键事件和模式恢复，支持方向键、中文及补充字符过滤、隐藏输入、行编辑与取消。Windows 10 原生 ConPTY 测试覆盖输入输出重定向、登录与取消、子进程正常及中断退出后的恢复；CI 运行 Windows 原生测试，不再只有交叉编译。
+v0.9.0 已接入 `CONIN$` / `CONOUT$`、原生控制台按键事件和模式恢复，支持方向键、中文及补充字符过滤、隐藏输入、行编辑与取消。Windows 10 原生 ConPTY 测试覆盖输入输出重定向、登录与取消、子进程正常及中断退出后的恢复；CI 运行 Windows 原生测试，不再只有交叉编译。
 
 建议使用 Windows Terminal 的 Git Bash；经典 mintty 需要 `winpty tf.exe`。npm/pnpm 的 `.cmd` 入口通过 Git Bash 执行配套的 POSIX shim，参数按 argv 传递，不拼进 `cmd /c` 命令字符串。自定义、没有配套 POSIX shim 的批处理文件不支持。
 
 实测 Windows OpenSSH 9.5 的 `ssh -tt` 会丢失命令退出码：独立的 `exit 37` 也返回 0。自动化退出码断言使用原生 ConPTY 或不分配终端的 SSH；tf 在远端 Git Bash 中的 Ctrl-C 退出码已核验为 130。
 
-配置目录、凭据和恢复日志使用受保护的 Windows DACL，只授权当前用户、Administrators 和 SYSTEM。Unix 继续使用 POSIX 权限。以上为未发布改动，v0.8.0 的 Windows 二进制仍只支持非交互。
+配置目录、凭据和恢复日志使用受保护的 Windows DACL，只授权当前用户、Administrators 和 SYSTEM。Unix 继续使用 POSIX 权限。安装与卸载均提供独立 PowerShell 脚本，支持 5.1 和 7，不需要 Git Bash 或外部下载、解压工具。
 
 ### C. 后端协同改进点
 

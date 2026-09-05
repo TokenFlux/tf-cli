@@ -62,7 +62,7 @@ jobs:
           - { goos: darwin, goarch: amd64 }
           - { goos: linux, goarch: arm64 }
           - { goos: linux, goarch: amd64 }
-          # Windows v0 标注实验性：能编译，但交互路径未验证。
+          # Windows 原生交互由 CI 的 windows-latest 和 ConPTY 测试覆盖。
           - { goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@v7

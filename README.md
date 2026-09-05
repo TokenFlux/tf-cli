@@ -104,7 +104,7 @@ make build
 - **源码 / go install 安装**：
   删除安装时设置的 GOBIN 中的 tf；若 GOBIN 为空，则位置为 `$(go env GOPATH)/bin`。若需清理配置与凭据，再按需删除配置目录（默认 `~/.tf`，或 `tf config` 显示的路径）。
 
-> **操作系统支持**：Linux 与 macOS 支持完整交互。Windows 开发版已支持原生控制台交互，建议在 Windows Terminal 的 Git Bash 中运行，也可通过 Windows OpenSSH 分配的终端运行。经典 mintty 无原生控制台时使用 `winpty tf.exe`。npm/pnpm 安装的客户端需要 Git Bash 在 PATH 中；当前已发布的 v0.8.0 仍仅支持 Windows 非交互模式。
+> **操作系统支持**：Linux 与 macOS 支持完整交互。Windows 自 v0.9.0 起支持原生控制台交互，可在 Windows Terminal 的 PowerShell 或 Git Bash 中运行，也可通过 Windows OpenSSH 分配的终端运行。经典 mintty 无原生控制台时使用 `winpty tf.exe`。npm/pnpm 安装的客户端需要 Git Bash 在 PATH 中。
 
 ## 快速上手
 
