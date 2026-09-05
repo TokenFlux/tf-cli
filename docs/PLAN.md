@@ -13,7 +13,7 @@ M0–M7 已完成，见 [`STATUS.md`](STATUS.md)。这份文档现在只管往�
 | 语言 / 分发 | Go 单二进制；GitHub Actions 交叉编译 + install.sh；npm 平台包通过 `@tokenflux/tf` 配合 5 个平台二进制可选依赖包分发，支持 GitHub OIDC Trusted Publishing |
 | 进程模型 | fork + wait（信号转发自己写，换取确定性清理与终端收尾）|
 | 绝对禁止 | 本地代理 / MITM / 覆盖 harness UA |
-| 认证 | `tf login` 默认高亮网页导入，确认后自动打开 Keys 页面，也可选择粘贴；管道和显式 flag 直达对应方式。网页导入使用 localhost 回环、可选会话证明与 Origin 预览确认，契约见 [`integrations/web-import.md`](integrations/web-import.md) |
+| 认证 | `tf login` 默认高亮网页导入，也可选择粘贴；未传 `--host` 时交互选择默认或自定义网关，再打开对应 Keys 页面。管道和显式 flag 直达对应方式。网页导入使用 localhost 回环、可选会话证明与 Origin 预览确认，契约见 [`integrations/web-import.md`](integrations/web-import.md) |
 | 参数 | tf 只认自己的一小组 flag，遇到第一个陌生参数起全部透传；写在 harness 名后的 `-h`/`--help` 交给底层工具，tf 包装帮助写在命令名前（`tf --help <harness>`）；`--` 无条件透传 |
 | 存储 | `config.json`(0644) / `credentials.json`(0600) 分开；支持 XDG；不用钥匙串 |
 | 文案 | 跟随 locale + `TF_LANG`；错误码保持英文常量 |
@@ -86,7 +86,7 @@ scripts/
 
 这里的“过渡版”是阶段名，不对应 SemVer 的 `v0.5.0`。CLI 侧已实现 localhost 回环、终端链接 challenge/HMAC、可选导入证明与 Origin 预览确认，不改 TokenRouter 后端；TokenRouter Keys 页前端集成已在开放 PR [TokenFlux/TokenRouter#1956](https://github.com/TokenFlux/TokenRouter/pull/1956) 中实现，状态为开放、待人工审查合并、尚未正式上线。前端可不实现会话证明，但未验证连接必须显示警告，不强制阻断。
 
-普通入口 `tf login [名字]` 默认高亮网页导入，确认后打开 Keys 页面；`--from-web` 保留为显式直达方式。完整字段与浏览器示例见 [`integrations/web-import.md`](integrations/web-import.md)。
+普通入口 `tf login [名字]` 默认高亮网页导入，随后选择默认或自定义网关，再打开 Keys 页面；`--from-web` 跳过方式选择，`--host` 跳过网关选择。完整字段与浏览器示例见 [`integrations/web-import.md`](integrations/web-import.md)。
 
 ### Windows 交互支持（未发布）
 

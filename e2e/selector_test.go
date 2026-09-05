@@ -224,10 +224,14 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	}
 	env := append(f.env(), "SHELL=/bin/sh", "TF_BROWSER_MARKER="+browserMarker)
 
-	p := start(t, env, "login", "--host", srv.URL)
+	p := start(t, env, "login")
 	p.waitFor("选择登录方式")
 	p.waitFor("从网页导入")
 	p.send(keyEnter)
+	p.waitFor("选择网关")
+	p.send(keyDown + keyEnter)
+	p.waitFor("网关地址：")
+	p.send(srv.URL + "/v1/\n")
 	p.waitFor("等待网页导入")
 	match := regexp.MustCompile(`http://127\.0\.0\.1:4311[0-9]`).FindString(p.screen())
 	if match == "" {

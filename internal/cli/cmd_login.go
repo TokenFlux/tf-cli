@@ -78,6 +78,13 @@ func runLogin(c *Context) error {
 		fromWeb = idx == 0
 	}
 
+	if c.Flags.String("host") == "" && c.UI.Interactive(c.Flags.Bool("no-input")) && (fromWeb || isTerminal(os.Stdin)) {
+		host, err = selectLoginHost(c, host)
+		if err != nil {
+			return err
+		}
+	}
+
 	var key string
 	var imported *webImportRequest
 	if fromWeb {
@@ -463,6 +470,52 @@ func readKey(c *Context) (string, error) {
 			WithHint("echo $KEY | tf login")
 	}
 	return key, nil
+}
+
+func loginGatewayItems(u *ui.UI, current string) ([]ui.Item, int) {
+	items := []ui.Item{
+		{Label: u.T("默认网关", "Default gateway"), Detail: config.DefaultHost},
+		{Label: u.T("自定义网关", "Custom gateway"), Detail: u.T("输入网关地址", "Enter a gateway URL")},
+	}
+	defaultIndex := 0
+	if current != "" && normalizeHost(current) != normalizeHost(config.DefaultHost) {
+		items[1].Detail = current
+		items[0], items[1] = items[1], items[0]
+		defaultIndex = 1
+	}
+	return items, defaultIndex
+}
+
+func selectLoginHost(c *Context, current string) (string, error) {
+	items, defaultIndex := loginGatewayItems(c.UI, current)
+	idx, err := c.UI.Select(c.UI.T("选择网关", "Choose a gateway"), items)
+	if err != nil {
+		return "", err
+	}
+	if idx == defaultIndex {
+		return normalizeHost(config.DefaultHost), nil
+	}
+	fallback := ""
+	prompt := c.UI.T("网关地址：", "Gateway URL:")
+	if current != "" && normalizeHost(current) != normalizeHost(config.DefaultHost) {
+		fallback = normalizeHost(current)
+		prompt = fmt.Sprintf(c.UI.T("网关地址 [%s]：", "Gateway URL [%s]:"), fallback)
+	}
+	for attempt := 0; attempt < 3; attempt++ {
+		value, err := c.UI.ReadLine(prompt)
+		if err != nil {
+			return "", err
+		}
+		if value == "" {
+			value = fallback
+		}
+		host := normalizeHost(value)
+		if _, err := webOrigin(host); err == nil {
+			return host, nil
+		}
+		c.UI.Warnf("%s", c.UI.T("请输入有效的 HTTP(S) 网关地址，不含用户名、密码、查询参数或片段", "Enter a valid HTTP(S) gateway URL without credentials, query or fragment"))
+	}
+	return "", ui.Errf(ui.CodeUsage, c.UI.T("网关地址无效", "invalid gateway address"))
 }
 
 // normalizeHost 归一化用户输入的 host。

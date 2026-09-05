@@ -25,6 +25,7 @@
 
 ### 新增
 
+- 交互登录和网页导入可选择默认 TokenFlux 网关或输入自定义地址；显式 `--host` 跳过选择，已有自建网关账户优先沿用原地址，成功导入后才保存。
 - Windows 原生控制台支持登录、方向键选择、中文及补充字符过滤、隐藏输入、行编辑与取消。建议使用 Windows Terminal 的 Git Bash；npm/pnpm 客户端需要 Git Bash 在 PATH 中。
 - `install.sh` 支持 Windows x64 Git Bash，下载并校验 ZIP 后安装 `tf.exe`；`uninstall.sh` 同步支持 Windows 二进制与更新备份，默认保留凭据。
 - 新增独立的 `install.ps1` / `uninstall.ps1`，支持 Windows PowerShell 5.1 和 PowerShell 7，不依赖 Git Bash 或外部下载、解压工具。校验失败及程序被占用时保留旧版本，卸载默认保留凭据，`-Purge` 不遍历目录链接。

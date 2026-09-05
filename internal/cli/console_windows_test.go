@@ -24,7 +24,25 @@ func TestWindowsLoginHelper(t *testing.T) {
 	if host == "" {
 		return
 	}
-	os.Exit(Main([]string{"login", "fixture", "--host", host}))
+	args := []string{"login", "fixture", "--host", host}
+	if mode := os.Getenv("TF_TEST_GATEWAY"); mode != "" {
+		args = []string{"login", "fixture"}
+		if mode == "default" {
+			config.DefaultHost = host
+		}
+		if mode == "pipe" {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.WriteString("sk-fixture-only\n"); err != nil {
+				t.Fatal(err)
+			}
+			w.Close()
+			os.Stdin = r
+		}
+	}
+	os.Exit(Main(args))
 }
 
 type loginOutput struct {
@@ -53,8 +71,18 @@ func TestWindowsLoginInteraction(t *testing.T) {
 		http.Error(w, "fixture", 400)
 	}))
 	defer srv.Close()
-	for _, cancelInput := range []bool{false, true} {
-		t.Run(map[bool]string{false: "save", true: "cancel"}[cancelInput], func(t *testing.T) {
+	for _, tc := range []struct {
+		name, gateway string
+		cancel        bool
+	}{
+		{"save", "", false}, {"cancel", "", true},
+		{"default-gateway", "default", false}, {"custom-gateway", "custom", false},
+		{"invalid-gateway-retry", "invalid", false}, {"existing-gateway", "existing", false},
+		{"cancel-gateway", "cancel", true}, {"cancel-custom-url", "cancel-url", true},
+		{"piped-key-existing-gateway", "pipe", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cancelInput := tc.cancel
 			dir := t.TempDir()
 			paths := config.Paths{ConfigDir: filepath.Join(dir, "tf")}
 			cfg, err := config.Load(paths)
@@ -62,6 +90,9 @@ func TestWindowsLoginInteraction(t *testing.T) {
 				t.Fatal(err)
 			}
 			cfg.CompletionsAsked = true
+			if tc.gateway == "existing" || tc.gateway == "pipe" {
+				cfg.KeyMetaOf("fixture").Host = srv.URL
+			}
 			if err := cfg.Save(); err != nil {
 				t.Fatal(err)
 			}
@@ -69,7 +100,7 @@ func TestWindowsLoginInteraction(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			env := append(os.Environ(), "TF_TEST_LOGIN_HOST="+srv.URL, "TF_LANG=en", "TF_API_KEY=", "XDG_CONFIG_HOME="+dir, "HOME="+dir, "USERPROFILE="+dir, "SHELL=")
+			env := append(os.Environ(), "TF_TEST_GATEWAY="+tc.gateway, "TF_TEST_LOGIN_HOST="+srv.URL, "TF_LANG=en", "TF_API_KEY=", "XDG_CONFIG_HOME="+dir, "HOME="+dir, "USERPROFILE="+dir, "SHELL=")
 			pty, err := conpty.Start(windows.EscapeArg(exe)+" -test.run=^TestWindowsLoginHelper$", conpty.ConPtyDimensions(100, 30), conpty.ConPtyEnv(env))
 			if err != nil {
 				t.Fatal(err)
@@ -93,13 +124,44 @@ func TestWindowsLoginInteraction(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			waitFor("Choose a login method")
-			send("\x1b[B\r")
-			waitFor("Paste API key")
-			if cancelInput {
-				send("sk-fixture-only\x03")
-			} else {
-				send("sk-fixture-only\r")
+			if tc.gateway != "pipe" {
+				waitFor("Choose a login method")
+				send("\x1b[B\r")
+			}
+			if tc.gateway != "" && tc.gateway != "pipe" {
+				waitFor("Choose a gateway")
+				switch tc.gateway {
+				case "cancel":
+					send("\x1b")
+				case "default":
+					send("\r")
+				default:
+					if tc.gateway == "existing" {
+						send("\r")
+					} else {
+						send("\x1b[B\r")
+					}
+					waitFor("Gateway URL")
+					if tc.gateway == "invalid" {
+						send("ftp://invalid\r")
+						waitFor("Enter a valid HTTP(S)")
+					}
+					if tc.gateway == "existing" {
+						send("\r")
+					} else if tc.gateway == "cancel-url" {
+						send("\x03")
+					} else {
+						send(srv.URL + "/v1/\r")
+					}
+				}
+			}
+			if tc.gateway != "cancel" && tc.gateway != "cancel-url" && tc.gateway != "pipe" {
+				waitFor("Paste API key (hidden):")
+				if cancelInput {
+					send("sk-fixture-only\x03")
+				} else {
+					send("sk-fixture-only\r")
+				}
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -125,6 +187,12 @@ func TestWindowsLoginInteraction(t *testing.T) {
 				}
 			} else if !exists || cred.Key != "sk-fixture-only" {
 				t.Fatal("login did not save the fixture key")
+			}
+			if !cancelInput {
+				stored, err := config.Load(paths)
+				if err != nil || stored.Keys["fixture"].Host != srv.URL {
+					t.Fatalf("wrong gateway saved: %v", err)
+				}
 			}
 		})
 	}
