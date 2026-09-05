@@ -54,13 +54,13 @@ npm install -g @tokenflux/tf
 
 升级请运行 `npm install -g @tokenflux/tf@latest`（`tf update` 不会直接修改 npm 托管的文件）。
 
-### macOS / Linux（独立脚本，无 Node 依赖）
+### macOS / Linux / Windows Git Bash（独立脚本，无 Node 依赖）
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | sh
 ```
 
-默认安装到 `~/.local/bin/tf`（可通过 `TF_INSTALL_DIR` 自定义）。升级直接运行 `tf update`。
+默认安装到 `~/.local/bin/tf`，Windows x64 安装为 `tf.exe`（可通过 `TF_INSTALL_DIR` 自定义）。Windows 请在 Git Bash 中执行；脚本需要 curl、unzip 和 cygpath。升级直接运行 `tf update`。
 
 ## 手动下载
 
@@ -74,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | 
 
 macOS 与 Linux 产物解压后将 `tf` 放入 PATH 即可。
 
-Windows 产物解压后将 `tf.exe` 放入 PATH。当前仅支持非交互模式，请使用 `--no-input` 配合 `-m`、`-k` 参数明确指定。
+Windows 产物解压后将 `tf.exe` 放入 PATH。建议在 Windows Terminal 的 Git Bash 中运行；经典 mintty 使用 `winpty tf.exe`。通过 npm/pnpm 安装的客户端需要 Git Bash 在 PATH 中。
 
 ## 卸载
 

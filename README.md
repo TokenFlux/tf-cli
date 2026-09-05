@@ -23,6 +23,10 @@ curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/install.sh | 
 
 默认安装至 `~/.local/bin/tf`（可通过环境变量 `TF_INSTALL_DIR` 自定义安装路径），无需管理员权限。
 
+Windows x64 在 **Git Bash** 中使用同一脚本，安装为 `~/.local/bin/tf.exe`，依赖 Git Bash 提供的 `unzip`、`cygpath` 和 curl。脚本校验发行包的 SHA-256，再替换程序；不会自动修改系统 PATH。按安装后的提示配置 PATH，或在当前会话执行 `export PATH="$HOME/.local/bin:$PATH"`。
+
+若 Git 自带的 curl 报 `CRYPT_E_REVOCATION_OFFLINE`，可用 `scoop install curl` 安装新版，然后在当前会话执行 `export PATH="$HOME/scoop/apps/curl/current/bin:$PATH"` 后重试。无需关闭 TLS 校验。
+
 ### npm（自 v0.5.3 起）
 
 npm 官方包名为 `@tokenflux/tf`（未加 scope 的 `tf` 与 `tf-cli` 属于无关项目）。主包通过 optionalDependencies 分发平台对应的 Go 二进制，无 postinstall 外部下载脚本：
@@ -75,6 +79,8 @@ make build
   # 同时删除 ~/.tf 或 XDG 对应的配置、凭据与缓存
   curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | sh -s -- --purge
   ```
+  Windows 在 Git Bash 中使用相同的卸载命令，会删除 `tf.exe` 及自更新留下的 `tf.exe.old`，默认仍保留凭据。
+
   若安装时指定了自定义目录，请在管道右侧传入环境变量（例如 `curl -fsSL https://raw.githubusercontent.com/tokenflux/tf-cli/main/uninstall.sh | TF_INSTALL_DIR=/原安装目录 sh`）。
 - **源码 / go install 安装**：
   删除安装时设置的 GOBIN 中的 tf；若 GOBIN 为空，则位置为 `$(go env GOPATH)/bin`。若需清理配置与凭据，再按需删除配置目录（默认 `~/.tf`，或 `tf config` 显示的路径）。

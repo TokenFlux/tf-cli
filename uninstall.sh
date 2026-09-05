@@ -25,21 +25,37 @@ case "${1:-}" in
 esac
 [ "$#" -eq 0 ] || { usage >&2; die "参数过多 / too many arguments"; }
 
-target="$DIR/tf"
-if [ -d "$target" ] && [ ! -L "$target" ]; then
-  die "$target 是目录，拒绝删除 / is a directory; refusing to remove it"
+binary=tf
+config_home="$HOME"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    binary=tf.exe
+    DIR=$(cygpath -u "$DIR")
+    config_home=$(cygpath -u "${USERPROFILE:-$HOME}")
+    ;;
+esac
+
+# Validate targets before deleting anything. The Windows updater keeps .old.
+set -- "$DIR/$binary"
+if [ "$binary" = tf.exe ]; then
+  set -- "$@" "$DIR/$binary.old"
 fi
-if [ -e "$target" ] || [ -L "$target" ]; then
-  rm -f -- "$target"
-  say "已删除 / removed: $target"
-else
-  say "未找到二进制 / binary not found: $target"
-fi
+for target do
+  if [ -d "$target" ] && [ ! -L "$target" ]; then
+    die "$target 是目录，拒绝删除 / is a directory; refusing to remove it"
+  fi
+done
+for target do
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    rm -f -- "$target"
+    say "已删除 / removed: $target"
+  fi
+done
 
 if [ -n "${XDG_CONFIG_HOME:-}" ]; then
   config_dir="$XDG_CONFIG_HOME/tf"
 else
-  config_dir="$HOME/.tf"
+  config_dir="$config_home/.tf"
 fi
 if [ -n "${XDG_CACHE_HOME:-}" ]; then
   cache_dir="$XDG_CACHE_HOME/tf"

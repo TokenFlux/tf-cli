@@ -26,6 +26,7 @@
 ### 新增
 
 - Windows 原生控制台支持登录、方向键选择、中文及补充字符过滤、隐藏输入、行编辑与取消。建议使用 Windows Terminal 的 Git Bash；npm/pnpm 客户端需要 Git Bash 在 PATH 中。
+- `install.sh` 支持 Windows x64 Git Bash，下载并校验 ZIP 后安装 `tf.exe`；`uninstall.sh` 同步支持 Windows 二进制与更新备份，默认保留凭据。
 
 ### 修复
 
