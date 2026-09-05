@@ -3,6 +3,8 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"sort"
 	"strings"
 
 	"github.com/tokenflux/tf-cli/internal/config"
@@ -144,7 +146,7 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 		}
 		items = append(items, ui.Item{Label: c.UI.T("完成", "done")})
 
-		// 每选一次就已经落盘（bindKey 会写配置），没有「放弃修改」这条路，
+		// 每次选择都立即保存，没有「放弃修改」这条路，
 		// 所以 esc 就直说它真正的后果：退出，已改的保留。
 		pick, err := c.UI.SelectWith(
 			fmt.Sprintf(c.UI.T("%s 的模型槽", "Model slots for %s"), h.Name), items,
@@ -174,24 +176,48 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 		// 一次启动只注入一把 Key，所以所有槽必须出自同一把。
 		// 换 Key 就得把别的槽清掉 —— 留着的话那些模型这把 Key 根本调不到，
 		// 而失败要等到启动之后才看得见。
-		if prev := st.cfg.Harness(h.Name).Key; prev != "" && prev != cands[choice].Key {
-			for name := range slots {
-				if name != sl.Name {
-					delete(slots, name)
+		hc := st.cfg.Harness(h.Name)
+		next := maps.Clone(slots)
+		if hc.Key != "" && hc.Key != cands[choice].Key {
+			var cleared []string
+			for name, id := range slots {
+				if name != sl.Name && id != "" {
+					cleared = append(cleared, name+"="+id)
 				}
 			}
-			c.UI.Warnf(c.UI.T("已切到 Key %q，其余槽已清空（一次启动只能用一把 Key）",
-				"switched to key %q; the other slots were cleared (one key per launch)"),
-				cands[choice].Key)
+			if len(cleared) > 0 {
+				sort.Strings(cleared)
+				accepted, err := confirmSlotKeyChange(c, cands[choice].Key, cleared)
+				if err != nil {
+					return err
+				}
+				if !accepted {
+					continue
+				}
+			}
+			next = config.ModelSlots{}
 		}
-		slots[sl.Name] = cands[choice].Model
-		bindKey(c, st.cfg, h, cands[choice].Key)
+		next[sl.Name] = cands[choice].Model
+		hc.Key, hc.Slots = cands[choice].Key, next
+		if err := st.cfg.Save(); err != nil {
+			return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
+		}
+		slots = next
 	}
 
-	if err := st.cfg.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
-	}
 	return showHarnessSlots(c, st.cfg, h)
+}
+
+func confirmSlotKeyChange(c *Context, key string, cleared []string) (bool, error) {
+	pick, err := c.UI.Select(fmt.Sprintf(c.UI.T("切换到 Key %q？", "Switch to key %q?"), key), []ui.Item{
+		{Label: c.UI.T("取消", "cancel")},
+		{Label: c.UI.T("切换并清空其他槽", "switch and clear other slots"),
+			Detail: strings.Join(cleared, ", ")},
+	})
+	if err != nil && ui.AsError(err).Code == ui.CodeCancelled && !errors.Is(err, ui.ErrInterrupted) {
+		return false, nil
+	}
+	return pick == 1, err
 }
 
 func hasSlot(h *harness.Harness, slot string) bool {
