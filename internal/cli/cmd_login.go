@@ -47,7 +47,7 @@ func runLogin(c *Context) error {
 	cfg, creds := st.cfg, st.creds
 
 	// 标签来源：位置参数 > --key。都没有时先落到 default，
-	// 冲突时再询问。显式指定则不追问。
+	// 冲突时再询问；指定名称并不等于授权覆盖凭据。
 	keyName := c.Flags.String("key")
 	if len(c.Args) > 0 {
 		keyName = c.Args[0]
@@ -125,7 +125,7 @@ func runLogin(c *Context) error {
 
 	if imported != nil && !explicit && !c.Flags.Bool("force") {
 		keyName, err = chooseImportedKeyName(c, creds, imported.KeyName, key, ids)
-	} else {
+	} else if imported == nil {
 		keyName, err = resolveLoginName(c, creds, keyName, explicit, key, ids)
 	}
 	if err != nil {
@@ -186,9 +186,9 @@ func chooseImportedKeyName(c *Context, creds *config.Credentials, webName, key s
 	case idx == 0:
 		return automatic, nil
 	case idx == len(items)-1:
-		return askKeyName(c, creds, automatic)
+		return askKeyName(c, creds, automatic, key)
 	default:
-		return webName, nil
+		return webName, confirmKeyReplacement(c, creds, webName, key)
 	}
 }
 
@@ -238,10 +238,10 @@ func resolveLoginName(c *Context, creds *config.Credentials,
 		return target, nil
 	case existing.Key == key: // 同一把，重写无害
 		return target, nil
-	case explicit: // 用户点名了这个名称，意图明确
-		return target, nil
 	case c.Flags.Bool("force"):
 		return target, nil
+	case explicit:
+		return target, confirmKeyReplacement(c, creds, target, key)
 	}
 
 	suggestion := suggestKeyName(ids, creds.Names())
@@ -272,14 +272,14 @@ func resolveLoginName(c *Context, creds *config.Credentials,
 	case 1:
 		return target, nil
 	}
-	return askKeyName(c, creds, suggestion)
+	return askKeyName(c, creds, suggestion, key)
 }
 
 // askKeyName 让用户输入 Key 名称，并当场校验。
 //
 // 已存在的名字不直接拒绝 —— 用户可能就是想覆盖那一个，
 // 但必须把影响说清楚。
-func askKeyName(c *Context, creds *config.Credentials, suggestion string) (string, error) {
+func askKeyName(c *Context, creds *config.Credentials, suggestion, key string) (string, error) {
 	for {
 		name, err := c.UI.ReadLine(fmt.Sprintf(
 			c.UI.T("Key 名称 [%s]：", "key name [%s]:"), suggestion))
@@ -294,12 +294,30 @@ func askKeyName(c *Context, creds *config.Credentials, suggestion string) (strin
 				"names may only contain letters, digits, underscores and hyphens, max 32"))
 			continue
 		}
-		if old, exists := creds.Get(name); exists {
-			c.UI.Warnf(c.UI.T("%q 已存在（%s），保存会覆盖它",
-				"%q already exists (%s); saving will replace it"), name, config.Mask(old.Key))
-		}
-		return name, nil
+		return name, confirmKeyReplacement(c, creds, name, key)
 	}
+}
+
+func confirmKeyReplacement(c *Context, creds *config.Credentials, name, key string) error {
+	old, exists := creds.Get(name)
+	if !exists || old.Key == key || c.Flags.Bool("force") {
+		return nil
+	}
+	if !c.UI.Interactive(c.Flags.Bool("no-input")) {
+		return ui.Errf(ui.CodeUsage, fmt.Sprintf(c.UI.T("%q 已存在，覆盖需要确认", "%q already exists; replacement requires confirmation"), name)).
+			WithHint(fmt.Sprintf("tf login %s --force", name))
+	}
+	pick, err := c.UI.Select(fmt.Sprintf(c.UI.T("覆盖 Key %q？", "Replace key %q?"), name), []ui.Item{
+		{Label: c.UI.T("取消", "cancel")},
+		{Label: c.UI.T("确认覆盖", "replace"), Detail: config.Mask(old.Key) + " → " + config.Mask(key)},
+	})
+	if err != nil {
+		return err
+	}
+	if pick == 0 {
+		return ui.Errf(ui.CodeCancelled, c.UI.T("已取消", "cancelled"))
+	}
+	return nil
 }
 
 func validKeyName(s string) bool {

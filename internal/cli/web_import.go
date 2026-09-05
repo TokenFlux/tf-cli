@@ -270,11 +270,14 @@ func confirmWebImport(c *Context, req webImportRequest, credentialsPath, targetN
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("Key", "key"), 8), key)
 	c.UI.Logf("  %s %s", ui.Pad(c.UI.T("名称", "name"), 8), destination)
 
-	idx, err := c.UI.Select(fmt.Sprintf(c.UI.T("写入 %s？", "Write to %s?"), credentialsPath), []ui.Item{
-		{Label: c.UI.T("写入", "write")},
-		{Label: c.UI.T("拒绝", "reject")},
-	})
-	return idx == 0, err
+	items := []ui.Item{{Label: c.UI.T("写入", "write")}, {Label: c.UI.T("拒绝", "reject")}}
+	acceptIndex := 0
+	if fixedTarget && existing != nil && existing.Key != "" && existing.Key != req.Key {
+		items[0], items[1] = items[1], items[0]
+		acceptIndex = 1
+	}
+	idx, err := c.UI.Select(fmt.Sprintf(c.UI.T("写入 %s？", "Write to %s?"), credentialsPath), items)
+	return idx == acceptIndex, err
 }
 
 func webOrigin(host string) (string, error) {

@@ -115,7 +115,7 @@ tf login work --from-web
 
 网页和终端确认页会对终端链接显示“已验证当前 tf 会话”；直接打开页面仍可导入，但两端都会显示未验证会话警告。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会继续。
 
-未在命令中指定名称时，CLI 校验 Key 后会让用户选择按可用模型自动命名、采用网页 Key 名称或自订名称。自动命名会避开已有名称；显式运行 `tf login work` 则直接使用 `work`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
+未在命令中指定名称时，CLI 校验 Key 后会让用户选择按可用模型自动命名、采用网页 Key 名称或自订名称。自动命名会避开已有名称；显式运行 `tf login work` 则使用 `work`；该名称已有不同 Key 时会先确认覆盖，默认取消。非交互覆盖必须添加 `--force`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
 
 ### 2. 启动客户端
 
