@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -251,12 +252,20 @@ func checkEnvironment(c *Context) []string {
 	for _, v := range []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY"} {
 		if p := os.Getenv(v); p != "" {
 			out = append(out, fmt.Sprintf(c.UI.T(
-				"%s=%s，网络请求与凭据将经由该代理传输", "%s=%s; keys and requests go through it"), v, p))
+				"%s=%s，网络请求与凭据将经由该代理传输", "%s=%s; keys and requests go through it"), v, proxyAddress(p)))
 			break
 		}
 	}
 
 	return out
+}
+
+func proxyAddress(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" && u.Scheme != "socks5h") {
+		return "[redacted]"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }
 
 // claudeSettingsFiles 列出 Claude Code 会读的 settings.json。
