@@ -91,7 +91,20 @@ func (c *Credentials) Save() error {
 	if c.transient {
 		return nil
 	}
-	return saveState(nil, c)
+	return withStoreLock(c.paths, func() error {
+		if err := snapshotMatches(c.paths.CredentialsFile(), c.snapshot); err != nil {
+			return err
+		}
+		data, err := marshalSnapshot(c)
+		if err != nil {
+			return err
+		}
+		if err := writeAtomic(c.paths.CredentialsFile(), data, credsFilePerm); err != nil {
+			return err
+		}
+		c.snapshot = data
+		return nil
+	})
 }
 
 // Get 返回某个 Key 名称对应的凭据。

@@ -67,7 +67,36 @@ func SaveState(cfg *Config, creds *Credentials) error {
 	if cfg.transient || creds.transient || cfg.paths.ConfigDir != creds.paths.ConfigDir {
 		return fmt.Errorf("configuration and credentials belong to different stores")
 	}
-	return saveState(cfg, creds)
+	paths := cfg.paths
+	return withStoreLock(paths, func() error {
+		if err := snapshotMatches(paths.ConfigFile(), cfg.snapshot); err != nil {
+			return err
+		}
+		if err := snapshotMatches(paths.CredentialsFile(), creds.snapshot); err != nil {
+			return err
+		}
+		configData, err := marshalSnapshot(cfg)
+		if err != nil {
+			return err
+		}
+		credentialsData, err := marshalSnapshot(creds)
+		if err != nil {
+			return err
+		}
+		journal, err := marshalSnapshot(transaction{Config: configData, Credentials: credentialsData})
+		if err != nil {
+			return err
+		}
+		// The journal is the commit point; recovery rolls both files forward.
+		if err := writeAtomic(filepath.Join(paths.ConfigDir, journalName), journal, credsFilePerm); err != nil {
+			return err
+		}
+		if err := recoverTransaction(paths); err != nil {
+			return err
+		}
+		cfg.snapshot, creds.snapshot = configData, credentialsData
+		return nil
+	})
 }
 
 func snapshotMatches(path string, snapshot []byte) error {
@@ -87,64 +116,6 @@ func marshalSnapshot(value any) ([]byte, error) {
 		return nil, err
 	}
 	return append(data, '\n'), nil
-}
-
-func saveState(cfg *Config, creds *Credentials) error {
-	var paths Paths
-	if cfg != nil {
-		paths = cfg.paths
-	} else {
-		paths = creds.paths
-	}
-	return withStoreLock(paths, func() error {
-		var configData, credentialsData []byte
-		var err error
-		if cfg != nil {
-			if err = snapshotMatches(paths.ConfigFile(), cfg.snapshot); err != nil {
-				return err
-			}
-			if configData, err = marshalSnapshot(cfg); err != nil {
-				return err
-			}
-		}
-		if creds != nil {
-			if err = snapshotMatches(paths.CredentialsFile(), creds.snapshot); err != nil {
-				return err
-			}
-			if credentialsData, err = marshalSnapshot(creds); err != nil {
-				return err
-			}
-		}
-		switch {
-		case cfg != nil && creds != nil:
-			journal, err := marshalSnapshot(transaction{Config: configData, Credentials: credentialsData})
-			if err != nil {
-				return err
-			}
-			// The journal is the commit point; recovery rolls both files forward.
-			if err = writeAtomic(filepath.Join(paths.ConfigDir, journalName), journal, credsFilePerm); err != nil {
-				return err
-			}
-			if err = recoverTransaction(paths); err != nil {
-				return err
-			}
-		case cfg != nil:
-			if err = writeAtomic(paths.ConfigFile(), configData, configFilePerm); err != nil {
-				return err
-			}
-		default:
-			if err = writeAtomic(paths.CredentialsFile(), credentialsData, credsFilePerm); err != nil {
-				return err
-			}
-		}
-		if cfg != nil {
-			cfg.snapshot = configData
-		}
-		if creds != nil {
-			creds.snapshot = credentialsData
-		}
-		return nil
-	})
 }
 
 func recoverTransaction(p Paths) error {

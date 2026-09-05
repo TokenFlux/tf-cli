@@ -253,7 +253,20 @@ func (c *Config) Save() error {
 	if c.transient {
 		return nil
 	}
-	return saveState(c, nil)
+	return withStoreLock(c.paths, func() error {
+		if err := snapshotMatches(c.paths.ConfigFile(), c.snapshot); err != nil {
+			return err
+		}
+		data, err := marshalSnapshot(c)
+		if err != nil {
+			return err
+		}
+		if err := writeAtomic(c.paths.ConfigFile(), data, configFilePerm); err != nil {
+			return err
+		}
+		c.snapshot = data
+		return nil
+	})
 }
 
 // writeAtomic 先写临时文件再改名，避免中断留下半个文件。
