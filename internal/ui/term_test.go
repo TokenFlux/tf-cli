@@ -31,6 +31,20 @@ func TestLettersAreFilterInput(t *testing.T) {
 	}
 }
 
+func TestUTF8FilterInput(t *testing.T) {
+	for _, r := range []rune{'中', '文', 'é', '\U0001F600'} {
+		k, got := keyOf(t, []byte(string(r)))
+		if k != keyRune || got != r {
+			t.Errorf("%q decoded as key=%v rune=%q", r, k, got)
+		}
+	}
+	for _, invalid := range [][]byte{{0xff}, {0xe4, 0xb8}} {
+		if k, _ := keyOf(t, invalid); k != keyNone {
+			t.Errorf("invalid UTF-8 accepted: %x", invalid)
+		}
+	}
+}
+
 // 不带字母的移动键仍要有：方向键之外还认 Ctrl-P / Ctrl-N。
 func TestControlKeys(t *testing.T) {
 	cases := []struct {

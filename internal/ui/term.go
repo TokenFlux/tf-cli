@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // rawTTY 是一个进入了 raw 模式的终端。
@@ -192,6 +193,21 @@ func (t *rawTTY) readKey() (k key, r rune) {
 	// 而目录里就有 claude-haiku（带 k）、qwen、kimi。
 	// 不带字母的替代键在上面：Ctrl-P / Ctrl-N。
 
+	if c >= utf8.RuneSelf {
+		buf := []byte{c}
+		for !utf8.FullRune(buf) {
+			next, ok := t.readByteTimeout()
+			if !ok {
+				return keyNone, 0
+			}
+			buf = append(buf, next)
+		}
+		r, size := utf8.DecodeRune(buf)
+		if r == utf8.RuneError && size == 1 {
+			return keyNone, 0
+		}
+		return keyRune, r
+	}
 	if c >= 0x20 {
 		return keyRune, rune(c)
 	}

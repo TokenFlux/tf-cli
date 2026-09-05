@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"unicode/utf8"
 )
 
 // Item 是选择器里的一行。
@@ -140,7 +141,8 @@ func (s *selector) run() (int, error) {
 			s.cursor = -1
 		case keyBackspace:
 			if s.query != "" {
-				s.query = s.query[:len(s.query)-1]
+				_, size := utf8.DecodeLastRuneInString(s.query)
+				s.query = s.query[:len(s.query)-size]
 				s.cursor = -1 // 过滤后重新定位到首个可选项
 			}
 		case keyRune:
