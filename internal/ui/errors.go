@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// ErrInterrupted distinguishes aborting a command from leaving one picker with Esc.
+var ErrInterrupted = errors.New("input interrupted")
+
 // Code 是稳定的英文错误码。无论文案语言如何，它都不变，
 // 便于搜索、贴给 AI 排查、以及被脚本消费。
 type Code string

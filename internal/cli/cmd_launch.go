@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -464,7 +465,7 @@ func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []str
 			// 主模型是刚刚选完的，副槽是 tf 主动追问的 —— 因为不问就会
 			// 静默失败。用户对追问说「算了」，意思是「按你说的来」，
 			// 不是「把我选的主模型也扔掉」。剩下的槽用推荐值补齐。
-			if ui.AsError(err).Code == ui.CodeCancelled {
+			if ui.AsError(err).Code == ui.CodeCancelled && !errors.Is(err, ui.ErrInterrupted) {
 				return nil
 			}
 			return err

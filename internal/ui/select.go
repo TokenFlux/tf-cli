@@ -134,7 +134,7 @@ func (s *selector) run() (int, error) {
 			return 0, Errf(CodeCancelled, s.ui.T("已取消", "cancelled"))
 		case keyCancel:
 			s.clear()
-			return 0, Errf(CodeCancelled, s.ui.T("已取消", "cancelled"))
+			return 0, Errf(CodeCancelled, s.ui.T("已取消", "cancelled")).WithCause(ErrInterrupted)
 		case keyClear:
 			s.query = ""
 			s.cursor = -1

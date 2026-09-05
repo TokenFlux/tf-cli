@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -135,7 +136,13 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 		pick, err := c.UI.SelectWith(
 			fmt.Sprintf(c.UI.T("%s 的模型槽", "Model slots for %s"), h.Name), items,
 			ui.SelectOpt{CancelHint: c.UI.T("退出（已改的保留）", "exit (edits are kept)")})
-		if err != nil || pick == len(items)-1 {
+		if err != nil {
+			if errors.Is(err, ui.ErrInterrupted) || ui.AsError(err).Code != ui.CodeCancelled {
+				return err
+			}
+			break
+		}
+		if pick == len(items)-1 {
 			break
 		}
 
@@ -146,7 +153,10 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 			candidateItems(cands),
 			ui.SelectOpt{CancelHint: c.UI.T("返回槽位列表", "back to the slot list")})
 		if err != nil {
-			continue // 取消只退回列表，不退出编辑器
+			if errors.Is(err, ui.ErrInterrupted) || ui.AsError(err).Code != ui.CodeCancelled {
+				return err
+			}
+			continue // Esc returns to the slot list.
 		}
 		// 一次启动只注入一把 Key，所以所有槽必须出自同一把。
 		// 换 Key 就得把别的槽清掉 —— 留着的话那些模型这把 Key 根本调不到，
