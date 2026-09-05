@@ -322,8 +322,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		return keyName, slots, nil
 	}
 
-	hc.Slots = slots
-	bindKey(c, cfg, h, keyName)
+	hc.Key, hc.Slots = keyName, slots
 	if err := cfg.Save(); err != nil {
 		c.UI.Warnf(c.UI.T("模型选择未保存：%v", "model choice not saved: %v"), err)
 	}

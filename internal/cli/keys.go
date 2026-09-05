@@ -184,18 +184,6 @@ func candidateItems(cands []candidate) []ui.Item {
 	return items
 }
 
-// bindKey 记住绑定关系。写盘失败不阻断启动。
-func bindKey(c *Context, cfg *config.Config, h *harness.Harness, name string) {
-	hc := cfg.Harness(h.Name)
-	if hc.Key == name {
-		return
-	}
-	hc.Key = name
-	if err := cfg.Save(); err != nil {
-		c.UI.Warnf(c.UI.T("绑定未能写入配置：%v", "could not persist the binding: %v"), err)
-	}
-}
-
 // refreshKeyMetadata 先刷新模型，再用模型 ID 中的最新分组前缀探测协议。
 func refreshKeyMetadata(c *Context, cfg *config.Config, creds *config.Credentials, names []string) {
 	refreshModels(c, cfg, creds, names)
