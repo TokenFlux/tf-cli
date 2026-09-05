@@ -54,6 +54,9 @@ func TestWidth(t *testing.T) {
 		{"key", 3},
 		{"模型槽：", 8},
 		{"a可b", 4},
+		{"\x1b[1m中文\x1b[0m", 4},
+		{"e\u0301", 1},
+		{"\U0001F469\u200d\U0001F4BB", 2},
 	}
 	for _, c := range cases {
 		if got := Width(c.s); got != c.want {
@@ -72,6 +75,9 @@ func TestPadAligns(t *testing.T) {
 	en := Pad("can run", 10) + "x"
 	if Width(en) != Width(zh) {
 		t.Errorf("mixed-language columns misaligned: %d vs %d", Width(en), Width(zh))
+	}
+	if got := Width(Pad("\x1b[1m中文\x1b[0m", 10)); got != 10 {
+		t.Errorf("styled label padded to %d columns, want 10", got)
 	}
 	// 超长标签不截断，宁可错位也不丢信息。
 	if got := Pad("averyverylonglabel", 4); got != "averyverylonglabel" {
