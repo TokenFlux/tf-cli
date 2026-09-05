@@ -148,7 +148,7 @@ func splitGlobals(argv []string) (leading []string, cmdIdx int, err error) {
 			continue
 		}
 		leading = append(leading, s)
-		if f.Kind == KindString && !hasInline {
+		if (f.Kind == KindString || f.Kind == KindStrings) && !hasInline {
 			if i+1 >= len(argv) {
 				return nil, -1, ui.Errf(ui.CodeMissingValue,
 					fmt.Sprintf("flag needs a value: %s", s))
@@ -260,7 +260,7 @@ func flagLabel(f Flag) string {
 		label += ", -" + f.Short
 	}
 	switch f.Kind {
-	case KindString:
+	case KindString, KindStrings:
 		label += " <value>"
 	case KindOptString:
 		label += " [value]"

@@ -20,7 +20,7 @@ func newModelCommand() *Command {
 		},
 		Flags: []Flag{
 			{Name: "list", Kind: KindBool, Desc: "列出全部 harness 的槽位||List slots for every harness"},
-			{Name: "set", Kind: KindString, Desc: "设置一个槽，形如 slot=model||Set one slot, as slot=model"},
+			{Name: "set", Kind: KindStrings, Desc: "设置一个槽，形如 slot=model||Set one slot, as slot=model"},
 			{Name: "reset", Kind: KindBool, Desc: "清空该 harness 的槽位||Clear this harness's slots"},
 			{Name: "edit", Kind: KindBool, Desc: "进入槽位编辑器||Open the slot editor"},
 		},
@@ -37,7 +37,13 @@ func runModel(c *Context) error {
 
 	// 不指定 harness 时列出全部。
 	if len(c.Args) == 0 {
+		if c.Flags.Present("set") || c.Flags.Bool("reset") || c.Flags.Bool("edit") {
+			return ui.Errf(ui.CodeUsage, c.UI.T("修改槽位需要指定 harness", "name a harness to change its slots"))
+		}
 		return listModelSlots(c, cfg)
+	}
+	if c.Flags.Bool("reset") && (c.Flags.Present("set") || c.Flags.Bool("edit")) {
+		return ui.Errf(ui.CodeUsage, c.UI.T("--reset 不能与 --set 或 --edit 同时使用", "--reset cannot be combined with --set or --edit"))
 	}
 
 	name := c.Args[0]
@@ -61,18 +67,25 @@ func runModel(c *Context) error {
 	}
 
 	if c.Flags.Present("set") {
-		slot, model, found := strings.Cut(c.Flags.String("set"), "=")
-		if !found || slot == "" || model == "" {
-			return ui.Errf(ui.CodeUsage,
-				c.UI.T("--set 的格式是 slot=model", "--set expects slot=model")).
-				WithHint(fmt.Sprintf("tf model %s --set default=<model>", h.Name))
+		updates := config.ModelSlots{}
+		for _, assignment := range c.Flags.Strings("set") {
+			slot, id, found := strings.Cut(assignment, "=")
+			if !found || slot == "" || id == "" {
+				return ui.Errf(ui.CodeUsage, c.UI.T("--set 的格式是 slot=model", "--set expects slot=model"))
+			}
+			if !hasSlot(h, slot) {
+				return ui.Errf(ui.CodeUsage,
+					fmt.Sprintf(c.UI.T("%s 没有名为 %q 的槽", "%s has no slot named %q"), h.Name, slot)).
+					WithHint(c.UI.T("可用槽位：", "available slots: ") + slotList(h))
+			}
+			if _, exists := updates[slot]; exists {
+				return ui.Errf(ui.CodeUsage, fmt.Sprintf(c.UI.T("槽位 %q 重复赋值", "slot %q is assigned more than once"), slot))
+			}
+			updates[slot] = id
 		}
-		if !hasSlot(h, slot) {
-			return ui.Errf(ui.CodeUsage,
-				fmt.Sprintf(c.UI.T("%s 没有名为 %q 的槽", "%s has no slot named %q"), h.Name, slot)).
-				WithHint(c.UI.T("可用槽位：", "available slots: ") + slotList(h))
+		for slot, id := range updates {
+			cfg.Harness(h.Name).Slots[slot] = id
 		}
-		cfg.Harness(h.Name).Slots[slot] = model
 		if err := cfg.Save(); err != nil {
 			return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 		}

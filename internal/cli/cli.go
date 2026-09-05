@@ -21,6 +21,7 @@ type Kind int
 const (
 	KindBool Kind = iota
 	KindString
+	KindStrings // Repeatable string values, preserved in command-line order.
 	// KindOptString 的值可省略：`-m` 不带值表示「进选择器」，
 	// `-m gpt-5.4` 表示直接指定。
 	KindOptString
@@ -49,6 +50,7 @@ func (f Flag) names() []string {
 type Values struct {
 	set     map[string]string
 	present map[string]bool
+	many    map[string][]string
 
 	// detached 记下哪些可选值 flag 的取值是分开写的（-m X 而非 -m=X）。
 	//
@@ -60,7 +62,7 @@ type Values struct {
 }
 
 func newValues() *Values {
-	return &Values{set: map[string]string{}, present: map[string]bool{}, detached: map[string]bool{}}
+	return &Values{set: map[string]string{}, present: map[string]bool{}, detached: map[string]bool{}, many: map[string][]string{}}
 }
 
 // Detached 报告这个 flag 的取值是否与 flag 分开写。
@@ -78,6 +80,11 @@ func (v *Values) Detach(name string) string {
 
 // String 返回字符串值。
 func (v *Values) String(name string) string { return v.set[name] }
+
+// Strings returns all values of a repeatable flag.
+func (v *Values) Strings(name string) []string {
+	return append([]string(nil), v.many[name]...)
+}
 
 // Bool 返回布尔值。
 func (v *Values) Bool(name string) bool { return v.set[name] == "true" }
@@ -190,18 +197,21 @@ func parse(cmd *Command, args []string) (*Context, error) {
 			}
 			i++
 
-		case KindString:
-			if hasInline {
-				vals.set[f.Name] = inline
+		case KindString, KindStrings:
+			value := inline
+			if !hasInline {
+				if i+1 >= len(args) {
+					return nil, ui.Errf(ui.CodeMissingValue,
+						fmt.Sprintf("flag needs a value: %s", a))
+				}
 				i++
-				continue
+				value = args[i]
 			}
-			if i+1 >= len(args) {
-				return nil, ui.Errf(ui.CodeMissingValue,
-					fmt.Sprintf("flag needs a value: %s", a))
+			vals.set[f.Name] = value
+			if f.Kind == KindStrings {
+				vals.many[f.Name] = append(vals.many[f.Name], value)
 			}
-			vals.set[f.Name] = args[i+1]
-			i += 2
+			i++
 
 		case KindOptString:
 			if hasInline {
