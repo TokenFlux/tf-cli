@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,36 @@ import (
 	"github.com/tokenflux/tf-cli/internal/gateway"
 	"github.com/tokenflux/tf-cli/internal/ui"
 )
+
+func TestTodayDisplaysActualCharge(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, want string
+		lang             ui.Lang
+	}{
+		{"provided response", `{"billing":{"remaining":93.3826824,"unit":"推理积分"},"usage":{"today":{"requests":117,"total_tokens":3076385,"cost":0.81240735,"actual_cost":6.4992588}}}`, "117 次请求，3076385 tokens，6.4993 推理积分", ui.LangZH},
+		{"English", `{"unit":"credits","usage":{"today":{"requests":2,"total_tokens":100,"actual_cost":1.25}}}`, "2 requests, 100 tokens, 1.25 credits", ui.LangEN},
+		{"quota unit", `{"quota":{"limit":10,"unit":"credits"},"usage":{"today":{"requests":2,"actual_cost":1}}}`, "2 requests, 0 tokens, 1 credits", ui.LangEN},
+		{"unlimited plan", `{"billing":{"remaining":-1,"source":"subscription","unit":"credits"},"usage":{"today":{"requests":2,"actual_cost":0.01}}}`, "2 requests, 0 tokens, 0.01 credits", ui.LangEN},
+		{"free requests", `{"unit":"credits","usage":{"today":{"requests":2,"cost":10,"actual_cost":0}}}`, "2 requests, 0 tokens, 0 credits", ui.LangEN},
+		{"tiny charge", `{"unit":"credits","usage":{"today":{"requests":2,"actual_cost":0.000001}}}`, "2 requests, 0 tokens, <0.0001 credits", ui.LangEN},
+		{"missing actual cost", `{"unit":"credits","usage":{"today":{"requests":2,"cost":10}}}`, "2 requests, 0 tokens\n", ui.LangEN},
+		{"null actual cost", `{"unit":"credits","usage":{"today":{"requests":2,"cost":10,"actual_cost":null}}}`, "2 requests, 0 tokens\n", ui.LangEN},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage gateway.Usage
+			if err := json.Unmarshal([]byte(tc.body), &usage); err != nil {
+				t.Fatal(err)
+			}
+			c := testCtx()
+			var out bytes.Buffer
+			c.UI.Out, c.UI.Lang, c.UI.JSON = &out, tc.lang, false
+			printUsage(c, &usage)
+			if !strings.Contains(out.String(), tc.want) {
+				t.Fatalf("want %q in:\n%s", tc.want, out.String())
+			}
+		})
+	}
+}
 
 func TestUsageDisplayUsesAccountFundsWithoutKeyLimit(t *testing.T) {
 	for _, tc := range []struct {

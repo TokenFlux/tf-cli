@@ -225,10 +225,27 @@ func printUsage(c *Context, u *gateway.Usage) {
 	c.UI.Printf("%s\n", line)
 
 	if t := u.Usage.Today; t.Requests > 0 {
+		today := fmt.Sprintf(c.UI.T("%d 次请求，%d tokens", "%d requests, %d tokens"),
+			t.Requests, t.TotalTokens)
+		if t.ActualCost != nil {
+			cost := strings.TrimRight(strings.TrimRight(strconv.FormatFloat(*t.ActualCost, 'f', 4, 64), "0"), ".")
+			if *t.ActualCost > 0 && *t.ActualCost < 0.0001 {
+				cost = "<0.0001"
+			}
+			costUnit := u.Billing.Unit
+			if costUnit == "" {
+				costUnit = u.Unit
+			}
+			if costUnit == "" {
+				costUnit = u.Quota.Unit
+			}
+			if costUnit != "" {
+				cost += " " + costUnit
+			}
+			today += c.UI.T("，", ", ") + cost
+		}
 		c.UI.Printf("%s\n", c.UI.Dim(fmt.Sprintf("  %s  %s",
-			ui.Pad(c.UI.T("今日", "today"), w),
-			fmt.Sprintf(c.UI.T("%d 次请求，%d tokens", "%d requests, %d tokens"),
-				t.Requests, t.TotalTokens))))
+			ui.Pad(c.UI.T("今日", "today"), w), today)))
 	}
 }
 

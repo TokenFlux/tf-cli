@@ -69,6 +69,9 @@ func TestUsageParsesRealResponse(t *testing.T) {
 	if u.Usage.Today.Requests == 0 {
 		t.Error("今天的请求数没解析出来")
 	}
+	if cost := u.Usage.Today.ActualCost; cost == nil || *cost != 4.839161 {
+		t.Errorf("actual charge was not parsed: %v", cost)
+	}
 }
 
 // 额度用尽时 /v1/models 也返回 429。

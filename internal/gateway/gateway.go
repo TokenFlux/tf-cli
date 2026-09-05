@@ -103,9 +103,10 @@ type Usage struct {
 	} `json:"billing"`
 	Usage struct {
 		Today struct {
-			Requests    int     `json:"requests"`
-			TotalTokens int     `json:"total_tokens"`
-			Cost        float64 `json:"cost"`
+			Requests    int      `json:"requests"`
+			TotalTokens int      `json:"total_tokens"`
+			Cost        float64  `json:"cost"`
+			ActualCost  *float64 `json:"actual_cost,omitempty"`
 		} `json:"today"`
 	} `json:"usage"`
 }
