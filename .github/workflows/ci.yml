@@ -11,7 +11,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -32,12 +35,14 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: make shell-test
+        if: runner.os != 'Windows'
 
       # 发布矩阵里的每个目标都要能编译。
       #
       # 这条是补的：Windows 的 syscall.Read 签名不同，本机 go build
       # 永远看不到，第一次打 tag 时才会在流水线最后一步炸掉。
       - name: 交叉编译
+        if: runner.os != 'Windows'
         run: |
           set -eu
           for t in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do

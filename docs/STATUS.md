@@ -130,11 +130,13 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 
 ### B. Windows
 
-只能非交互跑。交互栈整个建在 `/dev/tty` 与 `stty` 上，Windows 要走
-`CONIN$` 与 `SetConsoleMode` 重写。报错已经会说实话（「这个平台还没有
-交互界面」而不是「非交互」）。
+开发版已接入 `CONIN$` / `CONOUT$`、原生控制台按键事件和模式恢复，支持方向键、中文及补充字符过滤、隐藏输入、行编辑与取消。Windows 10 原生 ConPTY 测试覆盖输入输出重定向、登录与取消、子进程正常及中断退出后的恢复；CI 运行 Windows 原生测试，不再只有交叉编译。
 
-没有 Windows 机器验证之前不动手：交付没测过的交互实现比诚实的报错更糟。
+建议使用 Windows Terminal 的 Git Bash；经典 mintty 需要 `winpty tf.exe`。npm/pnpm 的 `.cmd` 入口通过 Git Bash 执行配套的 POSIX shim，参数按 argv 传递，不拼进 `cmd /c` 命令字符串。自定义、没有配套 POSIX shim 的批处理文件不支持。
+
+实测 Windows OpenSSH 9.5 的 `ssh -tt` 会丢失命令退出码：独立的 `exit 37` 也返回 0。自动化退出码断言使用原生 ConPTY 或不分配终端的 SSH；tf 在远端 Git Bash 中的 Ctrl-C 退出码已核验为 130。
+
+配置目录、凭据和恢复日志使用受保护的 Windows DACL，只授权当前用户、Administrators 和 SYSTEM。Unix 继续使用 POSIX 权限。以上为未发布改动，v0.8.0 的 Windows 二进制仍只支持非交互。
 
 ### C. 后端协同改进点
 
@@ -153,7 +155,7 @@ CC-Switch 等外部工具常修改该文件，启动时需注意该层覆盖关�
 2. **不做本地代理、不做 MITM、不覆盖 harness 的 User-Agent**
 3. **没有隐藏的全局可变状态。** 绑定属于 harness，没有「当前 profile」
 4. **不在客户端建推断子系统去补上游数据缺口**
-5. **零第三方依赖**，CI 卡死这条线（`go.sum` 必须为空）
+5. 依赖按用途保留：终端宽度、跨进程锁、Windows 系统 API 与仅供测试的 ConPTY；CI 校验模块完整性及锁文件一致性。
 6. **flag 管这一次，`tf model` 管以后。** `-m` / `-e` / `-k` 绝不写盘
 7. **非交互环境绝不静默安装、绝不静默覆盖凭据、不弹选择器**
 8. 不做：自己的聊天 REPL、自己的 agent loop、常驻守护进程

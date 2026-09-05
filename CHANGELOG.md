@@ -23,7 +23,19 @@
 
 ## [未发布]
 
-（暂无）
+### 新增
+
+- Windows 原生控制台支持登录、方向键选择、中文及补充字符过滤、隐藏输入、行编辑与取消。建议使用 Windows Terminal 的 Git Bash；npm/pnpm 客户端需要 Git Bash 在 PATH 中。
+
+### 修复
+
+- Windows 客户端退出后恢复控制台输入输出模式，将控制台中断状态转换为退出码 130。
+- Windows npm/pnpm 启动器通过配套 shell shim 启动，保留空参数、空格、引号和特殊字符，不将参数作为命令字符串执行。
+- 修复 Windows `go install` 来源识别；自更新替换失败时尝试恢复原可执行文件。
+
+### 安全
+
+- Windows 配置目录、凭据和事务日志使用受保护的 DACL，仅允许当前用户、Administrators 和 SYSTEM 访问，不再把 `chmod 0600` 当作 Windows 的访问控制。
 
 ---
 

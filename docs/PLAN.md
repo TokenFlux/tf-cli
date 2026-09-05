@@ -22,7 +22,7 @@ M0–M7 已完成，见 [`STATUS.md`](STATUS.md)。这份文档现在只管往�
 | harness 未装 | 交互式二选一，非交互只打印命令，绝不 sudo |
 | Telemetry | 默认关 |
 | License | Apache-2.0 |
-| Windows | 出二进制，只能非交互跑 |
+| Windows | 开发版支持原生控制台交互，v0.8.0 仍仅支持非交互 |
 
 ---
 
@@ -88,9 +88,9 @@ scripts/
 
 普通入口 `tf login [名字]` 默认高亮网页导入，确认后打开 Keys 页面；`--from-web` 保留为显式直达方式。完整字段与浏览器示例见 [`integrations/web-import.md`](integrations/web-import.md)。
 
-### 待定：Windows 交互支持
+### Windows 交互支持（未发布）
 
-Windows 交互需基于 `CONIN$` 与 `SetConsoleMode` 重写。待具备实际测试环境后再行支持。
+已接入原生控制台输入、隐藏输入、终端恢复和凭据 ACL，并在 Windows 10 上运行原生 ConPTY 测试。运行环境与已知限制见 [`STATUS.md`](STATUS.md#b-windows)。
 
 ---
 
