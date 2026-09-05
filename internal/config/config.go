@@ -158,6 +158,7 @@ type Config struct {
 
 	paths     Paths
 	transient bool
+	snapshot  []byte
 }
 
 // Runtime creates an isolated, non-persistent account for one launch.
@@ -170,7 +171,16 @@ func Runtime(host, key string) (*Config, *Credentials) {
 }
 
 // Load 读取配置；文件不存在时返回空配置。
-func Load(paths Paths) (*Config, error) {
+func Load(paths Paths) (cfg *Config, err error) {
+	err = withStoreLock(paths, func() error {
+		var loadErr error
+		cfg, loadErr = loadConfig(paths)
+		return loadErr
+	})
+	return cfg, err
+}
+
+func loadConfig(paths Paths) (*Config, error) {
 	cfg := &Config{Version: 1, Keys: map[string]*KeyMeta{}, paths: paths}
 
 	data, err := os.ReadFile(paths.ConfigFile())
@@ -187,6 +197,7 @@ func Load(paths Paths) (*Config, error) {
 		cfg.Keys = map[string]*KeyMeta{}
 	}
 	cfg.paths = paths
+	cfg.snapshot = data
 	return cfg, nil
 }
 
@@ -242,14 +253,7 @@ func (c *Config) Save() error {
 	if c.transient {
 		return nil
 	}
-	if err := os.MkdirAll(c.paths.ConfigDir, 0o700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeAtomic(c.paths.ConfigFile(), append(data, '\n'), configFilePerm)
+	return saveState(c, nil)
 }
 
 // writeAtomic 先写临时文件再改名，避免中断留下半个文件。
@@ -262,6 +266,10 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	defer os.Remove(tmp.Name())
 
 	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}

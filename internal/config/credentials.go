@@ -35,13 +35,23 @@ type Credentials struct {
 
 	paths     Paths
 	transient bool
+	snapshot  []byte
 }
 
 // LoadCredentials 读取凭据文件；不存在时返回空集合。
 //
 // 同时校验权限：文件对 group/other 可读时自动收紧回 0600 并汇报，
 // 因为这是一个装着 API Key 的文件。
-func LoadCredentials(p Paths) (*Credentials, bool, error) {
+func LoadCredentials(p Paths) (creds *Credentials, repaired bool, err error) {
+	err = withStoreLock(p, func() error {
+		var loadErr error
+		creds, repaired, loadErr = loadCredentials(p)
+		return loadErr
+	})
+	return creds, repaired, err
+}
+
+func loadCredentials(p Paths) (*Credentials, bool, error) {
 	c := &Credentials{Version: 1, Items: map[string]*Credential{}, paths: p}
 
 	path := p.CredentialsFile()
@@ -69,6 +79,7 @@ func LoadCredentials(p Paths) (*Credentials, bool, error) {
 		return nil, repaired, fmt.Errorf("parse %s: %w", path, err)
 	}
 	c.paths = p
+	c.snapshot = data
 	if c.Items == nil {
 		c.Items = map[string]*Credential{}
 	}
@@ -80,14 +91,7 @@ func (c *Credentials) Save() error {
 	if c.transient {
 		return nil
 	}
-	if err := ensureDir(c.paths.ConfigDir); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeAtomic(c.paths.CredentialsFile(), append(data, '\n'), credsFilePerm)
+	return saveState(nil, c)
 }
 
 // Get 返回某个 Key 名称对应的凭据。

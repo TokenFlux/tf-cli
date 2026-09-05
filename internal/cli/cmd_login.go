@@ -148,10 +148,7 @@ func runLogin(c *Context) error {
 		cred.GroupName = imported.GroupName
 	}
 	creds.Set(keyName, cred)
-	if err := creds.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据文件无法写入", "cannot write the credentials file")).WithCause(err)
-	}
-	if err := cfg.Save(); err != nil {
+	if err := config.SaveState(cfg, creds); err != nil {
 		return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 	}
 

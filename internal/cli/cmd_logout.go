@@ -134,10 +134,6 @@ func runLogout(c *Context) error {
 		removed = []string{name}
 	}
 
-	if err := creds.Save(); err != nil {
-		return ui.Errf(ui.CodeConfigWrite, c.UI.T("凭据文件写入失败", "cannot write the credentials file")).WithCause(err)
-	}
-
 	// 模型列表是由这把 Key 推导出来的，退出登录时一并清掉，
 	// 免得补全继续泄露「这把 Key 能看到哪些模型」。
 
@@ -153,7 +149,9 @@ func runLogout(c *Context) error {
 				}
 			}
 		}
-		_ = cfg.Save()
+	}
+	if err := config.SaveState(cfg, creds); err != nil {
+		return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置或凭据写入失败", "cannot write configuration or credentials")).WithCause(err)
 	}
 
 	c.UI.Emit("logout", map[string]any{"removed": removed}, func() {

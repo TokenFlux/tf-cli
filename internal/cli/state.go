@@ -22,15 +22,14 @@ func loadState(c *Context) (*state, error) {
 		return nil, ui.Errf(ui.CodeConfigRead,
 			c.UI.T("无法定位配置目录", "cannot locate the config directory")).WithCause(err)
 	}
-	cfg, err := config.Load(paths)
+	cfg, creds, repaired, err := config.LoadState(paths)
 	if err != nil {
-		return nil, ui.Errf(ui.CodeConfigRead,
-			c.UI.T("配置文件无法读取", "cannot read the config file")).WithCause(err)
-	}
-	creds, repaired, err := config.LoadCredentials(paths)
-	if err != nil {
-		return nil, ui.Errf(ui.CodeCredentialsRead,
-			c.UI.T("凭据文件无法读取", "cannot read the credentials file")).WithCause(err)
+		code := ui.CodeConfigRead
+		if cfg != nil {
+			code = ui.CodeCredentialsRead
+		}
+		return nil, ui.Errf(code,
+			c.UI.T("配置或凭据文件无法读取", "cannot read configuration or credentials")).WithCause(err)
 	}
 	if repaired {
 		c.UI.Warnf("%s", c.UI.T("凭据文件权限过宽，已收紧为 0600",
