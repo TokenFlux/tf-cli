@@ -204,7 +204,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	}
 
 	// 快路径：绑定仍然有效且槽位齐全，直接走，不联网也不提问。
-	if !explicitPick && override == "" && slices.Contains(keys, keyName) && slotsComplete(h, slots) {
+	if !explicitPick && override == "" && keyName == hc.Key && slices.Contains(keys, keyName) && cachedSlotsValid(cfg, keyName, h, slots) {
 		return keyName, slots, nil
 	}
 
@@ -253,7 +253,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 
 	// -m 指定了具体模型：认出它属于哪把 Key。
 	if override != "" {
-		if k, ok := ownerOf(cands, override); ok {
+		if k, ok := preferredOwner(cands, override, keyName); ok {
 			keyName = k
 		}
 	}
@@ -290,8 +290,8 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	// 绑定可能压根不存在（tf model --set 只写槽位，它无从知道该绑谁），
 	// 也可能指向一把已经 logout 的 Key。两种都是合法状态，
 	// 之前会一路把空名字带到 creds.Get 那里去崩掉。
-	if !slices.Contains(keys, keyName) {
-		k, ok := ownerOf(cands, slots[config.SlotDefault])
+	if !slices.Contains(modelsOf(cands, keyName), slots[config.SlotDefault]) {
+		k, ok := preferredOwner(cands, slots[config.SlotDefault], keyName)
 		if !ok {
 			return "", nil, ui.Errf(ui.CodeKeyNotFound, fmt.Sprintf(
 				c.UI.T("没有 Key 能提供 %s", "no key offers %s"), slots[config.SlotDefault])).
@@ -301,7 +301,12 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 	}
 
 	// 其余槽只能取自同一把 Key —— 一次启动只注入一把 Key。
-	own := modelsOf(cands, keyName)
+	own := compatibleSlotModels(cfg.Keys[keyName], h, slots[config.SlotDefault], modelsOf(cands, keyName))
+	for slot, id := range slots {
+		if slot != config.SlotDefault && !slices.Contains(own, id) {
+			delete(slots, slot)
+		}
+	}
 	if !oneShot && c.UI.Interactive(c.Flags.Bool("no-input")) {
 		if err := askSlots(c, h, slots, own); err != nil {
 			return "", nil, err
@@ -532,6 +537,42 @@ func modelsOf(cands []candidate, key string) []string {
 		}
 	}
 	return out
+}
+
+func preferredOwner(cands []candidate, id, preferred string) (string, bool) {
+	if slices.Contains(modelsOf(cands, preferred), id) {
+		return preferred, true
+	}
+	return ownerOf(cands, id)
+}
+
+func compatibleSlotModels(meta *config.KeyMeta, h *harness.Harness, main string, ids []string) []string {
+	proto, ok := access.PickFor(meta, model.Parse(main).Prefix, main, h)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, id := range ids {
+		prefix := model.Parse(id).Prefix
+		if access.CanRun(meta, prefix, h) && meta.SupportsIn(prefix, string(proto)) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func cachedSlotsValid(cfg *config.Config, key string, h *harness.Harness, slots config.ModelSlots) bool {
+	meta := cfg.Keys[key]
+	if meta == nil || !slotsComplete(h, slots) {
+		return false
+	}
+	ids := compatibleSlotModels(meta, h, slots[config.SlotDefault], meta.Models)
+	for _, id := range slots {
+		if id != "" && !slices.Contains(ids, id) {
+			return false
+		}
+	}
+	return true
 }
 
 func ownerOf(cands []candidate, id string) (string, bool) {
