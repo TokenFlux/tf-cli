@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache-dependency-path: go.sum
 
       # gofmt 不是建议，是硬门槛：格式漂移会让 diff 失去意义。
       - name: 格式
@@ -45,14 +45,12 @@ jobs:
             GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/tf
           done
 
-      # 零第三方依赖是硬约束，不是偏好。
       - name: 依赖检查
         run: |
-          if [ -s go.sum ]; then
-            echo "go.sum 非空，引入了第三方依赖："
-            cat go.sum
-            exit 1
-          fi
+          set -eu
+          go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
 
   npm:
     runs-on: ubuntu-latest
@@ -61,7 +59,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache-dependency-path: go.sum
       - uses: actions/setup-node@v6
         with:
           node-version: "24"

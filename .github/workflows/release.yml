@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache-dependency-path: go.sum
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
@@ -46,10 +46,9 @@ jobs:
           go test ./...
           make shell-test
           make npm-test
-          if [ -s go.sum ]; then
-            echo "go.sum 非空，引入了第三方依赖"
-            exit 1
-          fi
+          go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
           bash scripts/release-notes.sh "$TAG" > /dev/null
 
   build:
@@ -72,7 +71,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.mod
+          cache-dependency-path: go.sum
 
       - name: 确定版本号
         id: v
@@ -84,7 +83,7 @@ jobs:
             echo "commit=$(git rev-parse --short HEAD)"
           } >> "$GITHUB_OUTPUT"
 
-      # 交叉编译不需要 cgo，也不需要第三方 action —— 项目本身零依赖。
+      # 依赖均支持纯 Go 交叉编译，产物不需要 cgo。
       - name: 编译
         id: compile
         env:
