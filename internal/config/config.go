@@ -156,7 +156,17 @@ type Config struct {
 	// 问一次就够了：答过「不要」的人不该在每次 login 时再被打扰。
 	CompletionsAsked bool `json:"completions_asked,omitempty"`
 
-	paths Paths
+	paths     Paths
+	transient bool
+}
+
+// Runtime creates an isolated, non-persistent account for one launch.
+func Runtime(host, key string) (*Config, *Credentials) {
+	return &Config{Version: 1, transient: true, Keys: map[string]*KeyMeta{
+		"env": {Host: host},
+	}}, &Credentials{Version: 1, transient: true, Items: map[string]*Credential{
+		"env": {Key: key, Source: SourceEnv},
+	}}
 }
 
 // Load 读取配置；文件不存在时返回空配置。
@@ -229,6 +239,9 @@ func (c *Config) HostOf(name string) string {
 
 // Save 原子写回配置。
 func (c *Config) Save() error {
+	if c.transient {
+		return nil
+	}
 	if err := os.MkdirAll(c.paths.ConfigDir, 0o700); err != nil {
 		return err
 	}

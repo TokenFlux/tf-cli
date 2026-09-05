@@ -87,16 +87,19 @@ func TestCredentialsPermissionRepair(t *testing.T) {
 	}
 }
 
-// 环境变量优先于落盘凭据，供容器与 CI 使用。
-func TestEnvKeyWins(t *testing.T) {
+// Environment credentials must not replace unrelated stored accounts.
+func TestEnvKeyDoesNotReplaceStoredCredentials(t *testing.T) {
 	paths := testPaths(t)
 	creds, _, _ := LoadCredentials(paths)
 	creds.Set("default", &Credential{Key: "sk-file", Source: SourcePaste})
 
 	t.Setenv("TF_API_KEY", "sk-env")
 	cred, ok := creds.Get("default")
-	if !ok || cred.Key != "sk-env" || cred.Source != SourceEnv {
-		t.Errorf("env key should win, got %+v", cred)
+	if !ok || cred.Key != "sk-file" || cred.Source != SourcePaste {
+		t.Errorf("stored account was replaced, got %+v", cred)
+	}
+	if _, ok := creds.Get("missing"); ok {
+		t.Fatal("environment key resolved an unknown stored account")
 	}
 }
 

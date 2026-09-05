@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -34,8 +35,21 @@ func newLaunchCommand(h *harness.Harness) *Command {
 	}
 }
 
+func launchState(c *Context) (*state, error) {
+	if key := os.Getenv("TF_API_KEY"); key != "" && c.Flags.String("key") == "" {
+		host := config.DefaultHost
+		if override := c.Flags.String("host"); override != "" {
+			host = normalizeHost(override)
+		}
+		cfg, creds := config.Runtime(host, key)
+		c.UI.Logf("%s", c.UI.T("使用 TF_API_KEY（仅本次启动）", "using TF_API_KEY for this launch only"))
+		return &state{cfg: cfg, creds: creds}, nil
+	}
+	return loadState(c)
+}
+
 func runLaunch(c *Context, h *harness.Harness) error {
-	st, err := loadState(c)
+	st, err := launchState(c)
 	if err != nil {
 		return err
 	}

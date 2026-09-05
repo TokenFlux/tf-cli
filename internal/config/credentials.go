@@ -33,7 +33,8 @@ type Credentials struct {
 	Version int                    `json:"version"`
 	Items   map[string]*Credential `json:"credentials"`
 
-	paths Paths
+	paths     Paths
+	transient bool
 }
 
 // LoadCredentials 读取凭据文件；不存在时返回空集合。
@@ -76,6 +77,9 @@ func LoadCredentials(p Paths) (*Credentials, bool, error) {
 
 // Save 原子写回凭据，权限固定 0600。
 func (c *Credentials) Save() error {
+	if c.transient {
+		return nil
+	}
 	if err := ensureDir(c.paths.ConfigDir); err != nil {
 		return err
 	}
@@ -88,11 +92,8 @@ func (c *Credentials) Save() error {
 
 // Get 返回某个 Key 名称对应的凭据。
 //
-// 环境变量 TF_API_KEY 优先于落盘凭据，且不写盘 —— 容器与 CI 场景。
+// Runtime credentials are resolved separately, never substituted into stored accounts.
 func (c *Credentials) Get(name string) (*Credential, bool) {
-	if k := os.Getenv("TF_API_KEY"); k != "" {
-		return &Credential{Key: k, Source: SourceEnv}, true
-	}
 	cred, ok := c.Items[name]
 	return cred, ok && cred != nil && cred.Key != ""
 }

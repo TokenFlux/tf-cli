@@ -228,8 +228,10 @@ default  sk-d7d…a4fe  13 个模型
 | --- | --- | --- |
 | `config.json` | `0644` | 存储 Key 别名、网关地址、harness 映射与模型槽配置（无敏感信息，可同步） |
 | `credentials.json` | `0600` | 明文存储 API Key，仅当前用户可读写 |
-| `TF_API_KEY` | - | 运行时环境变量，优先级高于本地配置文件，适合 CI/CD 与容器环境 |
+| `TF_API_KEY` | - | 仅本次启动使用，不覆盖已保存的 Key；默认连接默认网关，自建网关需指定 `--host`；显式 `-k` 优先使用本地 Key |
 | `TF_LANG` | - | 强制指定 CLI 显示语言（可选 `zh` 或 `en`，默认跟随系统 Locale） |
+
+CI/CD 与容器无需先登录：通过环境注入 `TF_API_KEY` 后，运行 `tf codex --no-input -m=gpt-5.6-terra -- exec "your prompt"`。自建网关添加 `--host https://router.example.com`。运行时 Key、模型目录与槽位均不落盘；`tf status` 和 `tf keys` 仍只查询本地保存的账户。
 
 详细安全模型与凭据存储机制请参考 [SECURITY.md](SECURITY.md)。
 
