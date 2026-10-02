@@ -135,8 +135,9 @@ func (m *KeyMeta) ProtocolSummary() []string {
 
 // HarnessConfig 是某个 harness 的绑定与模型槽。
 type HarnessConfig struct {
-	Key   string     `json:"key,omitempty"`
-	Slots ModelSlots `json:"slots,omitempty"`
+	Key       string     `json:"key,omitempty"`
+	Slots     ModelSlots `json:"slots,omitempty"`
+	AutoSlots ModelSlots `json:"auto_slots,omitempty"`
 }
 
 // ModelSlots 是槽名到模型 ID 的映射。
@@ -151,9 +152,11 @@ type Config struct {
 	Keys      map[string]*KeyMeta       `json:"keys"`
 	Harnesses map[string]*HarnessConfig `json:"harnesses,omitempty"`
 
-	// CompletionsAsked 记下已经问过要不要装 shell 补全。
+	// CompletionsAsked 只为兼容读取旧配置而保留。
 	//
-	// 问一次就够了：答过「不要」的人不该在每次 login 时再被打扰。
+	// 登录流程不再询问补全安装、也不再写这个字段；显式入口是
+	// tf completions <shell> --install。字段本身要等独立的
+	// schema 清理再删。
 	CompletionsAsked bool `json:"completions_asked,omitempty"`
 
 	paths     Paths

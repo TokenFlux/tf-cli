@@ -150,7 +150,12 @@ func EnsureInstalled(c *Context, h *harness.Harness) error {
 			WithCause(err)
 	}
 
-	st := h.Detect()
+	st, detectErr := h.DetectAfterInstall(chosen)
+	if detectErr != nil {
+		return ui.Errf(ui.CodeInstallIncomplete,
+			c.UI.T("安装命令已完成，但无法启动已安装的客户端", "installation finished, but the installed client could not be started")).
+			WithCause(detectErr).WithHint(c.UI.T("检查 Node.js 和包管理器的全局安装目录后重试", "check Node.js and the package manager's global install directory, then retry"))
+	}
 	if !st.Installed {
 		return ui.Errf(ui.CodeInstallIncomplete,
 			c.UI.T("安装命令已执行，但仍找不到可执行文件；可能不在 PATH 中",
@@ -171,7 +176,9 @@ func notInstalledErr(c *Context, h *harness.Harness, options []harness.InstallOp
 	hint := ""
 	if len(options) > 0 {
 		hint = options[0].Command()
-		if !available && len(options[0].Args) > 0 {
+		if !available && len(options[0].Args) > 0 && options[0].Args[0] == "npm" {
+			hint = fmt.Sprintf(c.UI.T("未找到可运行的 npm；请先安装 Node.js LTS（https://nodejs.org），再运行：%s", "no runnable npm found; install Node.js LTS (https://nodejs.org), then run: %s"), hint)
+		} else if !available && len(options[0].Args) > 0 {
 			hint = fmt.Sprintf(c.UI.T("本机没有 %s，装上它再运行：%s",
 				"%s is not on this machine; install it, then run: %s"),
 				options[0].Args[0], hint)

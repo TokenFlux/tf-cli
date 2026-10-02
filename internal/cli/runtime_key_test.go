@@ -10,6 +10,8 @@ import (
 	"github.com/tokenflux/tf-cli/internal/harness"
 )
 
+// status --check 只能把已保存的 Key 发给它自己的网关；
+// TF_API_KEY 是运行时凭据，绝不广播给保存的账户。
 func TestStatusDoesNotBroadcastEnvironmentCredential(t *testing.T) {
 	t.Setenv("TF_API_KEY", "sk-environment-private")
 	cfg, creds := fixture(t, map[string][]string{"a": nil, "b": nil})
@@ -22,7 +24,10 @@ func TestStatusDoesNotBroadcastEnvironmentCredential(t *testing.T) {
 		t.Cleanup(srv.Close)
 		cfg.KeyMetaOf(name).Host = srv.URL
 	}
-	fetchUsage(cfg, creds)
+	usage, errs := checkUsage(cfg, creds)
+	if len(errs) != 0 || len(usage) != 2 {
+		t.Fatalf("usage=%v errs=%v", usage, errs)
+	}
 	for range 2 {
 		if got := <-received; got != "Bearer sk-a" && got != "Bearer sk-b" {
 			t.Fatalf("unexpected credential: %q", got)

@@ -32,13 +32,6 @@ func newLoginCommand() *Command {
 	}
 }
 
-func loginMethodItems(u *ui.UI) []ui.Item {
-	return []ui.Item{
-		{Label: u.T("从网页导入", "Import from web"), Detail: u.T("自动打开 Keys 页面", "open the Keys page")},
-		{Label: u.T("粘贴 API Key", "Paste API key"), Detail: u.T("终端隐藏输入", "hidden terminal input")},
-	}
-}
-
 func runLogin(c *Context) error {
 	st, err := loadState(c)
 	if err != nil {
@@ -46,8 +39,8 @@ func runLogin(c *Context) error {
 	}
 	cfg, creds := st.cfg, st.creds
 
-	// 标签来源：位置参数 > --key。都没有时先落到 default，
-	// 冲突时再询问；指定名称并不等于授权覆盖凭据。
+	// 标签来源：位置参数 > --key。都没有时先落到 default；
+	// 网页导入路径在校验后改用自动命名。指定名称并不等于授权覆盖凭据。
 	keyName := c.Flags.String("key")
 	if len(c.Args) > 0 {
 		keyName = c.Args[0]
@@ -56,12 +49,12 @@ func runLogin(c *Context) error {
 	if !explicit {
 		keyName = "default"
 	}
-	host := config.DefaultHost
-	if m, ok := cfg.Keys[keyName]; ok && m.Host != "" {
-		host = m.Host
-	}
-	if h := c.Flags.String("host"); h != "" {
-		host = normalizeHost(h)
+	host := loginHost(c, cfg, keyName)
+	// 显式 --host 和继承配置的 host 都必须在发任何请求前是合法网关地址；
+	// 不合法时继续走下去只会变成一次看不懂的网络错误。
+	if _, err := webOrigin(host); err != nil {
+		return ui.Errf(ui.CodeUsage, fmt.Sprintf(
+			c.UI.T("网关地址无效：%s", "invalid gateway address: %s"), host)).WithCause(err)
 	}
 
 	fromWeb, withKey := c.Flags.Bool("from-web"), c.Flags.Bool("with-key")
@@ -69,29 +62,26 @@ func runLogin(c *Context) error {
 		return ui.Errf(ui.CodeUsage,
 			c.UI.T("--from-web 不能和 --with-key 一起使用", "--from-web cannot be used with --with-key"))
 	}
+	// 方式不用问：显式 flag > 管道 > 默认网页导入。
 	// 管道输入本身就是明确选择，不能为了问方式而先去读 /dev/tty。
-	if !fromWeb && !withKey && isTerminal(os.Stdin) && c.UI.Interactive(c.Flags.Bool("no-input")) {
-		idx, err := c.UI.Select(c.UI.T("选择登录方式", "Choose a login method"), loginMethodItems(c.UI))
-		if err != nil {
-			return err
-		}
-		fromWeb = idx == 0
-	}
-
-	if c.Flags.String("host") == "" && c.UI.Interactive(c.Flags.Bool("no-input")) && (fromWeb || isTerminal(os.Stdin)) {
-		host, err = selectLoginHost(c, host)
-		if err != nil {
-			return err
-		}
+	switch {
+	case fromWeb || withKey:
+	case !isTerminal(os.Stdin):
+		withKey = true
+	default:
+		fromWeb = true
 	}
 
 	var key string
 	var imported *webImportRequest
 	if fromWeb {
+		// 没有控制终端就不该启动一个等十分钟的监听 —— 确认无从谈起。
 		if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 			return ui.Errf(ui.CodeUsage,
 				c.UI.T("网页导入需要交互式终端确认", "web import requires an interactive terminal for confirmation")).
-				WithHint("echo $KEY | tf login")
+				WithHint(c.UI.T(
+					"可使用：echo \"$KEY\" | tf login；或在交互终端运行：tf login --with-key",
+					"use: echo \"$KEY\" | tf login; or run in an interactive terminal: tf login --with-key"))
 		}
 		req, err := waitForWebImport(c, host, st.paths.CredentialsFile(), keyName,
 			creds.Items[keyName], explicit || c.Flags.Bool("force"))
@@ -130,8 +120,11 @@ func runLogin(c *Context) error {
 			WithCause(err)
 	}
 
+	// 网页导入且没有显式名称时自动命名：名称只来自本次模型目录与
+	// 已占用名称，不采用网页给的任意文本。网页的 key_name 仍作为来源
+	// 元数据存进凭据。显式名称的覆盖确认已在导入确认环节完成。
 	if imported != nil && !explicit && !c.Flags.Bool("force") {
-		keyName, err = chooseImportedKeyName(c, creds, imported.KeyName, key, ids)
+		keyName = resolveImportedKeyName(creds, key, ids)
 	} else if imported == nil {
 		keyName, err = resolveLoginName(c, creds, keyName, explicit, key, ids)
 	}
@@ -172,63 +165,38 @@ func runLogin(c *Context) error {
 			c.UI.Printf("  %s %s\n", ui.Pad(c.UI.T("可用于", "can run"), 8), strings.Join(access.Runnable(cfg, keyName), " "))
 		}
 	})
-
-	// 放在结果之后：先让用户看见登录成功，再问补全。
-	// 顺序反了会像是「还没成功就又要我做事」。
-	offerCompletions(c, cfg)
 	return nil
 }
 
-// chooseImportedKeyName 在网关返回模型目录后，让用户在自动识别、网页名称
-// 和自订名称之间选择。网页名称只是候选，不能绕过本地名称校验。
-func chooseImportedKeyName(c *Context, creds *config.Credentials, webName, key string,
-	ids []string) (string, error) {
-	automatic := suggestKeyName(ids, creds.Names())
-	items := importedKeyNameItems(c.UI, creds, automatic, webName, key)
-	idx, err := c.UI.Select(c.UI.T("选择本地 Key 名称", "Choose a local key name"), items)
-	if err != nil {
-		return "", err
+// resolveImportedKeyName 为网页导入的 Key 自动生成本地名称。
+//
+// suggestKeyName 已经避开全部已占用名称，所以这里不存在「静默覆盖」;
+// 网页的 key_name 只是来源元数据，不进入本地命名 —— 它没有经过本地
+// 校验，也不该替用户做命名决策。
+func resolveImportedKeyName(creds *config.Credentials, key string, ids []string) string {
+	// 重复导入同一把 Key 必须是幂等操作：优先复用已有名称，
+	// 否则每次网页登录都会产生 gpt-2、gpt-3 这样的重复条目。
+	for _, name := range creds.Names() {
+		if cred, ok := creds.Get(name); ok && cred.Key == key {
+			return name
+		}
 	}
-	switch {
-	case idx == 0:
-		return automatic, nil
-	case idx == len(items)-1:
-		return askKeyName(c, creds, automatic, key)
-	default:
-		return webName, confirmKeyReplacement(c, creds, webName, key)
-	}
+	return suggestKeyName(ids, creds.Names())
 }
 
-func importedKeyNameItems(u *ui.UI, creds *config.Credentials, automatic, webName,
-	key string) []ui.Item {
-	items := []ui.Item{{
-		Label:  fmt.Sprintf(u.T("自动识别为 %q", "detect automatically as %q"), automatic),
-		Detail: u.T("根据可用模型，避开已用名称", "based on available models; avoids existing names"),
-	}}
-
-	if webName != "" && webName != automatic {
-		item := ui.Item{
-			Label:  fmt.Sprintf(u.T("使用网页名称 %q", "use web name %q"), webName),
-			Detail: u.T("网页提供的名称", "name provided by the web page"),
-		}
-		if !validKeyName(webName) {
-			item.Detail = u.T("不符合本地名称规则", "not a valid local name")
-			item.Disabled = true
-		} else if old, ok := creds.Items[webName]; ok && old != nil && old.Key != "" {
-			if old.Key == key {
-				item.Detail = u.T("同一把 Key 已存在，将更新来源信息",
-					"the same key exists; its source metadata will be updated")
-			} else {
-				item.Detail = fmt.Sprintf(u.T("将覆盖 %s", "replaces %s"), config.Mask(old.Key))
-			}
-		}
-		items = append(items, item)
+// loginHost 决定本次登录连哪个网关。
+//
+// --host 优先；同名 Key 已存的 host 其次 —— 重新登录同一把 Key 时沿用
+// 它的自建网关。其余一律用编译时默认值。host 继承必须按目标名称限定：
+// 登录 personal 不能意外连上 work 的网关。
+func loginHost(c *Context, cfg *config.Config, keyName string) string {
+	if h := c.Flags.String("host"); h != "" {
+		return normalizeHost(h)
 	}
-
-	return append(items, ui.Item{
-		Label:  u.T("自订名称…", "custom name…"),
-		Detail: u.T("自己输入一个", "type your own"),
-	})
+	if m, ok := cfg.Keys[keyName]; ok && m.Host != "" {
+		return normalizeHost(m.Host)
+	}
+	return normalizeHost(config.DefaultHost)
 }
 
 // resolveLoginName 处理“这个 Key 名称已经有另一把 Key”的情况。
@@ -257,7 +225,10 @@ func resolveLoginName(c *Context, creds *config.Credentials,
 		return "", ui.Errf(ui.CodeUsage, fmt.Sprintf(
 			c.UI.T("%q 下已存着另一把 Key（%s）", "%q already holds a different key (%s)"),
 			target, config.Mask(existing.Key))).
-			WithHint(fmt.Sprintf("tf login %s   |   tf login --force", suggestion))
+			WithHint(fmt.Sprintf(c.UI.T(
+				"可使用：echo \"$KEY\" | tf login %s；如需覆盖：echo \"$KEY\" | tf login %s --force",
+				"use: echo \"$KEY\" | tf login %s; to replace it: echo \"$KEY\" | tf login %s --force"),
+				suggestion, suggestion))
 	}
 
 	idx, err := c.UI.Select(fmt.Sprintf(
@@ -470,52 +441,6 @@ func readKey(c *Context) (string, error) {
 			WithHint("echo $KEY | tf login")
 	}
 	return key, nil
-}
-
-func loginGatewayItems(u *ui.UI, current string) ([]ui.Item, int) {
-	items := []ui.Item{
-		{Label: u.T("默认网关", "Default gateway"), Detail: config.DefaultHost},
-		{Label: u.T("自定义网关", "Custom gateway"), Detail: u.T("输入网关地址", "Enter a gateway URL")},
-	}
-	defaultIndex := 0
-	if current != "" && normalizeHost(current) != normalizeHost(config.DefaultHost) {
-		items[1].Detail = current
-		items[0], items[1] = items[1], items[0]
-		defaultIndex = 1
-	}
-	return items, defaultIndex
-}
-
-func selectLoginHost(c *Context, current string) (string, error) {
-	items, defaultIndex := loginGatewayItems(c.UI, current)
-	idx, err := c.UI.Select(c.UI.T("选择网关", "Choose a gateway"), items)
-	if err != nil {
-		return "", err
-	}
-	if idx == defaultIndex {
-		return normalizeHost(config.DefaultHost), nil
-	}
-	fallback := ""
-	prompt := c.UI.T("网关地址：", "Gateway URL:")
-	if current != "" && normalizeHost(current) != normalizeHost(config.DefaultHost) {
-		fallback = normalizeHost(current)
-		prompt = fmt.Sprintf(c.UI.T("网关地址 [%s]：", "Gateway URL [%s]:"), fallback)
-	}
-	for attempt := 0; attempt < 3; attempt++ {
-		value, err := c.UI.ReadLine(prompt)
-		if err != nil {
-			return "", err
-		}
-		if value == "" {
-			value = fallback
-		}
-		host := normalizeHost(value)
-		if _, err := webOrigin(host); err == nil {
-			return host, nil
-		}
-		c.UI.Warnf("%s", c.UI.T("请输入有效的 HTTP(S) 网关地址，不含用户名、密码、查询参数或片段", "Enter a valid HTTP(S) gateway URL without credentials, query or fragment"))
-	}
-	return "", ui.Errf(ui.CodeUsage, c.UI.T("网关地址无效", "invalid gateway address"))
 }
 
 // normalizeHost 归一化用户输入的 host。

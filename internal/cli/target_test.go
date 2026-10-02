@@ -87,6 +87,36 @@ func TestTemporaryKeyDoesNotPersistBindingOrFilledSlots(t *testing.T) {
 	}
 }
 
+// 首次配置的辅助槽由 fill 补齐，不再询问：每个 harness 的所有槽位
+// 都必须非空、出自同一把 Key、且与主模型同协议。
+func TestResolveTargetAutoFillsAuxiliarySlots(t *testing.T) {
+	for _, name := range []string{"claude", "codex", "opencode", "pi"} {
+		t.Run(name, func(t *testing.T) {
+			h, _ := harness.Lookup(name)
+			cfg, creds := fixture(t, map[string][]string{
+				"a": {"anthropic_messages", "openai_responses", "openai_chat_completions"},
+			})
+			ids := []string{"a-main", "a-fast", "a-heavy"}
+			cfg.KeyMetaOf("a").Host = modelServer(t, ids...).URL
+			cfg.KeyMetaOf("a").Models = ids
+			c := testCtx()
+			c.Flags.set["model"] = "a-main" // 一次性覆盖：结果不得写盘
+			key, slots, err := resolveTarget(c, cfg, creds, h)
+			if err != nil || key != "a" {
+				t.Fatalf("key=%q err=%v", key, err)
+			}
+			for _, s := range h.Slots {
+				if slots[s.Name] == "" {
+					t.Errorf("slot %s left empty: %v", s.Name, slots)
+				}
+			}
+			if cfg.Harness(name).Key != "" || len(cfg.Harness(name).Slots) != 0 {
+				t.Errorf("one-shot launch persisted: %+v", cfg.Harness(name))
+			}
+		})
+	}
+}
+
 func TestAuxiliarySlotsMustSpeakMainProtocol(t *testing.T) {
 	h, _ := harness.Lookup("opencode")
 	meta := &config.KeyMeta{Protocols: map[string][]string{"GPT": {"openai_responses"}, "Claude": {"anthropic_messages"}}}

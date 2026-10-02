@@ -110,13 +110,10 @@ make build
 
 ### 1. 登录并绑定网关
 
-`tf login` 默认高亮“从网页导入”。选定登录方式后，CLI 会让你选择默认 TokenFlux 网关或输入自定义地址，再建立本机监听并打开对应的 Keys 页面。显式传入 `--host` 会跳过网关选择；管道与非交互登录保持原行为。
+`tf login` 直接进入网页导入：建立本机监听、打开 Keys 页面，在终端确认一次后写入凭据。全程没有登录方式或网关选择器；粘贴 Key 走 `tf login --with-key`，管道输入（`echo $KEY | tf login`）自动识别。
 
 ```console
 $ tf login
-选择登录方式
-❯ 从网页导入    自动打开 Keys 页面
-  粘贴 API Key  终端隐藏输入
 等待网页导入
   监听     http://127.0.0.1:43110
   来源     https://tokenflux.dev
@@ -124,7 +121,7 @@ $ tf login
   10 分钟内没有请求会自动退出
 ```
 
-需要粘贴时，在选择器中选择第二项，或使用 `tf login --with-key`；交互模式下同样可以选择网关。自定义地址支持省略 `https://` 和末尾误带的 `/v1`，会在读取 Key 前校验。已有自建网关账户优先沿用原地址；取消选择不会修改账户，导入成功后才保存选定地址。
+`tf login --with-key` 从 stdin 或终端隐藏输入读取 Key，是 SSH、CI 与无浏览器环境的稳定入口。`tf login work --from-web` 则以 flag 显式表达“网页导入 + 指定名称”。
 
 如使用私有化部署的 TokenRouter 网关：
 
@@ -132,19 +129,15 @@ $ tf login
 tf login work --host https://router.example.com
 ```
 
-也可以用 flag 直接进入网页导入：
-
-```sh
-tf login work --from-web
-```
+`--host` 是自建网关的唯一入口，地址支持省略 `https://` 和末尾误带的 `/v1`，会在发起任何请求前校验。重新登录同名 Key 时沿用其已保存的网关地址。
 
 网页和终端确认页会对终端链接显示“已验证当前 tf 会话”；直接打开页面仍可导入，但两端都会显示未验证会话警告。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会继续。
 
-未在命令中指定名称时，CLI 校验 Key 后会让用户选择按可用模型自动命名、采用网页 Key 名称或自订名称。自动命名会避开已有名称；显式运行 `tf login work` 则使用 `work`；该名称已有不同 Key 时会先确认覆盖，默认取消。非交互覆盖必须添加 `--force`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
+未在命令中指定名称时，CLI 按该 Key 可见的模型目录自动命名并避开已有名称；网页 `key_name` 仅作为来源元数据保存（`tf keys` 可见）。显式运行 `tf login work` 则使用 `work`；该名称已有不同 Key 时会先确认覆盖，默认取消。非交互覆盖必须添加 `--force`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
 
 ### 2. 启动客户端
 
-直接指定目标 harness 启动。首次运行若未配置模型，将启动交互式选择器；配置后将自动持久化偏好：
+直接指定目标 harness 启动。首次运行只需选择一次主模型，辅助槽位（fast/heavy/review/small）自动按档位填充；配置后将自动持久化偏好，之后启动不再询问：
 
 ```console
 $ tf claude
@@ -185,8 +178,10 @@ $ tf model claude
 claude
   default   claude-sonnet-5           — 主对话
   fast      claude-haiku-4-5-20251001 — 后台任务：标题、文件摘要
-  heavy     未配置                    — /model 切换高算力档位
+  heavy     gpt-5.5                   — /model 切换高算力档位
 ```
+
+自动填充的辅助槽位会记录为自动值。之后 `tf keys --refresh` 获取到新的模型目录时，下一次启动会重新计算自动槽位；明确通过 `tf model ... --set` 或 `--edit` 修改过的槽位视为用户设置，不会被自动覆盖。
 
 修改指定槽位的默认模型：
 
@@ -217,22 +212,27 @@ personal  sk-9f2…a047
 
 ### 运行状态与诊断
 
-通过 `tf status` 检查当前生效的凭据、各客户端模型映射、用量配额及环境冲突：
+通过 `tf status` 检查当前生效的凭据、各客户端模型映射及环境冲突。默认只读本地配置，不发起网络请求；`tf status --check` 才联网检查各 Key 的用量配额与可达性：
 
 ```console
 $ tf status
 /Users/user/.tf
 
 default  sk-d7d…a4fe  13 个模型
-  额度  0/10 推理积分  额度已耗尽，请求将被拒绝
-  今日  8 次请求，170933 tokens
 
   claude    default  claude-sonnet-5
   codex     default  gpt-5.6-terra
   opencode  —        claude-sonnet-5
   pi        default  gpt-5.6-terra
 警告：~/.codex/auth.json 本地已存在凭据；直接运行 codex（不经由 tf）将使用该凭据
+
+$ tf status --check
+default  sk-d7d…a4fe  13 个模型
+  额度  0/10 推理积分  额度已耗尽，请求将被拒绝
+  今日  8 次请求，170933 tokens
 ```
+
+`--check` 失败不影响本地状态的展示与退出码；`--json` 输出通过 `checked` 与 `check_errors` 区分“未检查”“已检查”与“检查失败”。
 
 ## 技术实现与注入机制
 

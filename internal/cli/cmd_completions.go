@@ -24,57 +24,9 @@ import (
 //   - 脚本本身是薄的，逻辑全在 `tf __complete` 里，这样升级 tf
 //     就等于升级补全，用户不必重新安装脚本。
 
-// offerCompletions 在 login 之后问一次要不要装 shell 补全。
-//
-// tf 不擅自改用户的环境，但问一句和偷偷写是两回事 —— 装 harness
-// 走的就是同一条规矩。放在 login 末尾：那本来就是配置时刻，
-// 用户正在回答问题，而且一辈子只经历一次。
-func offerCompletions(c *Context, cfg *config.Config) {
-	if cfg.CompletionsAsked || !c.UI.Interactive(c.Flags.Bool("no-input")) {
-		return
-	}
-	shell := completions.CurrentShell()
-	if shell == "" || completions.Installed(shell) {
-		return
-	}
-
-	idx, err := c.UI.Select(
-		fmt.Sprintf(c.UI.T("是否安装 %s 的自动补全？", "Install %s completions?"), shell),
-		[]ui.Item{
-			{Label: c.UI.T("安装", "yes"), Detail: mustPath(shell)},
-			{Label: c.UI.T("跳过", "no")},
-		})
-
-	// 只有“这件事已经有结果”才记下来。
-	//
-	// 答了不用 —— 记。答了装且装成了 —— 记。
-	// 答了装但写失败 —— 不记：用户明明要了，我没给成，
-	// 这时候记上“问过了”等于把一件没办成的事永久关掉。
-	remember := func() {
-		cfg.CompletionsAsked = true
-		_ = cfg.Save()
-	}
-
-	if err != nil || idx != 0 {
-		remember()
-		return
-	}
-	if err := installCompletion(c, shell, completions.Scripts[shell]); err != nil {
-		c.UI.Warnf("%s", err.Error())
-		return // 下次再问
-	}
-	remember()
-}
-
-// mustPath 给出补全文件位置，用于让用户看清将要写到哪里。
-func mustPath(shell string) string {
-	p, err := completions.Path(shell)
-	if err != nil {
-		return ""
-	}
-	return p
-}
-
+// 补全只在用户显式要求时安装：登录成功就干登录的事，
+// 不趁那个时刻再追问 shell 配置 —— tf completions <shell> --install
+// 是唯一入口，它只写专用补全目录，不碰 rc 文件。
 func newCompletionsCommand() *Command {
 	return &Command{
 		Name:  "completions",
@@ -169,6 +121,8 @@ func complete(words []string) []string {
 		return filter([]string{"bash", "zsh", "fish"}, cur)
 	case "login":
 		return filter(append(storedKeys(), "--with-key", "--from-web", "--host", "--force"), cur)
+	case "status":
+		return filter(dedupe(append([]string{"--check"}, globalFlagNames()...)), cur)
 	case "update":
 		return filter([]string{"--check"}, cur)
 	case "logout":
@@ -254,22 +208,58 @@ func completeModel(rest []string, cur string) []string {
 	if !ok {
 		return nil
 	}
-	// `--set slot=` 时补槽名；已经带 = 时补模型。
-	if strings.HasPrefix(cur, "-") {
-		return []string{"--edit", "--set", "--reset", "--list"}
-	}
-	if slot, _, found := strings.Cut(cur, "="); found {
-		out := []string{}
-		for _, m := range cachedModels(h.Name) {
-			out = append(out, slot+"="+m)
+	args := rest[1:]
+
+	// `--set heavy=` 补模型；`--set=heavy=` 也支持，方便 bash/zsh
+	// 在同一个 token 里完成赋值。
+	if _, _, found := strings.Cut(cur, "="); found {
+		if strings.HasPrefix(cur, "--set=") {
+			assignment := strings.TrimPrefix(cur, "--set=")
+			return completeModelAssignment(h, assignment, "--set=")
 		}
-		return out
+		return completeModelAssignment(h, cur, "")
 	}
-	names := []string{}
+
+	// `tf model claude --set <TAB>` 的当前词为空，--set 在 args 里。
+	if len(args) > 0 && args[len(args)-1] == "--set" {
+		return modelSlotAssignments(h, "")
+	}
+	if strings.HasPrefix(cur, "--set=") {
+		return completeModelAssignment(h, strings.TrimPrefix(cur, "--set="), "--set=")
+	}
+	if strings.HasPrefix(cur, "-") {
+		return modelFlags()
+	}
+
+	// `tf model claude <TAB>` 同时给出命令 flag 和常用的 slot=入口。
+	return append(modelFlags(), modelSlotAssignments(h, "")...)
+}
+
+func modelFlags() []string {
+	return []string{"--edit", "--set", "--reset", "--list"}
+}
+
+func modelSlotAssignments(h *harness.Harness, prefix string) []string {
+	out := make([]string, 0, len(h.Slots))
 	for _, s := range h.Slots {
-		names = append(names, s.Name+"=")
+		out = append(out, prefix+s.Name+"=")
 	}
-	return names
+	return out
+}
+
+func completeModelAssignment(h *harness.Harness, assignment, prefix string) []string {
+	slot, _, found := strings.Cut(assignment, "=")
+	if !found {
+		return modelSlotAssignments(h, prefix)
+	}
+	if !hasSlot(h, slot) {
+		return nil
+	}
+	out := make([]string, 0, len(cachedModels(h.Name)))
+	for _, m := range cachedModels(h.Name) {
+		out = append(out, prefix+slot+"="+m)
+	}
+	return out
 }
 
 // cachedModels 只读缓存。缓存冷就返回空 —— 补全宁可少给候选，

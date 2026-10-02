@@ -64,19 +64,16 @@ func TestEffortsUsesPlainModelToOrderFamilies(t *testing.T) {
 }
 
 // 档位猜测决定首次运行时三个槽会不会塞成同一个模型。
-func TestGuessTier(t *testing.T) {
-	cases := map[string]string{
-		"claude-haiku-4-5-20251001": "fast",
-		"claude-sonnet-5":           "",
-		"claude-opus-5":             "heavy",
-		"gemini-3.6-flash-high":     "fast",
-		"gemini-3.1-pro-low":        "heavy",
-		"gpt-5.4":                   "",
+
+func TestPreferredHeavyUsesExplicitTierAndVersionFallback(t *testing.T) {
+	if got := PreferredHeavy([]string{"claude-sonnet-5", "claude-opus-4-6", "claude-opus-5"}, "claude-sonnet-5"); got != "claude-opus-5" {
+		t.Errorf("explicit heavy = %q, want claude-opus-5", got)
 	}
-	for id, want := range cases {
-		if got := GuessTier(id); got != want {
-			t.Errorf("GuessTier(%q) = %q, want %q", id, got, want)
-		}
+	if got := PreferredHeavy([]string{"gpt-5.6-sol", "gpt-5.4", "gpt-5.5"}, "gpt-5.6-sol"); got != "gpt-5.5" {
+		t.Errorf("version fallback = %q, want gpt-5.5", got)
+	}
+	if got := PreferredHeavy([]string{"gpt-5.5"}, "gpt-5.5"); got != "gpt-5.5" {
+		t.Errorf("single-model fallback = %q, want main model", got)
 	}
 }
 

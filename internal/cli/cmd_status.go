@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -25,15 +26,20 @@ import (
 // 启动横幅写着用了哪把 Key、哪个模型，但 Claude Code 与 codex 一进
 // alternate screen 那行就没了 —— 出问题回头找，找不到。
 //
-// 只发一次 /v1/usage：那是唯一会改变「下一次请求能不能成」的东西。
-// 额度用完时 harness 只会报一个 429，不说为什么 —— 这条命令要能答上。
-// 取不到就不显示，本机状态照常出。
+// 默认只读本地：配置、绑定、缓存模型和环境冲突，不发任何网络请求。
+// --check 才是联网的那个：它取 /v1/usage —— 唯一会改变「下一次请求
+// 能不能成」的东西。额度用完时 harness 只会报一个 429，不说为什么 ——
+// 这条命令要能答上。取不到就不显示，本机状态照常出。
 func newStatusCommand() *Command {
 	return &Command{
 		Name:  "status",
-		Usage: "tf status",
+		Usage: "tf status [--check]",
 		Summary: func(u *ui.UI) string {
 			return u.T("显示当前会用哪把 Key、哪个模型", "Show which key and models are in effect")
+		},
+		Flags: []Flag{
+			{Name: "check", Kind: KindBool,
+				Desc: "联网检查各 Key 的额度与可达性||Check each key's quota and reachability over the network"},
 		},
 		Run: runStatus,
 	}
@@ -48,11 +54,15 @@ type statusHarness struct {
 }
 
 type statusOut struct {
-	ConfigDir string                    `json:"config_dir"`
-	Keys      []string                  `json:"keys"`
-	Harnesses []statusHarness           `json:"harnesses"`
-	Usage     map[string]*gateway.Usage `json:"usage,omitempty"`
-	Problems  []string                  `json:"problems,omitempty"`
+	ConfigDir string          `json:"config_dir"`
+	Keys      []string        `json:"keys"`
+	Harnesses []statusHarness `json:"harnesses"`
+	// checked 区分「没查过」和「查了」：脚本靠它判断 usage 缺席
+	// 是默认模式还是一次失败的远程检查。
+	Checked     bool                      `json:"checked"`
+	Usage       map[string]*gateway.Usage `json:"usage,omitempty"`
+	CheckErrors map[string]string         `json:"check_errors,omitempty"`
+	Problems    []string                  `json:"problems,omitempty"`
 }
 
 func runStatus(c *Context) error {
@@ -71,7 +81,18 @@ func runStatus(c *Context) error {
 			Key: hc.Key, Slots: hc.Slots,
 		})
 	}
-	out.Usage = fetchUsage(cfg, creds)
+	// 远程检查只属于 --check：默认 status 必须离线可用。
+	// 检查失败是每把 Key 的局部事件，不改变退出码。
+	if c.Flags.Bool("check") {
+		out.Checked = true
+		out.Usage, out.CheckErrors = checkUsage(cfg, creds)
+		for _, name := range creds.Names() {
+			if e, ok := out.CheckErrors[name]; ok {
+				c.UI.Warnf("%s", fmt.Sprintf(c.UI.T(
+					"无法检查 %q 的额度：%s", "could not check quota for %q: %s"), name, e))
+			}
+		}
+	}
 	out.Problems = checkEnvironment(c)
 
 	c.UI.Emit("status", out, func() { printStatus(c, cfg, creds, out) })
@@ -141,15 +162,19 @@ func formatModelCount(u *ui.UI, n int) string {
 	return fmt.Sprintf("%d models", n)
 }
 
-// fetchUsage 并发取各把 Key 的额度。取不到就没有，不报错。
-func fetchUsage(cfg *config.Config, creds *config.Credentials) map[string]*gateway.Usage {
+// checkUsage 并发取各把 Key 的额度。
+//
+// 一把失败不丢其它 Key 的结果：成功的进 usage，失败的进 errors ——
+// 「没查过」「查成功」「查失败」在 JSON 里是三种分得开的状态。
+func checkUsage(cfg *config.Config, creds *config.Credentials) (map[string]*gateway.Usage, map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 
 	var (
-		wg  sync.WaitGroup
-		mu  sync.Mutex
-		out = map[string]*gateway.Usage{}
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		usage  = map[string]*gateway.Usage{}
+		errors = map[string]string{}
 	)
 	for _, name := range creds.Names() {
 		cred, ok := creds.Get(name)
@@ -160,16 +185,38 @@ func fetchUsage(cfg *config.Config, creds *config.Credentials) map[string]*gatew
 		go func(name, key string) {
 			defer wg.Done()
 			u, err := gateway.New(cfg.HostOf(name), key).Usage(ctx)
+			mu.Lock()
+			defer mu.Unlock()
 			if err != nil {
+				errors[name] = summarizeCheckError(err)
 				return
 			}
-			mu.Lock()
-			out[name] = u
-			mu.Unlock()
+			usage[name] = u
 		}(name, cred.Key)
 	}
 	wg.Wait()
-	return out
+	if len(errors) == 0 {
+		errors = nil
+	}
+	return usage, errors
+}
+
+// summarizeCheckError 把检查失败压成一行安全摘要。
+//
+// 只留状态码与网关错误码，绝不带 Authorization、Key、完整响应体
+// 或用户信息 —— 这个字符串会进 JSON data，可能被脚本留存。
+func summarizeCheckError(err error) string {
+	var apiErr *gateway.APIError
+	if errors.As(err, &apiErr) {
+		if apiErr.Code != "" {
+			return fmt.Sprintf("http %d: %s", apiErr.Status, apiErr.Code)
+		}
+		return fmt.Sprintf("http %d", apiErr.Status)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
+		return "timeout"
+	}
+	return "unreachable"
 }
 
 // printUsage 只讲会影响下一次请求的两件事：还剩多少、今天用了多少。

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -199,56 +201,25 @@ func TestHarnessHelpBelongsToItsPosition(t *testing.T) {
 	}
 }
 
-func TestLoginMethodItemsFollowLocale(t *testing.T) {
-	cases := []struct {
-		lang ui.Lang
-		want []ui.Item
-	}{
-		{ui.LangZH, []ui.Item{
-			{Label: "从网页导入", Detail: "自动打开 Keys 页面"},
-			{Label: "粘贴 API Key", Detail: "终端隐藏输入"},
-		}},
-		{ui.LangEN, []ui.Item{
-			{Label: "Import from web", Detail: "open the Keys page"},
-			{Label: "Paste API key", Detail: "hidden terminal input"},
-		}},
-	}
-	for _, tc := range cases {
-		if got := loginMethodItems(&ui.UI{Lang: tc.lang}); !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("loginMethodItems(%s) = %#v, want %#v", tc.lang, got, tc.want)
-		}
-	}
-}
-
-func TestImportedKeyNameItems(t *testing.T) {
+// 网页导入不再有名称选择器：自动名只来自模型目录与已占用名称。
+//
+// 网页的 key_name 不参与本地命名 —— 它只是来源元数据，由 tf keys 展示。
+func TestImportedKeyNameAutoResolution(t *testing.T) {
 	creds := &config.Credentials{Items: map[string]*config.Credential{
-		"browser-key": {Key: "sk-other"},
+		"gpt": {Key: "sk-other"},
 	}}
-	u := &ui.UI{Lang: ui.LangZH}
-
-	items := importedKeyNameItems(u, creds, "gpt", "browser-key", "sk-new")
-	if len(items) != 3 {
-		t.Fatalf("items = %#v; want automatic, web, and custom choices", items)
+	if got := resolveImportedKeyName(creds, "sk-new", []string{"gpt-5.4"}); got != "gpt-2" {
+		t.Errorf("taken name must get a suffix, got %q", got)
 	}
-	if !strings.Contains(items[0].Label, `"gpt"`) || items[0].Disabled {
-		t.Errorf("automatic item = %#v", items[0])
+	creds2 := &config.Credentials{Items: map[string]*config.Credential{
+		"work": {Key: "sk-same"},
+	}}
+	if got := resolveImportedKeyName(creds2, "sk-same", []string{"gpt-5.4"}); got != "work" {
+		t.Errorf("same credential must reuse its name, got %q", got)
 	}
-	if !strings.Contains(items[1].Label, `"browser-key"`) ||
-		!strings.Contains(items[1].Detail, "覆盖") || items[1].Disabled {
-		t.Errorf("web item = %#v", items[1])
-	}
-	if !strings.Contains(items[2].Label, "自订") {
-		t.Errorf("custom item = %#v", items[2])
-	}
-
-	invalid := importedKeyNameItems(u, creds, "gpt", "网页 Key", "sk-new")
-	if len(invalid) != 3 || !invalid[1].Disabled || !strings.Contains(invalid[1].Detail, "不符合") {
-		t.Errorf("invalid web name item = %#v", invalid)
-	}
-
-	duplicate := importedKeyNameItems(u, creds, "gpt", "gpt", "sk-new")
-	if len(duplicate) != 2 {
-		t.Errorf("a web name equal to the automatic name must be deduplicated: %#v", duplicate)
+	creds3 := &config.Credentials{Items: map[string]*config.Credential{}}
+	if got := resolveImportedKeyName(creds3, "sk-new", []string{"gpt-5.4", "gpt-5.5"}); got != "gpt" {
+		t.Errorf("auto name = %q, want gpt", got)
 	}
 }
 
@@ -299,6 +270,25 @@ func TestSuggestKeyName(t *testing.T) {
 		if got := suggestKeyName(c.ids, c.taken); got != c.want {
 			t.Errorf("suggestKeyName(%v, taken=%v) = %q, want %q", c.ids, c.taken, got, c.want)
 		}
+	}
+}
+
+func TestModelCompletionIsContextAware(t *testing.T) {
+	contains := func(got []string, want string) bool {
+		return slices.Contains(got, want)
+	}
+
+	if got := complete([]string{"model", "claude", ""}); !contains(got, "--edit") || !contains(got, "--set") || !contains(got, "heavy=") {
+		t.Fatalf("after harness completion = %v, want flags and slots", got)
+	}
+	if got := complete([]string{"model", "claude", "--e"}); !contains(got, "--edit") {
+		t.Fatalf("flag completion = %v, want --edit", got)
+	}
+	if got := complete([]string{"model", "claude", "--set", ""}); !contains(got, "heavy=") {
+		t.Fatalf("--set value completion = %v, want heavy=", got)
+	}
+	if got := complete([]string{"model", "claude", "--set=hea"}); !contains(got, "--set=heavy=") {
+		t.Fatalf("inline --set completion = %v, want --set=heavy=", got)
 	}
 }
 
@@ -369,28 +359,74 @@ func TestZshScriptQuotesWordArray(t *testing.T) {
 	}
 }
 
-// 问过一次就不再问。
+// 补全只由显式命令安装：login 不再代问。
 //
-// 答过「不要」的人不该在每次 login 时被重新打扰，所以无论答什么
-// 都要落盘记住。
-func TestCompletionsAskedOnlyOnce(t *testing.T) {
-	c := testCtx()
-	cfg := &config.Config{CompletionsAsked: true}
+// tf completions <shell> --install 是唯一入口，写进专用补全目录，
+// 不碰 rc 文件，也不需要 CompletionsAsked 这种「问过了」状态。
+func TestCompletionsExplicitInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
-	// 已问过：不该再走到选择器（testCtx 是非交互，走到就会挂）。
-	offerCompletions(c, cfg)
+	cmd := newCompletionsCommand()
+	c, err := parse(cmd, []string{"fish", "--install"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	c.UI = &ui.UI{Out: &out, Err: &out, Lang: ui.LangEN}
+	if err := cmd.Run(c); err != nil {
+		t.Fatal(err)
+	}
+	installed, err := os.ReadFile(filepath.Join(home, ".config", "fish", "completions", "tf.fish"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(installed), "__tf_complete") {
+		t.Error("installed file is not the fish completion script")
+	}
 
-	if !cfg.CompletionsAsked {
-		t.Error("the flag must survive")
+	// JSON 模式应输出信封而不是脚本本体。
+	c, err = parse(cmd, []string{"fish", "--install"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	c.UI = &ui.UI{Out: &out, Err: &out, Lang: ui.LangEN, JSON: true}
+	if err := cmd.Run(c); err != nil {
+		t.Fatal(err)
+	}
+	var env struct {
+		OK bool `json:"ok"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil || !env.OK {
+		t.Fatalf("install JSON = %s, %v", out.String(), err)
 	}
 }
 
-// 非交互环境绝不弹选择器。
-func TestCompletionsNotOfferedNonInteractive(t *testing.T) {
-	cfg := &config.Config{}
-	offerCompletions(testCtx(), cfg)
-	if cfg.CompletionsAsked {
-		t.Error("must not mark as asked when it never asked")
+// 安装失败要给出底层错误，且不把凭据操作搞砸 ——
+// 显式命令的失败与 login 无关。
+func TestCompletionsInstallFailureIsReported(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	// 放一个同名目录占住补全文件的位置，写入必然失败。
+	blocker := filepath.Join(home, ".config", "fish", "completions")
+	if err := os.MkdirAll(filepath.Dir(blocker), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blocker, []byte("not a dir"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := newCompletionsCommand()
+	c, err := parse(cmd, []string{"fish", "--install"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.UI = &ui.UI{Out: io.Discard, Err: io.Discard, Lang: ui.LangEN}
+	if err := cmd.Run(c); err == nil {
+		t.Fatal("install into an unwritable location must fail")
 	}
 }
 
@@ -660,37 +696,6 @@ func TestSuggestionsNameOnlyAvailableTools(t *testing.T) {
 				t.Errorf("建议了本机没有的 %s：%s", bin, note)
 			}
 		}
-	}
-}
-
-// 装补全失败时不能记「已经问过」。
-//
-// 用户答了「装」，写盘失败了 —— 这时记上「问过了」等于把一件没办成
-// 的事永久关掉，而且再也不会提起。只有结果已经确定才记：答了不用是
-// 确定，装成了是确定，装失败不是。
-func TestCompletionsAskedOnlyWhenSettled(t *testing.T) {
-	src, err := os.ReadFile("cmd_completions.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := strings.ReplaceAll(string(src), "\r\n", "\n")
-	start := strings.Index(body, "func offerCompletions(")
-	if start < 0 {
-		t.Fatal("offerCompletions not found")
-	}
-	fn := body[start : start+strings.Index(body[start:], "\n}\n")]
-
-	// 赋值必须发生在 Select 之后：写在前面就等于「问了就算数」。
-	set := strings.Index(fn, "CompletionsAsked = true")
-	sel := strings.Index(fn, "c.UI.Select(")
-	if set < 0 || sel < 0 {
-		t.Fatal("expected both a Select call and the flag assignment")
-	}
-	if set < sel {
-		t.Error("CompletionsAsked 在提问之前就置位了，装失败也会被记成问过")
-	}
-	if !strings.Contains(fn, "return // 下次再问") {
-		t.Error("安装失败后必须直接返回，不记录")
 	}
 }
 

@@ -28,6 +28,43 @@ func TestMultipleSlotAssignmentsAreSavedTogether(t *testing.T) {
 	}
 }
 
+func TestManualSlotEditClearsAutomaticMarker(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	paths, err := config.DefaultPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hc := cfg.Harness("claude")
+	hc.Slots = config.ModelSlots{"default": "gpt-5.6-sol", "heavy": "gpt-5.4"}
+	hc.AutoSlots = config.ModelSlots{"heavy": "gpt-5.4"}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := parse(newModelCommand(), []string{"claude", "--set", "heavy=gpt-5.5"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.UI = testCtx().UI
+	if err := runModel(c); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err = config.Load(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hc = cfg.Harness("claude")
+	if hc.Slots[config.SlotHeavy] != "gpt-5.5" || len(hc.AutoSlots) != 0 {
+		t.Fatalf("manual edit did not clear auto marker: slots=%v auto=%v", hc.Slots, hc.AutoSlots)
+	}
+}
+
 func TestInvalidSlotBatchDoesNotPartiallySave(t *testing.T) {
 	for _, invalid := range []string{"bogus=b", "review=", "default=b"} {
 		t.Run(invalid, func(t *testing.T) {

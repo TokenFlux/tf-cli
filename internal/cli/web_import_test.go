@@ -415,3 +415,26 @@ func TestWebImportRequiresInteractiveConfirmation(t *testing.T) {
 		t.Fatalf("error = %#v", got)
 	}
 }
+
+// 默认 tf login 的目标是网页导入：非交互调用不进入选择器、
+// 不启动监听，直接返回用法错误并给出粘贴入口。
+func TestDefaultLoginIsWebImport(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	cmd := newLoginCommand()
+	ctx, err := parse(cmd, []string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.UI = &ui.UI{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}, Lang: ui.LangZH, JSON: true}
+	err = runLogin(ctx)
+	got := ui.AsError(err)
+	if got.Code != ui.CodeUsage {
+		t.Fatalf("error = %#v", got)
+	}
+	// 不管 stdin 是管道还是字符设备，非交互失败都必须给出粘贴入口，
+	// 而不是让用户对着一个不存在的监听器发呆。
+	if !strings.Contains(got.Hint, "tf login") {
+		t.Fatalf("hint = %q, want a paste entry point", got.Hint)
+	}
+}

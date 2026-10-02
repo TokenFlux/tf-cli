@@ -57,7 +57,9 @@ func runModel(c *Context) error {
 	}
 
 	if c.Flags.Bool("reset") {
-		cfg.Harness(h.Name).Slots = config.ModelSlots{}
+		hc := cfg.Harness(h.Name)
+		hc.Slots = config.ModelSlots{}
+		hc.AutoSlots = config.ModelSlots{}
 		if err := cfg.Save(); err != nil {
 			return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 		}
@@ -86,7 +88,9 @@ func runModel(c *Context) error {
 			updates[slot] = id
 		}
 		for slot, id := range updates {
-			cfg.Harness(h.Name).Slots[slot] = id
+			hc := cfg.Harness(h.Name)
+			hc.Slots[slot] = id
+			delete(hc.AutoSlots, slot)
 		}
 		if err := cfg.Save(); err != nil {
 			return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
@@ -178,6 +182,7 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 		// 而失败要等到启动之后才看得见。
 		hc := st.cfg.Harness(h.Name)
 		next := maps.Clone(slots)
+		autoSlots := cloneSlots(hc.AutoSlots)
 		if hc.Key != "" && hc.Key != cands[choice].Key {
 			var cleared []string
 			for name, id := range slots {
@@ -196,9 +201,11 @@ func editSlots(c *Context, st *state, h *harness.Harness) error {
 				}
 			}
 			next = config.ModelSlots{}
+			autoSlots = config.ModelSlots{}
 		}
 		next[sl.Name] = cands[choice].Model
-		hc.Key, hc.Slots = cands[choice].Key, next
+		delete(autoSlots, sl.Name)
+		hc.Key, hc.Slots, hc.AutoSlots = cands[choice].Key, next, autoSlots
 		if err := st.cfg.Save(); err != nil {
 			return ui.Errf(ui.CodeConfigWrite, c.UI.T("配置无法写入", "cannot write config")).WithCause(err)
 		}

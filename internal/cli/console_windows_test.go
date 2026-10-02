@@ -24,23 +24,28 @@ func TestWindowsLoginHelper(t *testing.T) {
 	if host == "" {
 		return
 	}
-	args := []string{"login", "fixture", "--host", host}
-	if mode := os.Getenv("TF_TEST_GATEWAY"); mode != "" {
+	mode := os.Getenv("TF_TEST_GATEWAY")
+	args := []string{"login", "fixture", "--with-key", "--host", host}
+	switch mode {
+	case "default":
+		config.DefaultHost = host
+		args = []string{"login", "fixture", "--with-key"}
+	case "existing":
+		// 同名 Key 已存的 host 由配置文件提供，命令行不带 --host。
+		args = []string{"login", "fixture", "--with-key"}
+	case "invalid":
+		args = []string{"login", "fixture", "--with-key", "--host", "ftp://invalid"}
+	case "pipe":
 		args = []string{"login", "fixture"}
-		if mode == "default" {
-			config.DefaultHost = host
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
 		}
-		if mode == "pipe" {
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := w.WriteString("sk-fixture-only\n"); err != nil {
-				t.Fatal(err)
-			}
-			w.Close()
-			os.Stdin = r
+		if _, err := w.WriteString("sk-fixture-only\n"); err != nil {
+			t.Fatal(err)
 		}
+		w.Close()
+		os.Stdin = r
 	}
 	os.Exit(Main(args))
 }
@@ -61,6 +66,8 @@ func (o *loginOutput) String() string {
 	return strings.ReplaceAll(strings.ReplaceAll(ansi.Strip(o.text.String()), "\r", ""), "\n", "")
 }
 
+// Windows 登录走与 Unix 一致的默认路径：方式与网关都不再询问，
+// --with-key 直达隐藏输入，host 的优先级为 --host > 同名已存 > 默认值。
 func TestWindowsLoginInteraction(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/models" {
@@ -74,12 +81,13 @@ func TestWindowsLoginInteraction(t *testing.T) {
 	for _, tc := range []struct {
 		name, gateway string
 		cancel        bool
+		wantCode      uint32
 	}{
-		{"save", "", false}, {"cancel", "", true},
-		{"default-gateway", "default", false}, {"custom-gateway", "custom", false},
-		{"invalid-gateway-retry", "invalid", false}, {"existing-gateway", "existing", false},
-		{"cancel-gateway", "cancel", true}, {"cancel-custom-url", "cancel-url", true},
-		{"piped-key-existing-gateway", "pipe", false},
+		{"save", "", false, 0}, {"cancel", "", true, 130},
+		{"default-gateway", "default", false, 0},
+		{"existing-gateway", "existing", false, 0},
+		{"invalid-gateway", "invalid", false, 1},
+		{"piped-key-existing-gateway", "pipe", false, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cancelInput := tc.cancel
@@ -89,7 +97,6 @@ func TestWindowsLoginInteraction(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfg.CompletionsAsked = true
 			if tc.gateway == "existing" || tc.gateway == "pipe" {
 				cfg.KeyMetaOf("fixture").Host = srv.URL
 			}
@@ -124,38 +131,12 @@ func TestWindowsLoginInteraction(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if tc.gateway != "pipe" {
-				waitFor("Choose a login method")
-				send("\x1b[B\r")
-			}
-			if tc.gateway != "" && tc.gateway != "pipe" {
-				waitFor("Choose a gateway")
-				switch tc.gateway {
-				case "cancel":
-					send("\x1b")
-				case "default":
-					send("\r")
-				default:
-					if tc.gateway == "existing" {
-						send("\r")
-					} else {
-						send("\x1b[B\r")
-					}
-					waitFor("Gateway URL")
-					if tc.gateway == "invalid" {
-						send("ftp://invalid\r")
-						waitFor("Enter a valid HTTP(S)")
-					}
-					if tc.gateway == "existing" {
-						send("\r")
-					} else if tc.gateway == "cancel-url" {
-						send("\x03")
-					} else {
-						send(srv.URL + "/v1/\r")
-					}
-				}
-			}
-			if tc.gateway != "cancel" && tc.gateway != "cancel-url" && tc.gateway != "pipe" {
+			switch tc.gateway {
+			case "pipe":
+				// 管道 stdin 本身就是明确选择，不该有任何终端交互。
+			case "invalid":
+				waitFor("invalid gateway address")
+			default:
 				waitFor("Paste API key (hidden):")
 				if cancelInput {
 					send("sk-fixture-only\x03")
@@ -166,11 +147,7 @@ func TestWindowsLoginInteraction(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			code, err := pty.Wait(ctx)
-			want := uint32(0)
-			if cancelInput {
-				want = 130
-			}
-			if err != nil || code != want {
+			if err != nil || code != tc.wantCode {
 				t.Fatalf("exit=%d err=%v output=%s", code, err, output.String())
 			}
 			if strings.Contains(output.String(), "sk-fixture-only") {
@@ -181,18 +158,18 @@ func TestWindowsLoginInteraction(t *testing.T) {
 				t.Fatal(err)
 			}
 			cred, exists := creds.Get("fixture")
-			if cancelInput {
+			if cancelInput || tc.gateway == "invalid" {
 				if exists {
-					t.Fatal("cancel persisted the key")
+					t.Fatal("a rejected login persisted the key")
 				}
-			} else if !exists || cred.Key != "sk-fixture-only" {
+				return
+			}
+			if !exists || cred.Key != "sk-fixture-only" {
 				t.Fatal("login did not save the fixture key")
 			}
-			if !cancelInput {
-				stored, err := config.Load(paths)
-				if err != nil || stored.Keys["fixture"].Host != srv.URL {
-					t.Fatalf("wrong gateway saved: %v", err)
-				}
+			stored, err := config.Load(paths)
+			if err != nil || stored.Keys["fixture"].Host != srv.URL {
+				t.Fatalf("wrong gateway saved: %v", err)
 			}
 		})
 	}

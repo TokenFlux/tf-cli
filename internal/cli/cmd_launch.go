@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -205,8 +204,16 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		keyName = k
 	}
 
+	autoSlots := cloneSlots(hc.AutoSlots)
+	if len(autoSlots) == 0 {
+		// Older configs predate auto_slots. The old fill behavior only created
+		// auxiliary fallbacks equal to the main model, so those are safe to
+		// migrate; distinct values remain user-owned.
+		autoSlots = legacyAutoSlots(h, slots)
+	}
+
 	// 快路径：绑定仍然有效且槽位齐全，直接走，不联网也不提问。
-	if !explicitPick && override == "" && keyName == hc.Key && slices.Contains(keys, keyName) && cachedSlotsValid(cfg, keyName, h, slots) {
+	if !explicitPick && override == "" && keyName == hc.Key && slices.Contains(keys, keyName) && cachedSlotsValid(cfg, keyName, h, slots, autoSlots) {
 		return keyName, slots, nil
 	}
 
@@ -309,12 +316,15 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 			delete(slots, slot)
 		}
 	}
-	if !oneShot && c.UI.Interactive(c.Flags.Bool("no-input")) {
-		if err := askSlots(c, h, slots, own); err != nil {
-			return "", nil, err
-		}
+	// 辅助槽不再逐个问：fill 按档位补齐，没有对应档位就回落主模型。
+	// 要逐槽细调的人走 tf model <harness> --edit。
+	fillAdaptive(h, slots, own, autoSlots)
+	// Required 槽到这里还空着就是内部缺陷 —— fill 至少会回落到主模型，
+	// 而留空的代价是 harness 静默回落到它自己的内置模型。
+	if !slotsComplete(h, slots) {
+		return "", nil, ui.Errf(ui.CodeInternal, fmt.Sprintf(
+			c.UI.T("%s 的必填槽位未能自动填充", "%s has a required slot left unfilled"), h.Name))
 	}
-	fill(h, slots, own)
 	warnIdenticalSlots(c, h, slots)
 
 	// -m/-e/-k 不写盘，这本来就是 flag 该有的样子，不必每次声明一遍。
@@ -322,7 +332,7 @@ func resolveTarget(c *Context, cfg *config.Config, creds *config.Credentials,
 		return keyName, slots, nil
 	}
 
-	hc.Key, hc.Slots = keyName, slots
+	hc.Key, hc.Slots, hc.AutoSlots = keyName, slots, autoSlots
 	if err := cfg.Save(); err != nil {
 		c.UI.Warnf(c.UI.T("模型选择未保存：%v", "model choice not saved: %v"), err)
 	}
@@ -425,109 +435,25 @@ func slotsComplete(h *harness.Harness, slots config.ModelSlots) bool {
 	return true
 }
 
-// askSlots 逐个问还没定的非主槽。
-//
-// 只在首次配置该 harness 时问一次，之后不再打扰。不问的代价是实打实的：
-// codex 的 review、claude 的 fast 决定了那部分工作用哪个模型、花多少钱，
-// 而自动归位在分组里没有对应档位时只能回落到主模型。
-//
-// 每个槽的首项是推荐值，直接回车即可，所以「多问几屏」的成本接近于零。
-// 也正因为接受推荐值只需回车，esc 就不必兼职「跳过」，能与别处一样只表示取消。
-func askSlots(c *Context, h *harness.Harness, slots config.ModelSlots, ids []string) error {
-	main := slots[config.SlotDefault]
+func fillAdaptive(h *harness.Harness, slots config.ModelSlots, ids []string, autoSlots config.ModelSlots) {
 	for _, s := range h.Slots {
-		if s.Name == config.SlotDefault || slots[s.Name] != "" {
+		if s.Name == config.SlotDefault {
 			continue
 		}
-
-		suggested := suggestForSlot(s.Name, main, ids)
-		items := []ui.Item{{
-			Label:  model.Parse(suggested).Display(),
-			Detail: slotSuggestionReason(c, suggested, main),
-		}}
-		rest := make([]string, 0, len(ids))
-		for _, id := range ids {
-			if id != suggested {
-				items = append(items, ui.Item{Label: model.Parse(id).Display(), Detail: model.Parse(id).Prefix})
-				rest = append(rest, id)
-			}
+		current := slots[s.Name]
+		automatic := current == "" || autoSlots[s.Name] == current
+		if !automatic {
+			delete(autoSlots, s.Name)
+			continue
 		}
-
-		title := fmt.Sprintf(c.UI.T("配置 %s 的 %s 模型槽（用途：%s）：", "Which model for %s.%s? (%s)"),
-			h.Name, s.Name, s.Purpose(c.UI.Lang == ui.LangZH))
-		pick, err := c.UI.SelectWith(title, items, ui.SelectOpt{
-			CancelHint: c.UI.T("使用默认推荐值", "take the suggestions"),
-		})
-		if err != nil {
-			// esc 只该退掉这一屏，不该炸掉上游已完成的工作。
-			//
-			// 主模型是刚刚选完的，副槽是 tf 主动追问的 —— 因为不问就会
-			// 静默失败。用户对追问说「算了」，意思是「按你说的来」，
-			// 不是「把我选的主模型也扔掉」。剩下的槽用推荐值补齐。
-			if ui.AsError(err).Code == ui.CodeCancelled && !errors.Is(err, ui.ErrInterrupted) {
-				return nil
-			}
-			return err
-		}
-		if pick == 0 {
-			slots[s.Name] = suggested
-		} else {
-			slots[s.Name] = rest[pick-1]
-		}
+		chosen := preferredAutoSlot(s.Name, slots[config.SlotDefault], ids)
+		slots[s.Name] = chosen
+		autoSlots[s.Name] = chosen
 	}
-	return nil
 }
 
-// suggestForSlot 给出某个槽的推荐模型。
-func suggestForSlot(slot, main string, ids []string) string {
-	want := ""
-	switch slot {
-	case config.SlotFast, config.SlotSmall:
-		want = "fast"
-	case config.SlotHeavy:
-		want = "heavy"
-	}
-	if want != "" {
-		for _, id := range ids {
-			if model.GuessTier(id) == want {
-				return id
-			}
-		}
-	}
-	return main
-}
-
-func slotSuggestionReason(c *Context, suggested, main string) string {
-	if suggested == main {
-		return c.UI.T("跟随主模型", "same as the main model")
-	}
-	return c.UI.T("推荐", "recommended")
-}
-
-// fill 给空槽按档位归位。
-//
-// 分组里真有 haiku / opus 时就不该把几个槽塞同一个模型 ——
-// 那会让 harness 内部的模型切换变成空操作，后台任务也会烧主模型的钱。
 func fill(h *harness.Harness, slots config.ModelSlots, ids []string) {
-	for _, s := range h.Slots {
-		if slots[s.Name] != "" {
-			continue
-		}
-		slots[s.Name] = slots[config.SlotDefault]
-		if s.Name != config.SlotFast && s.Name != config.SlotSmall && s.Name != config.SlotHeavy {
-			continue
-		}
-		want := "fast"
-		if s.Name == config.SlotHeavy {
-			want = "heavy"
-		}
-		for _, id := range ids {
-			if model.GuessTier(id) == want {
-				slots[s.Name] = id
-				break
-			}
-		}
-	}
+	fillAdaptive(h, slots, ids, config.ModelSlots{})
 }
 
 func modelsOf(cands []candidate, key string) []string {
@@ -562,7 +488,7 @@ func compatibleSlotModels(meta *config.KeyMeta, h *harness.Harness, main string,
 	return out
 }
 
-func cachedSlotsValid(cfg *config.Config, key string, h *harness.Harness, slots config.ModelSlots) bool {
+func cachedSlotsValid(cfg *config.Config, key string, h *harness.Harness, slots config.ModelSlots, autoSlots config.ModelSlots) bool {
 	meta := cfg.Keys[key]
 	if meta == nil || !slotsComplete(h, slots) {
 		return false
@@ -573,7 +499,58 @@ func cachedSlotsValid(cfg *config.Config, key string, h *harness.Harness, slots 
 			return false
 		}
 	}
-	return true
+	return !autoSlotsStale(h, slots, ids, autoSlots)
+}
+
+func autoSlotsStale(h *harness.Harness, slots config.ModelSlots, ids []string, autoSlots config.ModelSlots) bool {
+	for _, s := range h.Slots {
+		if s.Name == config.SlotDefault || autoSlots[s.Name] == "" || autoSlots[s.Name] != slots[s.Name] {
+			continue
+		}
+		if want := preferredAutoSlot(s.Name, slots[config.SlotDefault], ids); want != slots[s.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+func preferredAutoSlot(slot, main string, ids []string) string {
+	switch slot {
+	case config.SlotHeavy:
+		return model.PreferredHeavy(ids, main)
+	case config.SlotFast, config.SlotSmall:
+		for _, id := range ids {
+			if model.GuessTier(id) == "fast" {
+				return id
+			}
+		}
+	}
+	return main
+}
+
+func cloneSlots(src config.ModelSlots) config.ModelSlots {
+	if len(src) == 0 {
+		return config.ModelSlots{}
+	}
+	out := make(config.ModelSlots, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+func legacyAutoSlots(h *harness.Harness, slots config.ModelSlots) config.ModelSlots {
+	out := config.ModelSlots{}
+	main := slots[config.SlotDefault]
+	if main == "" {
+		return out
+	}
+	for _, s := range h.Slots {
+		if s.Name != config.SlotDefault && slots[s.Name] == main {
+			out[s.Name] = main
+		}
+	}
+	return out
 }
 
 func ownerOf(cands []candidate, id string) (string, bool) {

@@ -6,6 +6,7 @@ package harness
 import (
 	"context"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -208,10 +209,11 @@ func probeVersion(path string) string {
 func (h *Harness) AvailableInstalls() []InstallOption {
 	var out []InstallOption
 	for _, o := range h.Installs {
-		if len(o.Args) > 0 {
-			if _, err := exec.LookPath(o.Args[0]); err == nil {
-				out = append(out, o)
-			}
+		if len(o.Args) == 0 || (runtime.GOOS == "windows" && o.Args[0] == "brew") {
+			continue
+		}
+		if cmd := process.CommandContext(context.Background(), o.Args[0], nil, nil); cmd.Err == nil {
+			out = append(out, o)
 		}
 	}
 	return out

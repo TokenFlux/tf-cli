@@ -224,14 +224,8 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	}
 	env := append(f.env(), "SHELL=/bin/sh", "TF_BROWSER_MARKER="+browserMarker)
 
-	p := start(t, env, "login")
-	p.waitFor("选择登录方式")
-	p.waitFor("从网页导入")
-	p.send(keyEnter)
-	p.waitFor("选择网关")
-	p.send(keyDown + keyEnter)
-	p.waitFor("网关地址：")
-	p.send(srv.URL + "/v1/\n")
+	// 默认 login 直接进入网页导入：没有方式选择器，也没有网关选择器。
+	p := start(t, env, "login", "--host", srv.URL)
 	p.waitFor("等待网页导入")
 	match := regexp.MustCompile(`http://127\.0\.0\.1:4311[0-9]`).FindString(p.screen())
 	if match == "" {
@@ -368,14 +362,16 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 		t.Fatal("浏览器没有收到导入响应")
 	}
 
-	p.waitFor("选择本地 Key 名称")
-	p.waitFor(`自动识别为 "gpt"`)
-	p.waitFor(`使用网页名称 "browser-key"`)
-	p.send(keyDown)
-	p.send(keyEnter)
-	p.waitFor(`已保存为 Key "browser-key"`)
+	// 导入确认后直接自动命名保存，不再出现本地名称选择器；
+	// 网页的 key_name 只作为来源元数据落盘。
+	p.waitFor(`已保存为 Key "gpt"`)
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("退出码 = %d，want 0\n--- 屏幕 ---\n%s", code, p.tail())
+	}
+	for _, gone := range []string{"选择登录方式", "选择网关", "选择本地 Key 名称"} {
+		if strings.Contains(p.screen(), gone) {
+			t.Fatalf("已删除的选择器 %q 仍然出现\n%s", gone, p.tail())
+		}
 	}
 
 	path := filepath.Join(f.dir, "cfg", "tf", "credentials.json")
@@ -396,7 +392,7 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	if err := json.Unmarshal(data, &stored); err != nil {
 		t.Fatal(err)
 	}
-	got := stored.Items["browser-key"]
+	got := stored.Items["gpt"]
 	if got.Key != "sk-web-import-test" || got.Source != "import" || got.Origin != srv.URL ||
 		got.KeyName != "browser-key" || got.GroupID != 7 || got.GroupName != "GPT" {
 		t.Errorf("落盘元数据不完整：%+v", got)
@@ -410,21 +406,21 @@ func TestWebImportRequiresTerminalConfirmationBeforeSaving(t *testing.T) {
 	}
 }
 
+// --with-key 是粘贴路径的稳定入口：直达隐藏输入，没有方式选择器。
 func TestInteractiveLoginCanChoosePaste(t *testing.T) {
 	srv := fakeGateway(t, []string{"gpt-5.4"})
 	f := writeConfig(t, srv.URL, []string{"gpt-5.4"})
 	env := append(f.env(), "SHELL=/bin/sh")
 
-	p := start(t, env, "login", "paste", "--host", srv.URL)
-	p.waitFor("选择登录方式")
-	p.waitFor("粘贴 API Key")
-	p.send(keyDown)
-	p.send(keyEnter)
+	p := start(t, env, "login", "paste", "--with-key", "--host", srv.URL)
 	p.waitFor("粘贴 API Key")
 	p.send("sk-interactive-paste\n")
 	p.waitFor(`已保存为 Key "paste"`)
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("退出码 = %d，want 0\n--- 屏幕 ---\n%s", code, p.tail())
+	}
+	if strings.Contains(p.screen(), "选择登录方式") {
+		t.Fatalf("--with-key 不应出现方式选择器\n%s", p.tail())
 	}
 }
 
@@ -445,8 +441,10 @@ func TestPipedLoginSkipsMethodPicker(t *testing.T) {
 		t.Fatalf("管道登录失败：%v\n%s", err, out)
 	}
 	text := clean(string(out))
-	if strings.Contains(text, "选择登录方式") {
-		t.Fatalf("管道登录不应弹方式选择器：\n%s", text)
+	for _, gone := range []string{"选择登录方式", "选择网关"} {
+		if strings.Contains(text, gone) {
+			t.Fatalf("管道登录不应弹 %q：\n%s", gone, text)
+		}
 	}
 	if !strings.Contains(text, `已保存为 Key "pipe"`) {
 		t.Fatalf("管道登录没有保存：\n%s", text)

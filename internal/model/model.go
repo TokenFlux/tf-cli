@@ -4,7 +4,10 @@
 // provider 前缀），必须集中在一处，否则一定写乱。
 package model
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // 思考强度档位，由弱到强。
 //
@@ -161,4 +164,67 @@ func GuessTier(id string) string {
 		}
 	}
 	return ""
+}
+
+// PreferredHeavy chooses the strongest available fallback for a heavy slot.
+//
+// Explicit heavy names (opus/pro/max/etc.) win first. When a gateway uses
+// generic IDs such as gpt-5.4 and gpt-5.5, compare the numeric model version
+// instead of freezing a particular model name in tf. The main model is excluded
+// when another candidate exists, so gpt-5.6-sol + gpt-5.5 selects gpt-5.5.
+func PreferredHeavy(ids []string, main string) string {
+	var explicit, fallback []string
+	for _, id := range ids {
+		if id == main {
+			continue
+		}
+		switch GuessTier(id) {
+		case "heavy":
+			explicit = append(explicit, id)
+		case "fast":
+			continue
+		default:
+			fallback = append(fallback, id)
+		}
+	}
+	candidates := explicit
+	if len(candidates) == 0 {
+		candidates = fallback
+	}
+	if len(candidates) == 0 {
+		return main
+	}
+	best := candidates[0]
+	for _, id := range candidates[1:] {
+		if strongerModel(id, best) {
+			best = id
+		}
+	}
+	return best
+}
+
+func strongerModel(a, b string) bool {
+	av, bv := versionParts(Parse(a).Base), versionParts(Parse(b).Base)
+	for i := 0; i < len(av) && i < len(bv); i++ {
+		if av[i] != bv[i] {
+			return av[i] > bv[i]
+		}
+	}
+	return len(av) > len(bv)
+}
+
+func versionParts(id string) []int {
+	var out []int
+	for _, part := range strings.FieldsFunc(id, func(r rune) bool {
+		return r < '0' || r > '9'
+	}) {
+		if part == "" {
+			continue
+		}
+		n, err := strconv.Atoi(part)
+		if err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }

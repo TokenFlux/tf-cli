@@ -205,6 +205,31 @@ func TestFillPicksCheaperModelForFastSlot(t *testing.T) {
 	}
 }
 
+// 没有明确 heavy 关键词时按模型版本自适应：主模型是 5.6-sol 时，
+// heavy 选择 5.5，而不是永久写死某个模型名。
+func TestFillAdaptsHeavyModelVersion(t *testing.T) {
+	claude, _ := harness.Lookup("claude")
+	slots := config.ModelSlots{"default": "gpt-5.6-sol"}
+	fill(claude, slots, []string{"gpt-5.6-sol", "gpt-5.4", "gpt-5.5"})
+	if slots[config.SlotHeavy] != "gpt-5.5" {
+		t.Errorf("heavy slot = %q, want gpt-5.5", slots[config.SlotHeavy])
+	}
+
+	auto := config.ModelSlots{config.SlotHeavy: "gpt-5.4"}
+	slots[config.SlotHeavy] = "gpt-5.4"
+	fillAdaptive(claude, slots, []string{"gpt-5.6-sol", "gpt-5.4", "gpt-5.5"}, auto)
+	if slots[config.SlotHeavy] != "gpt-5.5" || auto[config.SlotHeavy] != "gpt-5.5" {
+		t.Errorf("auto heavy did not update: slots=%v auto=%v", slots, auto)
+	}
+
+	manual := config.ModelSlots{}
+	slots[config.SlotHeavy] = "gpt-5.4"
+	fillAdaptive(claude, slots, []string{"gpt-5.6-sol", "gpt-5.4", "gpt-5.5"}, manual)
+	if slots[config.SlotHeavy] != "gpt-5.4" {
+		t.Errorf("manual heavy was overwritten: %q", slots[config.SlotHeavy])
+	}
+}
+
 // flag 管这一次，tf model 管以后：-m 绝不写盘。
 func TestOneShotModelDoesNotPersist(t *testing.T) {
 	dir := t.TempDir()

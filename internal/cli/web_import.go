@@ -251,7 +251,7 @@ func confirmWebImport(c *Context, req webImportRequest, credentialsPath, targetN
 
 	destination := targetName
 	if !fixedTarget {
-		destination = c.UI.T("校验后选择", "choose after validation")
+		destination = c.UI.T("校验后自动命名", "assigned automatically after validation")
 	} else if existing != nil && existing.Key != "" && existing.Key != req.Key {
 		destination += fmt.Sprintf(c.UI.T("（将覆盖 %s）", " (replaces %s)"), config.Mask(existing.Key))
 	}

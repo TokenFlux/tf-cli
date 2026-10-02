@@ -17,7 +17,7 @@
 ## 一、当前形态
 
 命令：`version` `status` `config` `login` `logout` `keys` `update` `harness`
-`model` `completions` + `claude` `codex` `opencode` `pi`。`tf login` 默认高亮网页导入，确认后打开 Keys 页面，也可选择粘贴；`--from-web` 可直接进入网页导入。
+`model` `completions` + `claude` `codex` `opencode` `pi`。`tf login` 默认直接进入网页导入并打开 Keys 页面；`--with-key` 或管道输入走粘贴路径，`--host` 指定自建网关，`--from-web` 为显式等价写法。`tf status` 默认只读本地，`--check` 才联网查额度。
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-input`（旧名 `--yes`）。对 `claude`/`codex`/`opencode`/`pi` 透传命令，写在 harness 名后的 `-h`/`--help` 交给底层工具，`tf --help <harness>` 用于查看 tf 包装帮助。`login` 另有 `--with-key`、`--from-web`、`--force`。
 
@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | M0 骨架 | 完成 | CLI 框架、config/credentials、权限自修复、错误码、双语、`--json` |
 | M1 目录 | 放弃 | 见下 |
-| M2 认证 | 完成 | `login`、`login --from-web`、`logout`、`keys`、`status`（含额度） |
+| M2 认证 | 完成 | `login`（默认网页导入）、`logout`、`keys`、`status`（本地状态 + `--check` 额度检查） |
 | M3 启动 | 完成 | fork+wait、信号转发、退出码穿透、终端复位。各 harness 均已实测 |
 | M4 模型 | 完成 | 模型 ID 与强度后缀解析、补全顺序、方向键选择器、按 harness 分开的模型槽 |
 | M5 预检 | 完成 | 零 token 协议探测、按分组前缀的准入记录、隐藏原因说明 |
