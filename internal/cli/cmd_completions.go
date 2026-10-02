@@ -123,6 +123,10 @@ func complete(words []string) []string {
 		return filter(append(storedKeys(), "--with-key", "--from-web", "--host", "--force"), cur)
 	case "status":
 		return filter(dedupe(append([]string{"--check"}, globalFlagNames()...)), cur)
+	case "auth":
+		return filter(completeAuth(rest, cur), cur)
+	case "agent-readme":
+		return filter(globalFlagNames(), cur)
 	case "update":
 		return filter([]string{"--check"}, cur)
 	case "logout":
@@ -151,7 +155,7 @@ func completeLaunch(h *harness.Harness, rest []string) []string {
 			i++ // 跳过其取值
 		case "help", "h":
 			return nil // 帮助参数起已进入 harness 的参数空间
-		case "json", "no-input", "yes", "y":
+		case "json", "no-input", "no-tui", "yes", "y":
 		default:
 			return nil // 陌生 flag 即透传起点
 		}
@@ -174,8 +178,20 @@ func completeLaunch(h *harness.Harness, rest []string) []string {
 	return dedupe(append([]string{"--model", "--effort"}, globalFlagNames()...))
 }
 
-// dedupe 去掉重复项并保持原有顺序。
-//
+func completeAuth(rest []string, cur string) []string {
+	if len(rest) > 0 && rest[len(rest)-1] == "--key" {
+		return storedKeys()
+	}
+	if strings.HasPrefix(cur, "--key=") {
+		out := make([]string, 0, len(storedKeys()))
+		for _, name := range storedKeys() {
+			out = append(out, "--key="+name)
+		}
+		return out
+	}
+	return dedupe(append([]string{"--key"}, globalFlagNames()...))
+}
+
 // 启动命令自己的 flag 与全局 flag 有重叠（--key 两边都有），
 // 补全列表里出现两次会让人以为是两个不同的东西。
 func dedupe(in []string) []string {
@@ -236,7 +252,7 @@ func completeModel(rest []string, cur string) []string {
 }
 
 func modelFlags() []string {
-	return []string{"--edit", "--set", "--reset", "--list"}
+	return dedupe(append([]string{"--edit", "--set", "--reset", "--list"}, globalFlagNames()...))
 }
 
 func modelSlotAssignments(h *harness.Harness, prefix string) []string {
@@ -336,6 +352,9 @@ func globalFlagNames() []string {
 	out := make([]string, 0)
 	for _, f := range globalFlags() {
 		out = append(out, "--"+f.Name)
+		if f.Name == "no-input" {
+			out = append(out, "--no-tui")
+		}
 	}
 	return out
 }

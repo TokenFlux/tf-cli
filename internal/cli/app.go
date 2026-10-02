@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/tokenflux/tf-cli/internal/buildinfo"
@@ -197,33 +196,63 @@ func desc(u *ui.UI, s string) string {
 
 func (a *App) printHelp(u *ui.UI) {
 	u.Printf("%s\n", u.T(
-		"tf —— 用 TokenFlux / TokenRouter 启动你已经在用的 AI 编码工具。",
-		"tf — launch the AI coding harnesses you already use, against TokenFlux / TokenRouter.",
+		"tf —— 用 TokenFlux / TokenRouter 启动 AI 编码工具。",
+		"tf — launch AI coding tools against TokenFlux / TokenRouter.",
 	))
 	u.Printf("\n%s\n  tf <command> [flags]\n", u.Bold(u.T("用法", "USAGE")))
 
-	var visible []*Command
+	u.Printf("\n%s\n", u.Bold(u.T("从这里开始", "START HERE")))
+	u.Printf("  %-22s %s\n", "tf login", u.T("登录并保存一把 Key", "sign in and save a key"))
+	u.Printf("  %-22s %s\n", "tf claude", u.T("启动 Claude Code（首次会引导配置）", "launch Claude Code; first run guides setup"))
+	u.Printf("  %-22s %s\n", "tf status", u.T("查看本地配置是否就绪", "check whether local setup is ready"))
+
+	u.Printf("\n%s\n", u.Bold(u.T("Agent / 脚本", "AGENTS / SCRIPTS")))
+	u.Printf("  %-22s %s\n", "tf agent-readme", u.T("输出机器使用契约", "print the machine-use contract"))
+	u.Printf("  %-22s %s\n", "tf auth --json", u.T("解释当前实际使用的 Key", "explain the credential in effect"))
+	u.Printf("  %-22s %s\n", "tf claude --no-tui", u.T("无选择器启动 harness", "launch without selectors"))
+
+	groups := []struct {
+		title string
+		names []string
+	}{
+		{u.T("启动工具", "RUN AGENTS"), harnessNames()},
+		{u.T("配置与模型", "SETUP & MODELS"), []string{"login", "model", "keys", "completions", "harness"}},
+		{u.T("查看与诊断", "INSPECT & DIAGNOSE"), []string{"status", "auth", "config"}},
+		{u.T("维护", "MAINTENANCE"), []string{"logout", "update", "version"}},
+	}
+	byName := make(map[string]*Command, len(a.commands))
 	for _, c := range a.commands {
-		if !c.Hidden {
-			visible = append(visible, c)
-		}
+		byName[c.Name] = c
 	}
-	sort.SliceStable(visible, func(i, j int) bool { return visible[i].Name < visible[j].Name })
-
-	u.Printf("\n%s\n", u.Bold(u.T("命令", "COMMANDS")))
-	for _, c := range visible {
-		u.Printf("  %-12s %s\n", c.Name, c.Summary(u))
+	for _, group := range groups {
+		a.printHelpGroup(u, group.title, group.names, byName)
 	}
 
-	u.Printf("\n%s\n", u.Bold(u.T("全局选项", "GLOBAL FLAGS")))
+	u.Printf("\n%s\n", u.Bold(u.T("常用选项", "COMMON OPTIONS")))
 	for _, f := range globalFlags() {
 		u.Printf("  %-22s %s\n", flagLabel(f), desc(u, f.Desc))
 	}
 	u.Printf("  %-22s %s\n", "--version, -v", u.T("显示版本", "Show version"))
 	u.Printf("\n%s\n", u.Dim(u.T(
-		"提示：harness 命令会将未识别的参数透传给底层工具；可使用 -- 强制透传。",
-		"Tip: harness commands pass unrecognized args through; use -- to force it.",
+		"查看命令详情：tf --help <command>。harness 后未识别的参数会透传；用 -- 强制透传。",
+		"For command details: tf --help <command>. Unknown arguments after a harness pass through; use -- to force passthrough.",
 	)))
+}
+
+func (a *App) printHelpGroup(u *ui.UI, title string, names []string, byName map[string]*Command) {
+	visible := make([]*Command, 0, len(names))
+	for _, name := range names {
+		if c := byName[name]; c != nil && !c.Hidden {
+			visible = append(visible, c)
+		}
+	}
+	if len(visible) == 0 {
+		return
+	}
+	u.Printf("\n%s\n", u.Bold(title))
+	for _, c := range visible {
+		u.Printf("  %-12s %s\n", c.Name, c.Summary(u))
+	}
 }
 
 func (a *App) printCommandHelp(u *ui.UI, c *Command) {
@@ -235,13 +264,13 @@ func (a *App) printCommandHelp(u *ui.UI, c *Command) {
 	u.Printf("\n%s\n  %s\n", u.Bold(u.T("用法", "USAGE")), usage)
 
 	if len(c.Flags) > 0 {
-		u.Printf("\n%s\n", u.Bold(u.T("选项", "FLAGS")))
+		u.Printf("\n%s\n", u.Bold(u.T("命令选项", "COMMAND OPTIONS")))
 		for _, f := range c.Flags {
 			u.Printf("  %-22s %s\n", flagLabel(f), desc(u, f.Desc))
 		}
 	}
 
-	u.Printf("\n%s\n", u.Bold(u.T("全局选项", "GLOBAL FLAGS")))
+	u.Printf("\n%s\n", u.Bold(u.T("通用选项", "COMMON OPTIONS")))
 	for _, f := range globalFlags() {
 		u.Printf("  %-22s %s\n", flagLabel(f), desc(u, f.Desc))
 	}
@@ -258,6 +287,9 @@ func flagLabel(f Flag) string {
 	label := "--" + f.Name
 	if f.Short != "" {
 		label += ", -" + f.Short
+	}
+	if f.Name == "no-input" {
+		label += ", --no-tui"
 	}
 	switch f.Kind {
 	case KindString, KindStrings:

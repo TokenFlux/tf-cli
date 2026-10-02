@@ -112,6 +112,7 @@ make build
 
 `tf login` 直接进入网页导入：建立本机监听、打开 Keys 页面，在终端确认一次后写入凭据。全程没有登录方式或网关选择器；粘贴 Key 走 `tf login --with-key`，管道输入（`echo $KEY | tf login`）自动识别。
 
+在交互终端中，`tf model <harness>` 默认进入模型槽位编辑向导；脚本、CI 和 Agent 使用 `--no-tui`（`--no-input` 仍兼容）禁止所有 TUI 与提问。
 ```console
 $ tf login
 等待网页导入
@@ -134,6 +135,27 @@ tf login work --host https://router.example.com
 网页和终端确认页会对终端链接显示“已验证当前 tf 会话”；直接打开页面仍可导入，但两端都会显示未验证会话警告。网页请求到达后，终端会展示 Origin、网关、分组和脱敏 Key，只有手动确认后才会继续。
 
 未在命令中指定名称时，CLI 按该 Key 可见的模型目录自动命名并避开已有名称；网页 `key_name` 仅作为来源元数据保存（`tf keys` 可见）。显式运行 `tf login work` 则使用 `work`；该名称已有不同 Key 时会先确认覆盖，默认取消。非交互覆盖必须添加 `--force`。完整前端协议见 [`docs/integrations/web-import.md`](docs/integrations/web-import.md)。
+
+### 认证解析与 Agent 使用
+
+`tf login` 负责新增或替换凭据；`tf auth` 只读解释当前实际会使用的凭据，不联网、不写盘：
+
+```sh
+tf auth
+tf auth --json
+tf auth --key work --json
+tf agent-readme
+```
+
+脚本和 Agent 使用 `--no-tui --json`：
+
+```sh
+tf auth --no-tui --json
+tf status --check --no-tui --json
+tf codex --no-tui -m gpt-5.6-sol -- exec "your prompt"
+```
+
+完整的机器使用契约由 `tf agent-readme` 输出，也见 [`docs/agent-readme.md`](docs/agent-readme.md)。
 
 ### 2. 启动客户端
 
@@ -171,10 +193,10 @@ tf --help opencode        # 查看 tf 包装器对该 harness 的帮助
 
 ### 模型与槽位管理
 
-查看当前 harness 的槽位分配：
+查看当前 harness 的槽位分配（脚本/Agent 使用 `--no-tui`）：
 
 ```console
-$ tf model claude
+$ tf model claude --no-tui
 claude
   default   claude-sonnet-5           — 主对话
   fast      claude-haiku-4-5-20251001 — 后台任务：标题、文件摘要

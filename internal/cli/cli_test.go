@@ -292,6 +292,39 @@ func TestModelCompletionIsContextAware(t *testing.T) {
 	}
 }
 
+func TestHelpIsTaskOrientedAndGrouped(t *testing.T) {
+	app := NewApp()
+	for _, cmd := range allCommands() {
+		app.Register(cmd)
+	}
+	var out bytes.Buffer
+	u := &ui.UI{Out: &out, Err: &out, Lang: ui.LangEN}
+	app.printHelp(u)
+	text := out.String()
+	for _, section := range []string{"START HERE", "AGENTS / SCRIPTS", "RUN AGENTS", "SETUP & MODELS", "INSPECT & DIAGNOSE", "MAINTENANCE", "COMMON OPTIONS"} {
+		if !strings.Contains(text, section) {
+			t.Errorf("help is missing section %q:\n%s", section, text)
+		}
+	}
+	if strings.Contains(text, "COMMANDS") {
+		t.Error("top-level help should not flatten commands into COMMANDS")
+	}
+	if strings.Index(text, "START HERE") > strings.Index(text, "RUN AGENTS") {
+		t.Error("start path must appear before the full command groups")
+	}
+}
+
+func TestCommandHelpSeparatesCommandAndCommonOptions(t *testing.T) {
+	var out bytes.Buffer
+	u := &ui.UI{Out: &out, Err: &out, Lang: ui.LangEN}
+	print := NewApp()
+	print.printCommandHelp(u, newModelCommand())
+	text := out.String()
+	if !strings.Contains(text, "COMMAND OPTIONS") || !strings.Contains(text, "COMMON OPTIONS") {
+		t.Fatalf("command help lacks option hierarchy:\n%s", text)
+	}
+}
+
 // 任何位置都不能返回空候选。
 //
 // 空结果在 zsh 里不等于「什么都不补」：菜单补全会沿用上一次的候选，
@@ -462,7 +495,7 @@ func TestGlobalFlagsBeforeCommand(t *testing.T) {
 // --yes 是 --no-input 的旧名字，两种写法必须落到同一个值上。
 func TestNoInputAcceptsOldName(t *testing.T) {
 	cmd := &Command{Name: "logout"}
-	for _, arg := range []string{"--no-input", "--yes"} {
+	for _, arg := range []string{"--no-input", "--no-tui", "--yes"} {
 		ctx, err := parse(cmd, []string{arg})
 		if err != nil {
 			t.Fatalf("parse(%s): %v", arg, err)

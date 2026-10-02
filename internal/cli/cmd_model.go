@@ -97,12 +97,9 @@ func runModel(c *Context) error {
 		}
 	}
 
-	// 编辑要显式要求。
-	//
-	// 之前是「能交互就进编辑器，不能就只打印」—— 同一条命令按环境改变
-	// 会不会写盘。脚本里读一次配置和人在终端读一次配置，语义必须相同，
-	// 否则脚本作者读文档时看到的和他跑出来的是两回事。
-	if c.Flags.Bool("edit") {
+	// 编辑要显式要求；交互终端直接运行 `tf model <harness>` 也进入同一向导。
+	// `--no-tui`/`--no-input` 则只读输出，适合脚本和 Agent。
+	if c.Flags.Bool("edit") || (!c.Flags.Present("reset") && !c.Flags.Present("set") && c.UI.Interactive(c.Flags.Bool("no-input"))) {
 		if !c.UI.Interactive(c.Flags.Bool("no-input")) {
 			return ui.Errf(ui.CodeUsage,
 				c.UI.T("编辑器需要终端", "the editor needs a terminal")).
@@ -266,7 +263,7 @@ func listModelSlots(c *Context, cfg *config.Config) error {
 		}
 		// 这一屏只能看不能改，得说清楚改在哪儿。
 		c.UI.Logf("%s", c.UI.Dim(c.UI.T(
-			"改模型：tf model <harness> --edit", "to change models: tf model <harness> --edit")))
+			"改模型：tf model <harness>", "to change models: tf model <harness>")))
 	})
 	return nil
 }

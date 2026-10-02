@@ -11,6 +11,8 @@ func allCommands() []*Command {
 		newVersionCommand(),
 		newConfigCommand(),
 		newStatusCommand(),
+		newAuthCommand(),
+		newAgentReadmeCommand(),
 		newLoginCommand(),
 		newLogoutCommand(),
 		newKeysCommand(),
