@@ -41,8 +41,66 @@ func fakeGateway(t *testing.T, models []string) *httptest.Server {
 	return s
 }
 
-// 目录里带 j / k / q 的名字最需要过滤，而它们曾经恰好过滤不了。
-//
+func TestBareCommandOpensHomeTUI(t *testing.T) {
+	p := start(t, []string{"TF_LANG=zh"})
+	p.waitFor("tf 首页")
+	p.waitFor("启动 AI 工具")
+
+	p.send(keyEnter)
+	p.waitFor("选择要启动的工具")
+	p.send(keyEsc)
+	p.waitFor("tf 首页")
+	p.send(keyEsc)
+	if code := p.waitExit(); code != 130 {
+		t.Errorf("退出首页的退出码 = %d，want 130", code)
+	}
+}
+
+func TestHomeStatusWaitsBeforeReturningHome(t *testing.T) {
+	p := start(t, []string{"TF_LANG=zh"})
+	p.waitFor("tf 首页")
+
+	// 首页 -> 查看状态。
+	p.send(keyDown)
+	p.send(keyDown)
+	p.send(keyEnter)
+	p.waitFor("按 Enter 返回首页")
+
+	p.send(keyEnter)
+	p.waitFor("tf 首页")
+	p.send(keyEsc)
+	if code := p.waitExit(); code != 130 {
+		t.Errorf("退出首页的退出码 = %d，want 130", code)
+	}
+}
+
+func TestHomeModelCancelReturnsToHarnessMenu(t *testing.T) {
+	models := []string{"claude-opus-5", "gpt-5.4"}
+	srv := fakeGateway(t, models)
+	f := writeConfig(t, srv.URL, models)
+	p := start(t, f.env())
+	p.waitFor("tf 首页")
+
+	// 首页 -> 编辑模型 -> claude。
+	p.send(keyDown)
+	p.send(keyDown)
+	p.send(keyDown)
+	p.send(keyEnter)
+	p.waitFor("选择要编辑的工具")
+	p.send(keyEnter)
+	p.waitFor("claude 的模型槽")
+
+	// 编辑器取消只回到 harness 菜单，再取消才回到首页。
+	p.send(keyEsc)
+	p.waitFor("选择要编辑的工具")
+	p.send(keyEsc)
+	p.waitFor("tf 首页")
+	p.send(keyEsc)
+	if code := p.waitExit(); code != 130 {
+		t.Errorf("退出首页的退出码 = %d，want 130", code)
+	}
+}
+
 // 那三个字母被当成了 vim 风格的导航键，于是敲 haiku 的 k 会让光标乱跳。
 // 这是这套 pty 测试存在的首要理由：单元测试看不见按键。
 func TestLettersFilterInsteadOfNavigating(t *testing.T) {

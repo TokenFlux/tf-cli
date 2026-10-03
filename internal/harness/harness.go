@@ -177,11 +177,22 @@ type Status struct {
 
 // Detect 在 PATH 中查找 harness 并尝试取得版本号。
 func (h *Harness) Detect() Status {
+	status := h.DetectInstalled()
+	if !status.Installed {
+		return status
+	}
+	status.Version = probeVersion(status.Path)
+	return status
+}
+
+// DetectInstalled 只检查 PATH，不启动 harness。
+// 适合首页等高频交互路径，避免为了画菜单执行 `<bin> --version`。
+func (h *Harness) DetectInstalled() Status {
 	path, err := exec.LookPath(h.Bin)
 	if err != nil {
 		return Status{}
 	}
-	return Status{Installed: true, Path: path, Version: probeVersion(path)}
+	return Status{Installed: true, Path: path}
 }
 
 // probeVersion 运行 `<bin> --version`。取不到就留空，绝不因此失败。

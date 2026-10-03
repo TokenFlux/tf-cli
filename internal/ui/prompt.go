@@ -13,6 +13,14 @@ func (u *UI) Interactive(assumeYes bool) bool {
 	return !u.JSON && !assumeYes && hasControllingTTY()
 }
 
+// ClearScreen removes the current interactive page without affecting piped output.
+func (u *UI) ClearScreen() {
+	if !u.Interactive(false) {
+		return
+	}
+	fmt.Fprint(u.Out, "\033[2J\033[H")
+}
+
 // Choose is the numbered fallback when a raw selector is unavailable.
 func (u *UI) Choose(title string, options []string) (int, error) {
 	if len(options) == 0 {
