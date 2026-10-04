@@ -1,6 +1,6 @@
 # tf-cli 现状
 
-对应 v0.10.0。实施路线见 [`PLAN.md`](PLAN.md)。
+对应 v0.11.0。实施路线见 [`PLAN.md`](PLAN.md)。
 
 支撑文档：
 
@@ -16,7 +16,7 @@
 
 ## 一、当前形态
 
-命令：`version` `status` `auth` `agent-readme` `config` `login` `logout` `keys` `update` `harness`
+交互终端直接运行 `tf` 会进入任务首页，可启动 harness、登录、查看状态和编辑模型；`tf --help` 输出命令帮助，非交互终端不进入首页。命令：`version` `status` `auth` `agent-readme` `config` `login` `logout` `keys` `update` `harness`
 `model` `completions` + `claude` `codex` `opencode` `pi`。`tf login` 默认直接进入网页导入并打开 Keys 页面；`--with-key` 或管道输入走粘贴路径，`--host` 指定自建网关，`--from-web` 为显式等价写法。`tf status` 默认只读本地，`--check` 才联网查额度。`tf auth` 只读解释当前凭据解析结果；`tf agent-readme` 输出面向 Agent 的使用契约。
 
 全局 flag：`--help/-h` `--json` `--key/-k` `--host` `--no-tui`（兼容 `--no-input`、`--yes`）。交互终端中 `tf model <harness>` 默认进入槽位编辑向导；脚本和 Agent 使用 `--no-tui`。对 `claude`/`codex`/`opencode`/`pi` 透传命令，写在 harness 名后的 `-h`/`--help` 交给底层工具，`tf --help <harness>` 用于查看 tf 包装帮助。`login` 另有 `--with-key`、`--from-web`、`--force`。
